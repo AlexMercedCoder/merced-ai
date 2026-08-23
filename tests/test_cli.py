@@ -3,16 +3,28 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from merced_ai.cli import app
+from merced_ai.models import HarnessProbe, HarnessStatus
 from merced_ai.profiles import resolve_profile
 from merced_ai.sessions import SessionStore
 
 runner = CliRunner()
 
 
-def test_cli_profile_bot_and_dry_run(workspace: Path) -> None:
+def test_cli_profile_bot_and_dry_run(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.CommandHarnessAdapter.probe",
+        lambda adapter: HarnessProbe(
+            harness_id=adapter.descriptor.id,
+            status=HarnessStatus.READY,
+            path=Path(adapter.descriptor.executable_names[0]),
+            transport=adapter.descriptor.transports[0],
+            capabilities=adapter.descriptor.capabilities,
+        ),
+    )
     created = runner.invoke(
         app,
         [
