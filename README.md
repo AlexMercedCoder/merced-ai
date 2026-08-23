@@ -71,6 +71,21 @@ merced-ai session list
 merced-ai session resume <session-id>
 ```
 
+Launch the optional local UI:
+
+```bash
+python -m pip install 'merced-ai[webui]'
+merced-ai ui
+```
+
+The UI binds to loopback, opens with an ephemeral access token, and reads the same profile, bot,
+session, projection, and harness inventory records as the CLI.
+
+![Merced AI desktop UI](docs/screenshots/merced-ai-ui-desktop.jpg)
+
+The layout is responsive down to a compact mobile collaboration view. See the
+[mobile UI screenshot](docs/screenshots/merced-ai-ui-mobile.jpg).
+
 Use `-C PATH` on project-aware commands to select another workspace. Use `--json` on read and
 one-shot commands for automation.
 

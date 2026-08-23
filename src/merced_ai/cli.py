@@ -135,6 +135,22 @@ def doctor() -> None:
     console.print("Authentication is verified only when a real run starts.")
 
 
+@app.command("ui")
+def ui(
+    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
+    port: Annotated[int, typer.Option("--port", min=1024, max=65535)] = 8765,
+    no_open: Annotated[bool, typer.Option("--no-open")] = False,
+) -> None:
+    """Start the optional loopback-first local web UI."""
+    from merced_ai.webui_server import run_web_ui
+
+    try:
+        run_web_ui(workspace, host=host, port=port, open_browser=not no_open)
+    except (RuntimeError, ValueError) as exc:
+        _fail(str(exc), 2)
+
+
 @profile_app.command("list")
 def profile_list(
     workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,

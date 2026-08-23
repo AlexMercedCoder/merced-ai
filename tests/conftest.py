@@ -15,3 +15,8 @@ def workspace(tmp_path: Path) -> Path:
     path = tmp_path / "workspace"
     path.mkdir()
     return path
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"

@@ -10,3 +10,4 @@
 - Added one-shot asks, interactive chat, durable local sessions, and session resume.
 - Added shell-free bounded process execution with timeout and cancellation containment.
 - Added JSON automation surfaces, packaging, CI, security guidance, and MVP validation evidence.
+- Added an optional loopback-only responsive web UI with ephemeral-token API access.
