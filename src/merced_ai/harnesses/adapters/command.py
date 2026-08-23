@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 from typing import Any
@@ -21,6 +22,7 @@ from merced_ai.models import (
 from merced_ai.profiles import assemble_system_prompt
 
 MAX_CAPTURE_CHARS = 10_000_000
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 class HarnessRunError(RuntimeError):
@@ -381,6 +383,11 @@ def _normalize_output(
     harness_id: str, stdout: str
 ) -> tuple[str, dict[str, Any] | None, str | None]:
     text = stdout.strip()
+    if harness_id == "anton":
+        clean = ANSI_ESCAPE_RE.sub("", text)
+        responses = re.findall(r"(?:^|\n)anton>\s*(.*?)(?=\n(?:you>|anton>)|\Z)", clean, re.DOTALL)
+        output = responses[-1].strip() if responses else clean
+        return output, None, None
     if harness_id in {
         "claude",
         "gemini",
@@ -420,7 +427,9 @@ def _parse_json_lines(text: str) -> dict[str, Any] | None:
 
 def _stdin_payload(harness_id: str, request: RunRequest) -> str | None:
     if harness_id == "anton":
-        return _prefixed_prompt(request.projection.system_prompt, request.prompt) + "\nexit\n"
+        prompt = _prefixed_prompt(request.projection.system_prompt, request.prompt)
+        atomic_prompt = " ".join(line.strip() for line in prompt.splitlines() if line.strip())
+        return atomic_prompt + "\nexit\n"
     return None
 
 

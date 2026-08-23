@@ -14,7 +14,13 @@
 - Added adapters and discovery for Anton, DSH, AGY, Pi, Prime Agent, OpenClaw, and Kimi Code CLI.
 - Qualified OpenCode and Goose command adapters and hardened JSONL embedded-error detection.
 - Generated new OAP profiles with explicit revision 1 for cross-harness compatibility.
-- Live-qualified 13 installed harnesses in an unsandboxed disposable workspace and documented the
-  upstream Anton installation failure.
+- Live-qualified all 14 installed harnesses in an unsandboxed disposable workspace, including the
+  repaired and atomic Anton bridge.
 - Added DSH multi-provider guidance, Kimi alternate-config support, rootless executable discovery,
   and current OpenClaw/AGY invocation compatibility.
+- Added cross-platform detection overrides and bounded Linux, macOS, Windows, uv, npm, Homebrew,
+  Scoop, Chocolatey, and private-prefix search locations.
+- Repaired and live-qualified Anton, made its REPL projection atomic, and normalized its final
+  assistant response.
+- Added release-grade installation, configuration, detection, architecture, troubleshooting,
+  validation, contribution, and release documentation plus GitHub templates.

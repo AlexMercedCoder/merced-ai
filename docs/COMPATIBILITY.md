@@ -12,7 +12,7 @@ It was last updated on 2026-08-23.
 | Goose | yes | yes | yes | yes |
 | Loro | yes | yes | yes | yes |
 | MagAgent | yes | yes | yes | yes |
-| Anton | yes | yes | broken upstream install | no: missing `httpx` at startup |
+| Anton | yes | yes | yes | yes, repaired uv environment + atomic REPL bridge |
 | DeepSeek Harness (DSH) | yes | yes | yes | yes, OpenAI via `llm-pi-ai` |
 | Antigravity CLI (AGY) | yes | yes | yes | yes |
 | Pi Coding Agent | yes | yes | yes | yes, explicit Google model |
@@ -25,10 +25,11 @@ bounded subprocess behavior, and structured output/error parsing using controlle
 does not imply that provider credentials, quota, or every native capability is ready.
 
 The 2026-08-23 live qualification used an empty disposable workspace, bounded noninteractive
-invocations, exact-token responses, and instructions not to call tools. Thirteen harnesses completed
-through Merced AI. Anton could not be launched because the installed `anton-agent` environment
-raises `ModuleNotFoundError: httpx` during import; this is an installation failure before adapter
-transport or provider authentication is reached.
+invocations, exact-token responses, and instructions not to call tools. All fourteen harnesses
+completed through Merced AI. Anton initially failed because its isolated uv environment omitted
+`httpx`; after reinstalling with that dependency, its first multiline bridge run exposed that REPL
+newlines became separate turns. The bridge was changed to one atomic prompt and requalified with a
+clean normalized exact-token response and no intermediate tool activity.
 
 ## DSH provider routing
 

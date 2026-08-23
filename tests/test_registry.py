@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
 from merced_ai.harnesses.adapters.executable import ExecutableProbeAdapter
-from merced_ai.harnesses.detection import locate_executable
+from merced_ai.harnesses.detection import _fallback_bin_dirs, _override_variable, locate_executable
 from merced_ai.harnesses.registry import HarnessRegistry, default_registry
 from merced_ai.models import HarnessDescriptor, HarnessStatus, TransportKind
 
@@ -44,7 +45,7 @@ def test_registry_rejects_duplicate_ids() -> None:
 
 
 def test_missing_executable_is_reported_without_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("merced_ai.harnesses.detection.shutil.which", lambda _name: None)
+    monkeypatch.setattr("merced_ai.harnesses.detection.shutil.which", lambda _name, path=None: None)
     descriptor = HarnessDescriptor(
         id="missing",
         name="Missing",
@@ -76,7 +77,10 @@ def test_probe_uses_resolved_executable_without_shell(
         observed.update(kwargs)
         return Result()
 
-    monkeypatch.setattr("merced_ai.harnesses.detection.shutil.which", lambda _name: str(executable))
+    monkeypatch.setattr(
+        "merced_ai.harnesses.detection.shutil.which",
+        lambda _name, path=None: str(executable),
+    )
     monkeypatch.setattr("merced_ai.harnesses.detection.subprocess.run", fake_run)
     descriptor = HarnessDescriptor(
         id="fixture",
@@ -92,6 +96,8 @@ def test_probe_uses_resolved_executable_without_shell(
     assert probe.capabilities_verified is False
     assert observed["command"] == [str(executable.resolve()), "--version"]
     assert observed["shell"] is False
+    assert observed["encoding"] == "utf-8"
+    assert observed["errors"] == "replace"
 
 
 def test_locate_executable_finds_rootless_private_prefix(
@@ -101,7 +107,12 @@ def test_locate_executable_finds_rootless_private_prefix(
     executable.parent.mkdir(parents=True)
     executable.touch(mode=0o755)
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setattr("merced_ai.harnesses.detection.shutil.which", lambda _name: None)
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+
+    def fake_which(_name: str, path: str | None = None) -> str | None:
+        return str(executable) if path == str(executable.parent) else None
+
+    monkeypatch.setattr("merced_ai.harnesses.detection.shutil.which", fake_which)
     descriptor = HarnessDescriptor(
         id="openclaw",
         name="OpenClaw",
@@ -110,3 +121,55 @@ def test_locate_executable_finds_rootless_private_prefix(
     )
 
     assert locate_executable(descriptor) == executable.resolve()
+
+
+def test_locate_executable_honors_per_harness_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    executable = tmp_path / "prime-agent.cmd"
+    executable.touch()
+    monkeypatch.setenv("MERCED_AI_PRIME_AGENT_PATH", str(executable))
+    monkeypatch.setattr(
+        "merced_ai.harnesses.detection.shutil.which",
+        lambda value, path=None: str(executable) if value == str(executable) else None,
+    )
+    descriptor = HarnessDescriptor(
+        id="prime-agent",
+        name="Prime Agent",
+        executable_names=("prime-agent",),
+        transports=(TransportKind.STRUCTURED_SUBPROCESS,),
+    )
+
+    assert _override_variable(descriptor.id) == "MERCED_AI_PRIME_AGENT_PATH"
+    assert locate_executable(descriptor) == executable.resolve()
+
+
+def test_fallback_dirs_cover_configured_and_cross_platform_user_bins(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    app_data = tmp_path / "AppData" / "Roaming"
+    scoop = tmp_path / "scoop"
+    chocolatey = tmp_path / "chocolatey"
+    monkeypatch.setenv("MERCED_AI_HARNESS_PATHS", os.pathsep.join((str(first), str(second))))
+    monkeypatch.setenv("APPDATA", str(app_data))
+    monkeypatch.setenv("SCOOP", str(scoop))
+    monkeypatch.setenv("ChocolateyInstall", str(chocolatey))
+
+    paths = _fallback_bin_dirs("fixture")
+
+    assert first in paths
+    assert second in paths
+    assert app_data / "npm" in paths
+    assert scoop / "shims" in paths
+    assert chocolatey / "bin" in paths
+
+
+def test_fallback_dirs_cover_macos_package_manager_bins(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("merced_ai.harnesses.detection.sys.platform", "darwin")
+
+    paths = _fallback_bin_dirs("fixture")
+
+    assert Path("/opt/homebrew/bin") in paths
+    assert Path("/usr/local/bin") in paths

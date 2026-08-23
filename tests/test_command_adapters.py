@@ -7,6 +7,7 @@ import pytest
 from merced_ai.harnesses.adapters.command import (
     CommandHarnessAdapter,
     HarnessRunError,
+    _normalize_output,
     _stdin_payload,
 )
 from merced_ai.models import HarnessDescriptor, RunRequest, TransportKind
@@ -77,6 +78,33 @@ def test_qualified_adapter_builds_argv_without_shell_text(
     if harness_id == "anton":
         invocation += _stdin_payload(harness_id, request) or ""
     assert "Review README.md" in invocation
+
+
+def test_anton_repl_receives_profile_and_request_as_one_turn(workspace: Path) -> None:
+    request = _request("anton", workspace)
+
+    payload = _stdin_payload("anton", request)
+
+    assert payload is not None
+    assert payload.endswith("\nexit\n")
+    assert payload.count("\n") == 2
+    assert "<open-agent-profile>" in payload.splitlines()[0]
+    assert "Review README.md" in payload.splitlines()[0]
+
+
+def test_anton_output_extracts_last_assistant_turn() -> None:
+    stdout = (
+        "\x1b[1manton>\x1b[0m Welcome\n"
+        "you> atomic request\n"
+        "anton> First line\nsecond line\n"
+        "you> exit\nSee you."
+    )
+
+    output, raw, session_id = _normalize_output("anton", stdout)
+
+    assert output == "First line\nsecond line"
+    assert raw is None
+    assert session_id is None
 
 
 def test_command_adapter_normalizes_json_response(

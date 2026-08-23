@@ -19,7 +19,15 @@ tools, authentication, sandboxing, approvals, and final policy enforcement.
 - Machine-readable JSON output for inventory, profiles, bots, dry runs, and results.
 - Bounded subprocess execution without a shell, with timeout and Ctrl+C cancellation.
 
-## Install for development
+## Installation
+
+```bash
+python -m pip install merced-ai
+# optional UI
+python -m pip install 'merced-ai[webui]'
+```
+
+For development:
 
 ```bash
 python -m pip install -e '.[dev]'
@@ -28,6 +36,9 @@ merced-ai --version
 
 Python 3.11 or newer is required. At least one supported harness must be installed and authenticated
 for a real run. Inventory and dry-run workflows do not require model access.
+
+See the [installation guide](docs/INSTALLATION.md) for pipx/uv, platform-specific discovery, and
+explicit executable overrides.
 
 ## Quick start
 
@@ -150,6 +161,8 @@ not replace profile state.
   has begun.
 
 See [PRD.md](PRD.md) for the full product requirements, security model, architecture, and roadmap.
+The [documentation index](docs/README.md) links configuration, detection, troubleshooting,
+architecture, validation, and release guides.
 
 ## Development
 
