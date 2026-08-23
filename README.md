@@ -1,0 +1,132 @@
+# Merced AI
+
+Merced AI is a local-first broker for AI agent harnesses already installed on your machine. It
+discovers those harnesses, normalizes their noninteractive interfaces, and uses Open Agent Profile
+(OAP) documents to create portable bots you can chat and collaborate with.
+
+Merced AI is deliberately not another agent loop. The selected harness still owns model access,
+tools, authentication, sandboxing, approvals, and final policy enforcement.
+
+## MVP capabilities
+
+- Safe executable and version discovery for Codex, Claude Code, Gemini CLI, OpenCode, Goose, Loro,
+  and MagAgent.
+- Reference OAP validation, digest calculation, profile discovery, and minimal profile authoring.
+- Project-local and user-global bot bindings with preferred and fallback harnesses.
+- Honest native, projected, degraded, and unsupported profile projection reports.
+- One-shot bot runs and multi-turn local chat.
+- Durable, atomic project-local conversation sessions with resume support.
+- Machine-readable JSON output for inventory, profiles, bots, dry runs, and results.
+- Bounded subprocess execution without a shell, with timeout and Ctrl+C cancellation.
+
+## Install for development
+
+```bash
+python -m pip install -e '.[dev]'
+merced-ai --version
+```
+
+Python 3.11 or newer is required. At least one supported harness must be installed and authenticated
+for a real run. Inventory and dry-run workflows do not require model access.
+
+## Quick start
+
+Initialize a workspace:
+
+```bash
+merced-ai init
+merced-ai harness list
+```
+
+Create a minimal OAP profile:
+
+```bash
+merced-ai profile create reviewer \
+  --description "Reviews code for concrete defects before merge." \
+  --instructions "Review code. Report verified defects and do not edit files."
+```
+
+Bind it to a harness:
+
+```bash
+merced-ai bot create reviewer \
+  --profile reviewer \
+  --harness codex \
+  --fallback claude
+```
+
+Review the exact projection without launching a model:
+
+```bash
+merced-ai ask reviewer "Review the current diff" --dry-run --explain
+merced-ai profile effective reviewer --harness codex
+```
+
+Run or chat:
+
+```bash
+merced-ai ask reviewer "Review the current diff"
+merced-ai chat reviewer
+merced-ai session list
+merced-ai session resume <session-id>
+```
+
+Use `-C PATH` on project-aware commands to select another workspace. Use `--json` on read and
+one-shot commands for automation.
+
+## MVP harness matrix
+
+| Harness | Discovery | Execution | OAP projection |
+| --- | --- | --- | --- |
+| MagAgent | yes | native one-shot | native for project-discovered profiles |
+| Loro | yes | native one-shot | native for project-discovered profiles |
+| Claude Code | yes | structured print mode | system-prompt projection |
+| Codex | yes | noninteractive exec | delimited prompt compatibility mode |
+| Gemini CLI | yes | structured headless mode | delimited prompt compatibility mode |
+| OpenCode | yes | not yet qualified | unsupported |
+| Goose | yes | not yet qualified | unsupported |
+
+"Native" means the harness receives the OAP profile name through its own CLI. It does not mean
+Merced AI can supersede harness policy. All current projection reports remain provisional until the
+runtime handshake and effective-policy reporting milestone is complete.
+
+## Storage
+
+Project-local data:
+
+```text
+.agents/                    OAP profiles
+.merced-ai/bots/            bot bindings
+.merced-ai/sessions/        normalized conversation sessions
+```
+
+User-global data defaults to `~/.config/merced-ai` on Linux and follows the platform configuration
+directory on Windows. Set `MERCED_AI_HOME` to override it for automation or tests.
+
+OAP profiles remain the authoritative source for identity and learned state. Session JSON files do
+not replace profile state.
+
+## Security posture
+
+- Harness discovery never installs packages or scans the full filesystem.
+- Child commands are passed as argument arrays with `shell=False`.
+- Plaintext credentials are rejected by the OAP reference validator.
+- Harness policies remain authoritative.
+- Degraded profile injection is clearly reported and delimited.
+- Runs time out, captured output is bounded, and cancellation terminates the child process.
+- Automatic fallback happens only when a harness is unavailable, never after a paid or mutating run
+  has begun.
+
+See [PRD.md](PRD.md) for the full product requirements, security model, architecture, and roadmap.
+
+## Development
+
+```bash
+ruff format --check .
+ruff check .
+pytest
+python -m build
+```
+
+Unit and CLI tests use isolated filesystems and mocked harness processes. They do not call models or
+require network access.
