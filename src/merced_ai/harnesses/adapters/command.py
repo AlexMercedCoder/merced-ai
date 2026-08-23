@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import time
 from typing import Any
@@ -65,8 +66,7 @@ class CommandHarnessAdapter:
                     field="spec.role",
                     action="mapped",
                     reason=(
-                        "Role and bounded state are passed through a harness "
-                        "system-prompt flag."
+                        "Role and bounded state are passed through a harness system-prompt flag."
                     ),
                 ),
                 ProjectionAdjustment(
@@ -125,6 +125,7 @@ class CommandHarnessAdapter:
                 "exec",
                 "--color",
                 "never",
+                "--skip-git-repo-check",
                 "-C",
                 str(request.workspace),
                 "-s",
@@ -227,9 +228,10 @@ class CommandHarnessAdapter:
                 _prefixed_prompt(projection.system_prompt, prompt),
             ]
         if harness_id == "agy":
+            qualified_prompt = _prefixed_prompt(projection.system_prompt, prompt)
             command = [
                 str(executable),
-                "--print",
+                f"--print={qualified_prompt}",
                 "--output-format",
                 "json",
                 "--disable-slash-commands",
@@ -238,7 +240,6 @@ class CommandHarnessAdapter:
                 command.extend(("--mode", "plan"))
             if projection.model:
                 command.extend(("--model", projection.model))
-            command.append(_prefixed_prompt(projection.system_prompt, prompt))
             return command
         if harness_id in {"pi", "prime-agent"}:
             command = [str(executable), "--print", "--mode", "json", "--no-session"]
@@ -260,15 +261,19 @@ class CommandHarnessAdapter:
             command.append(prompt)
             return command
         if harness_id == "openclaw":
-            return [
+            command = [
                 str(executable),
                 "agent",
-                "exec",
-                "--cwd",
-                str(request.workspace),
+                "--local",
+                "--agent",
+                "main",
                 "--json",
+                "--message",
                 _prefixed_prompt(projection.system_prompt, prompt),
             ]
+            if projection.model:
+                command.extend(("--model", _qualified_model(profile, projection.model)))
+            return command
         if harness_id == "kimi":
             command = [
                 str(executable),
@@ -277,6 +282,8 @@ class CommandHarnessAdapter:
                 "--work-dir",
                 str(request.workspace),
             ]
+            if config_file := os.environ.get("MERCED_AI_KIMI_CONFIG_FILE"):
+                command.extend(("--config-file", config_file))
             if projection.model:
                 command.extend(("--model", projection.model))
             command.extend(("--prompt", _prefixed_prompt(projection.system_prompt, prompt)))
@@ -298,9 +305,8 @@ class CommandHarnessAdapter:
             process = subprocess.Popen(  # noqa: S603 - argv is built by a trusted adapter
                 command,
                 cwd=request.workspace,
-                stdin=(
-                    subprocess.PIPE if self.descriptor.id == "anton" else subprocess.DEVNULL
-                ),
+                env=_subprocess_env(self.descriptor.id, request),
+                stdin=(subprocess.PIPE if self.descriptor.id == "anton" else subprocess.DEVNULL),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 shell=False,
@@ -418,6 +424,13 @@ def _stdin_payload(harness_id: str, request: RunRequest) -> str | None:
     return None
 
 
+def _subprocess_env(harness_id: str, request: RunRequest) -> dict[str, str]:
+    env = os.environ.copy()
+    if harness_id == "openclaw":
+        env["OPENCLAW_WORKSPACE_DIR"] = str(request.workspace)
+    return env
+
+
 def _profile_provider(profile: ProfileRecord) -> str | None:
     provider = profile.document.get("spec", {}).get("model", {}).get("provider")
     return provider if isinstance(provider, str) and provider else None
@@ -521,7 +534,7 @@ def _projected_model(
         "gemini": {"google", "gemini"},
         "agy": {"google", "gemini"},
         "dsh": {"deepseek"},
-        "kimi": {"moonshot", "kimi"},
+        "kimi": {"moonshot", "kimi", "openai", "anthropic", "google", "gemini"},
     }.get(harness_id)
     if not model_id or compatible is None or provider in compatible:
         return model_id, None

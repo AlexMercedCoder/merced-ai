@@ -6,23 +6,58 @@ It was last updated on 2026-08-23.
 | Harness | Adapter | Contract-tested | Installed here | Live-qualified |
 | --- | --- | --- | --- | --- |
 | Codex | yes | yes | yes | yes |
-| Claude Code | yes | yes | yes | pending unsandboxed run |
-| Gemini CLI | yes | yes | yes | pending unsandboxed run |
-| OpenCode | yes | yes | yes | pending unsandboxed run |
-| Goose | yes | yes | yes | pending writable log state |
-| Loro | yes | yes | yes | pending writable audit state |
-| MagAgent | yes | yes | yes | pending writable config/log state |
-| Anton | yes | yes | yes | pending a stable noninteractive upstream interface |
-| DeepSeek Harness (DSH) | yes | yes | yes | missing DeepSeek credential |
-| Antigravity CLI (AGY) | yes | yes | yes | pending local socket permission |
-| Pi Coding Agent | yes | yes | yes | pending outbound network permission |
-| Prime Agent | yes | yes | yes | pending daemon/socket permission |
-| OpenClaw | yes | yes | no | pending installation and authentication |
-| Kimi Code CLI | yes | yes | no | pending installation and authentication |
+| Claude Code | yes | yes | yes | yes |
+| Gemini CLI | yes | yes | yes | yes, API-key auth + `gemini-3.5-flash` |
+| OpenCode | yes | yes | yes | yes |
+| Goose | yes | yes | yes | yes |
+| Loro | yes | yes | yes | yes |
+| MagAgent | yes | yes | yes | yes |
+| Anton | yes | yes | broken upstream install | no: missing `httpx` at startup |
+| DeepSeek Harness (DSH) | yes | yes | yes | yes, OpenAI via `llm-pi-ai` |
+| Antigravity CLI (AGY) | yes | yes | yes | yes |
+| Pi Coding Agent | yes | yes | yes | yes, explicit Google model |
+| Prime Agent | yes | yes | yes | yes |
+| OpenClaw | yes | yes | yes | yes, embedded OpenAI agent |
+| Kimi Code CLI | yes | yes | yes | yes, OpenAI Responses provider |
 
 "Contract-tested" means Merced AI tests argv construction, OAP projection, permission narrowing,
 bounded subprocess behavior, and structured output/error parsing using controlled executables. It
 does not imply that provider credentials, quota, or every native capability is ready.
+
+The 2026-08-23 live qualification used an empty disposable workspace, bounded noninteractive
+invocations, exact-token responses, and instructions not to call tools. Thirteen harnesses completed
+through Merced AI. Anton could not be launched because the installed `anton-agent` environment
+raises `ModuleNotFoundError: httpx` during import; this is an installation failure before adapter
+transport or provider authentication is reached.
+
+## DSH provider routing
+
+DSH does not require its default DeepSeek provider. Its bundled `llm-pi-ai` adapter can expose
+catalog providers and OpenAI-compatible gateways. The following `$DSH_HOME/settings.yaml` selects
+OpenAI without storing the key:
+
+```yaml
+agent-default-model:
+  provider: openai
+  model: gpt-5.4
+
+llm-pi-ai:
+  providers:
+    openai:
+      apiKeyEnv: OPENAI_API_KEY
+```
+
+The same mechanism can reference other provider-specific environment variables supported by the
+installed pi-ai catalog. A configured `apiKeyEnv` is resolved for every request and fails clearly
+when the named variable is absent.
+
+## Kimi custom providers
+
+Kimi Code CLI supports OpenAI, Anthropic, Google GenAI, and OpenAI-compatible provider
+configurations in addition to Kimi services. Merced AI accepts an alternate config path through
+`MERCED_AI_KIMI_CONFIG_FILE`; provider secrets can remain blank in that file and be supplied by the
+provider's standard environment variable at runtime. Qualification used OpenAI Responses with
+`OPENAI_API_KEY` and forced plan mode.
 
 The installed MagAgent release currently validates some permission values against its own older
 dialect (for example, network `none/read/full`) rather than the OAP reference schema values. Basic
@@ -46,6 +81,7 @@ semantics.
 - [OpenClaw headless agent execution](https://docs.openclaw.ai/cli/agent)
 - [Kimi Code CLI print mode](https://moonshotai.github.io/kimi-cli/en/customization/print-mode.html)
 - [Kimi CLI command reference](https://moonshotai.github.io/kimi-cli/en/reference/kimi-command.html)
+- [Kimi provider configuration](https://moonshotai.github.io/kimi-cli/en/configuration/providers.html)
 - [Z.AI OpenCode integration](https://docs.z.ai/devpack/tool/opencode)
 - [Z.AI Claude Code integration](https://docs.z.ai/devpack/tool/claude)
 - [Z.AI supported coding-tool helper](https://docs.z.ai/devpack/extension/coding-tool-helper)

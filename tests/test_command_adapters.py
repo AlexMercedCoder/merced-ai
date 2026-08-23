@@ -291,3 +291,48 @@ def test_goose_maps_provider_and_model_separately(
 
     assert command[command.index("--provider") + 1] == "google"
     assert command[command.index("--model") + 1] == "gemini-2.5-flash"
+
+
+def test_openclaw_uses_current_local_agent_interface(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = workspace / "openclaw"
+    executable.touch()
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+
+    command = _adapter("openclaw").build_command(_request("openclaw", workspace))
+
+    assert command[1:6] == ["agent", "--local", "--agent", "main", "--json"]
+    assert "exec" not in command
+    assert "--message" in command
+
+
+def test_agy_passes_prompt_as_flag_value(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    executable = workspace / "agy"
+    executable.touch()
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+
+    command = _adapter("agy").build_command(_request("agy", workspace))
+
+    assert any(value.startswith("--print=") for value in command)
+    assert command[-1] != "Review README.md"
+
+
+def test_kimi_accepts_merced_config_file_override(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = workspace / "kimi"
+    executable.touch()
+    config_file = workspace / "kimi.toml"
+    monkeypatch.setenv("MERCED_AI_KIMI_CONFIG_FILE", str(config_file))
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+
+    command = _adapter("kimi").build_command(_request("kimi", workspace))
+
+    assert command[command.index("--config-file") + 1] == str(config_file)

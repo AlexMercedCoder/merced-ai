@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from merced_ai.harnesses.adapters.executable import ExecutableProbeAdapter
+from merced_ai.harnesses.detection import locate_executable
 from merced_ai.harnesses.registry import HarnessRegistry, default_registry
 from merced_ai.models import HarnessDescriptor, HarnessStatus, TransportKind
 
@@ -91,3 +92,21 @@ def test_probe_uses_resolved_executable_without_shell(
     assert probe.capabilities_verified is False
     assert observed["command"] == [str(executable.resolve()), "--version"]
     assert observed["shell"] is False
+
+
+def test_locate_executable_finds_rootless_private_prefix(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    executable = tmp_path / ".openclaw" / "bin" / "openclaw"
+    executable.parent.mkdir(parents=True)
+    executable.touch(mode=0o755)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("merced_ai.harnesses.detection.shutil.which", lambda _name: None)
+    descriptor = HarnessDescriptor(
+        id="openclaw",
+        name="OpenClaw",
+        executable_names=("openclaw",),
+        transports=(TransportKind.STRUCTURED_SUBPROCESS,),
+    )
+
+    assert locate_executable(descriptor) == executable.resolve()

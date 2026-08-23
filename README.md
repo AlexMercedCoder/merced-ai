@@ -9,8 +9,8 @@ tools, authentication, sandboxing, approvals, and final policy enforcement.
 
 ## MVP capabilities
 
-- Safe executable and version discovery for Codex, Claude Code, Gemini CLI, OpenCode, Goose, Loro,
-  and MagAgent.
+- Safe executable and version discovery for 14 harnesses, including Codex, Claude Code, Gemini CLI,
+  OpenCode, Goose, Loro, MagAgent, DSH, Pi, Prime Agent, OpenClaw, and Kimi Code CLI.
 - Reference OAP validation, digest calculation, profile discovery, and minimal profile authoring.
 - Project-local and user-global bot bindings with preferred and fallback harnesses.
 - Honest native, projected, degraded, and unsupported profile projection reports.
@@ -105,7 +105,7 @@ one-shot commands for automation.
 | Antigravity CLI (AGY) | yes | structured print mode | delimited prompt compatibility mode |
 | Pi Coding Agent | yes | structured print mode | system-prompt projection |
 | Prime Agent | yes | structured print mode | system-prompt projection |
-| OpenClaw | yes | embedded agent exec | delimited prompt compatibility mode |
+| OpenClaw | yes | embedded local agent | delimited prompt compatibility mode |
 | Kimi Code CLI | yes | read-only print mode | delimited prompt compatibility mode |
 
 "Native" means the harness receives the OAP profile name through its own CLI. It does not mean
@@ -116,6 +116,11 @@ GLM is treated as a model-family route, not a separate harness. Use it through a
 such as Claude Code, OpenCode, Goose, Pi, or Prime Agent. Kimi models can likewise be selected in
 multi-provider harnesses, while the dedicated Kimi Code CLI has its own adapter. See
 [COMPATIBILITY.md](docs/COMPATIBILITY.md) for qualification status and caveats.
+
+DSH can use a non-DeepSeek provider through its bundled `llm-pi-ai` settings. Kimi can use a
+custom config selected with `MERCED_AI_KIMI_CONFIG_FILE`; standard provider environment variables
+remain outside Merced AI. See the compatibility guide for a key-free DSH example and current live
+qualification results.
 
 ## Storage
 

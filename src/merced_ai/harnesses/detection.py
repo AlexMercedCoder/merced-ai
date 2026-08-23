@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import time
@@ -18,6 +19,16 @@ def locate_executable(descriptor: HarnessDescriptor) -> Path | None:
         candidate = shutil.which(executable_name)
         if candidate:
             return Path(candidate).resolve()
+        # Rootless installers commonly place binaries in a private user prefix
+        # without updating the environment of an already-running parent process.
+        home_value = os.environ.get("HOME")
+        if not home_value:
+            continue
+        home = Path(home_value).expanduser()
+        for bin_dir in (home / ".local" / "bin", home / f".{executable_name}" / "bin"):
+            fallback = bin_dir / executable_name
+            if fallback.is_file() and os.access(fallback, os.X_OK):
+                return fallback.resolve()
     return None
 
 
