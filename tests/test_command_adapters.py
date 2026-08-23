@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from merced_ai.harnesses.adapters.command import CommandHarnessAdapter, HarnessRunError
+from merced_ai.harnesses.adapters.command import (
+    CommandHarnessAdapter,
+    HarnessRunError,
+    _stdin_payload,
+)
 from merced_ai.models import HarnessDescriptor, RunRequest, TransportKind
 from merced_ai.profiles import create_profile
 
@@ -37,7 +41,25 @@ def _request(harness_id: str, workspace: Path) -> RunRequest:
     )
 
 
-@pytest.mark.parametrize("harness_id", ["codex", "claude", "gemini", "magagent", "loro"])
+@pytest.mark.parametrize(
+    "harness_id",
+    [
+        "codex",
+        "claude",
+        "gemini",
+        "magagent",
+        "loro",
+        "opencode",
+        "goose",
+        "dsh",
+        "agy",
+        "pi",
+        "prime-agent",
+        "openclaw",
+        "kimi",
+        "anton",
+    ],
+)
 def test_qualified_adapter_builds_argv_without_shell_text(
     harness_id: str, workspace: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -51,7 +73,10 @@ def test_qualified_adapter_builds_argv_without_shell_text(
     command = _adapter(harness_id).build_command(request)
 
     assert command[0] == str(executable)
-    assert "Review README.md" in " ".join(command)
+    invocation = " ".join(command)
+    if harness_id == "anton":
+        invocation += _stdin_payload(harness_id, request) or ""
+    assert "Review README.md" in invocation
 
 
 def test_command_adapter_normalizes_json_response(
@@ -66,7 +91,9 @@ def test_command_adapter_normalizes_json_response(
     class Process:
         returncode = 0
 
-        def communicate(self, timeout: int | None = None) -> tuple[str, str]:
+        def communicate(
+            self, input: str | None = None, timeout: int | None = None
+        ) -> tuple[str, str]:
             return '{"result":"Reviewed successfully","session_id":"native-1"}', ""
 
     observed: dict[str, object] = {}
@@ -98,7 +125,9 @@ def test_command_adapter_contains_failure_output(
     class Process:
         returncode = 7
 
-        def communicate(self, timeout: int | None = None) -> tuple[str, str]:
+        def communicate(
+            self, input: str | None = None, timeout: int | None = None
+        ) -> tuple[str, str]:
             return "", "authentication required\n"
 
     monkeypatch.setattr(
@@ -108,6 +137,65 @@ def test_command_adapter_contains_failure_output(
     with pytest.raises(HarnessRunError, match="authentication required") as error:
         _adapter("gemini").run(_request("gemini", workspace))
     assert error.value.exit_code == 7
+
+
+def test_command_adapter_rejects_embedded_jsonl_error(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = workspace / "pi"
+    executable.touch()
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+
+    class Process:
+        returncode = 0
+
+        def communicate(
+            self, input: str | None = None, timeout: int | None = None
+        ) -> tuple[str, str]:
+            return (
+                '{"type":"message_end","message":{"role":"user",'
+                '"content":[{"type":"text","text":"hello"}]}}\n'
+                '{"type":"message_end","message":{"role":"assistant",'
+                '"content":[],"stopReason":"error","errorMessage":"fetch failed"}}',
+                "",
+            )
+
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.subprocess.Popen", lambda *_args, **_kwargs: Process()
+    )
+
+    with pytest.raises(HarnessRunError, match="fetch failed"):
+        _adapter("pi").run(_request("pi", workspace))
+
+
+def test_command_adapter_extracts_last_assistant_jsonl_message(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = workspace / "pi"
+    executable.touch()
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+
+    class Process:
+        returncode = 0
+
+        def communicate(
+            self, input: str | None = None, timeout: int | None = None
+        ) -> tuple[str, str]:
+            return (
+                '{"message":{"role":"user","content":[{"text":"hello"}]}}\n'
+                '{"message":{"role":"assistant","content":[{"text":"done"}]}}',
+                "",
+            )
+
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.subprocess.Popen", lambda *_args, **_kwargs: Process()
+    )
+
+    assert _adapter("pi").run(_request("pi", workspace)).output == "done"
 
 
 def test_command_adapter_terminates_cancelled_child(
@@ -123,7 +211,9 @@ def test_command_adapter_terminates_cancelled_child(
         returncode = None
         terminated = False
 
-        def communicate(self, timeout: int | None = None) -> tuple[str, str]:
+        def communicate(
+            self, input: str | None = None, timeout: int | None = None
+        ) -> tuple[str, str]:
             raise KeyboardInterrupt
 
         def terminate(self) -> None:
@@ -157,3 +247,47 @@ def test_projection_does_not_send_anthropic_model_to_codex(workspace: Path) -> N
 
     assert projection.model is None
     assert any(item.field == "spec.model" for item in projection.adjustments)
+
+
+@pytest.mark.parametrize("harness_id", ["opencode", "pi", "prime-agent"])
+def test_multi_provider_adapters_qualify_model_id(
+    harness_id: str, workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = workspace / harness_id
+    executable.touch()
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+    request = _request(harness_id, workspace)
+    request.profile.document["spec"]["model"] = {
+        "provider": "google",
+        "id": "gemini-2.5-flash",
+    }
+    adapter = _adapter(harness_id)
+    request.projection = adapter.project_profile(request.profile)
+
+    command = adapter.build_command(request)
+
+    assert "google/gemini-2.5-flash" in command
+
+
+def test_goose_maps_provider_and_model_separately(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = workspace / "goose"
+    executable.touch()
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+    request = _request("goose", workspace)
+    request.profile.document["spec"]["model"] = {
+        "provider": "google",
+        "id": "gemini-2.5-flash",
+    }
+    adapter = _adapter("goose")
+    request.projection = adapter.project_profile(request.profile)
+
+    command = adapter.build_command(request)
+
+    assert command[command.index("--provider") + 1] == "google"
+    assert command[command.index("--model") + 1] == "gemini-2.5-flash"

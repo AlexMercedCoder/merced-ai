@@ -11,3 +11,6 @@
 - Added shell-free bounded process execution with timeout and cancellation containment.
 - Added JSON automation surfaces, packaging, CI, security guidance, and MVP validation evidence.
 - Added an optional loopback-only responsive web UI with ephemeral-token API access.
+- Added adapters and discovery for Anton, DSH, AGY, Pi, Prime Agent, OpenClaw, and Kimi Code CLI.
+- Qualified OpenCode and Goose command adapters and hardened JSONL embedded-error detection.
+- Generated new OAP profiles with explicit revision 1 for cross-harness compatibility.

@@ -36,7 +36,22 @@ class HarnessRegistry:
 
 
 def default_registry() -> HarnessRegistry:
-    runnable = {"codex", "claude", "gemini", "loro", "magagent"}
+    runnable = {
+        "codex",
+        "claude",
+        "gemini",
+        "opencode",
+        "goose",
+        "loro",
+        "magagent",
+        "anton",
+        "dsh",
+        "agy",
+        "pi",
+        "prime-agent",
+        "openclaw",
+        "kimi",
+    }
     return HarnessRegistry(
         CommandHarnessAdapter(item) if item.id in runnable else ExecutableProbeAdapter(item)
         for item in _BUILTIN_DESCRIPTORS
@@ -100,5 +115,55 @@ _BUILTIN_DESCRIPTORS = (
         executable_names=("magent",),
         transports=(TransportKind.NATIVE, TransportKind.STRUCTURED_SUBPROCESS),
         capabilities=_RICH_SESSION.model_copy(update={"native_oap": True}),
+    ),
+    HarnessDescriptor(
+        id="anton",
+        name="Anton",
+        executable_names=("anton",),
+        transports=(TransportKind.TEXT_SUBPROCESS,),
+        version_args=("version",),
+        capabilities=_RICH_SESSION.model_copy(update={"model_listing": False}),
+    ),
+    HarnessDescriptor(
+        id="dsh",
+        name="DeepSeek Harness",
+        executable_names=("dsh",),
+        transports=(TransportKind.STRUCTURED_SUBPROCESS,),
+        capabilities=_RICH_SESSION.model_copy(update={"attachments": False}),
+    ),
+    HarnessDescriptor(
+        id="agy",
+        name="Antigravity CLI",
+        executable_names=("agy",),
+        transports=(TransportKind.STRUCTURED_SUBPROCESS,),
+        capabilities=_RICH_SESSION,
+    ),
+    HarnessDescriptor(
+        id="pi",
+        name="Pi Coding Agent",
+        executable_names=("pi",),
+        transports=(TransportKind.STRUCTURED_SUBPROCESS, TransportKind.ACP_STDIO),
+        capabilities=_RICH_SESSION,
+    ),
+    HarnessDescriptor(
+        id="prime-agent",
+        name="Prime Agent",
+        executable_names=("prime-agent",),
+        transports=(TransportKind.STRUCTURED_SUBPROCESS, TransportKind.ACP_STDIO),
+        capabilities=_RICH_SESSION,
+    ),
+    HarnessDescriptor(
+        id="openclaw",
+        name="OpenClaw",
+        executable_names=("openclaw",),
+        transports=(TransportKind.STRUCTURED_SUBPROCESS, TransportKind.ACP_STDIO),
+        capabilities=_RICH_SESSION,
+    ),
+    HarnessDescriptor(
+        id="kimi",
+        name="Kimi Code CLI",
+        executable_names=("kimi",),
+        transports=(TransportKind.STRUCTURED_SUBPROCESS, TransportKind.ACP_STDIO),
+        capabilities=_RICH_SESSION,
     ),
 )

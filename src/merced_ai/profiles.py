@@ -95,7 +95,7 @@ def create_profile(
     document = {
         "oap": "1.0",
         "kind": "AgentProfile",
-        "metadata": {"name": name, "description": description.strip()},
+        "metadata": {"name": name, "description": description.strip(), "revision": 1},
         "spec": {"role": {"instructions": instructions.rstrip() + "\n"}},
     }
     _atomic_write(path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True))

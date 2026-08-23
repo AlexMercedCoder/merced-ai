@@ -89,7 +89,7 @@ The layout is responsive down to a compact mobile collaboration view. See the
 Use `-C PATH` on project-aware commands to select another workspace. Use `--json` on read and
 one-shot commands for automation.
 
-## MVP harness matrix
+## Harness matrix
 
 | Harness | Discovery | Execution | OAP projection |
 | --- | --- | --- | --- |
@@ -98,12 +98,24 @@ one-shot commands for automation.
 | Claude Code | yes | structured print mode | system-prompt projection |
 | Codex | yes | noninteractive exec | delimited prompt compatibility mode |
 | Gemini CLI | yes | structured headless mode | delimited prompt compatibility mode |
-| OpenCode | yes | not yet qualified | unsupported |
-| Goose | yes | not yet qualified | unsupported |
+| OpenCode | yes | structured run mode | delimited prompt compatibility mode |
+| Goose | yes | structured run mode | system-prompt projection |
+| Anton | yes | stdin REPL bridge | delimited prompt compatibility mode |
+| DeepSeek Harness (DSH) | yes | headless profile | delimited prompt compatibility mode |
+| Antigravity CLI (AGY) | yes | structured print mode | delimited prompt compatibility mode |
+| Pi Coding Agent | yes | structured print mode | system-prompt projection |
+| Prime Agent | yes | structured print mode | system-prompt projection |
+| OpenClaw | yes | embedded agent exec | delimited prompt compatibility mode |
+| Kimi Code CLI | yes | read-only print mode | delimited prompt compatibility mode |
 
 "Native" means the harness receives the OAP profile name through its own CLI. It does not mean
 Merced AI can supersede harness policy. All current projection reports remain provisional until the
 runtime handshake and effective-policy reporting milestone is complete.
+
+GLM is treated as a model-family route, not a separate harness. Use it through a supported host
+such as Claude Code, OpenCode, Goose, Pi, or Prime Agent. Kimi models can likewise be selected in
+multi-provider harnesses, while the dedicated Kimi Code CLI has its own adapter. See
+[COMPATIBILITY.md](docs/COMPATIBILITY.md) for qualification status and caveats.
 
 ## Storage
 

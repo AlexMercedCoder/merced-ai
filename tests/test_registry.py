@@ -11,7 +11,22 @@ from merced_ai.models import HarnessDescriptor, HarnessStatus, TransportKind
 
 def test_default_registry_has_initial_harnesses() -> None:
     ids = {descriptor.id for descriptor in default_registry().descriptors()}
-    assert {"codex", "claude", "gemini", "opencode", "goose", "loro", "magagent"} <= ids
+    assert {
+        "codex",
+        "claude",
+        "gemini",
+        "opencode",
+        "goose",
+        "loro",
+        "magagent",
+        "anton",
+        "dsh",
+        "agy",
+        "pi",
+        "prime-agent",
+        "openclaw",
+        "kimi",
+    } <= ids
 
 
 def test_registry_rejects_duplicate_ids() -> None:

@@ -26,6 +26,7 @@ def test_create_discover_and_assemble_profile(workspace: Path) -> None:
 
     assert [item.name for item in discovered] == ["reviewer"]
     assert record.path == workspace / ".agents" / "reviewer.agent.yaml"
+    assert record.revision == 1
     assert record.profile_digest.startswith("sha256:")
     assert "<open-agent-profile>" in prompt
     assert "Report defects" in prompt

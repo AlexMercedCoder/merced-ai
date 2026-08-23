@@ -59,12 +59,15 @@ class CommandHarnessAdapter:
                     ),
                 ),
             )
-        if harness_id == "claude":
+        if harness_id in {"claude", "goose", "pi", "prime-agent"}:
             adjustments = [
                 ProjectionAdjustment(
                     field="spec.role",
                     action="mapped",
-                    reason="Role and bounded state are passed through --system-prompt.",
+                    reason=(
+                        "Role and bounded state are passed through a harness "
+                        "system-prompt flag."
+                    ),
                 ),
                 ProjectionAdjustment(
                     field="spec.permissions",
@@ -149,8 +152,6 @@ class CommandHarnessAdapter:
             return command
         if harness_id == "gemini":
             command = [str(executable), "--output-format", "json", "--approval-mode", "default"]
-            if shell_denied:
-                command.append("--sandbox")
             if projection.model:
                 command.extend(("--model", projection.model))
             command.append(_prefixed_prompt(projection.system_prompt, prompt))
@@ -184,6 +185,109 @@ class CommandHarnessAdapter:
             if _native_profile_visible(profile):
                 command.extend(("--agent", profile.name))
             return command
+        if harness_id == "opencode":
+            command = [
+                str(executable),
+                "run",
+                "--format",
+                "json",
+                "--dir",
+                str(request.workspace),
+            ]
+            if projection.model:
+                command.extend(("--model", _qualified_model(profile, projection.model)))
+            command.append(_prefixed_prompt(projection.system_prompt, prompt))
+            return command
+        if harness_id == "goose":
+            command = [
+                str(executable),
+                "run",
+                "--text",
+                prompt,
+                "--system",
+                projection.system_prompt,
+                "--quiet",
+                "--output-format",
+                "json",
+                "--no-session",
+            ]
+            provider = _profile_provider(profile)
+            if provider:
+                command.extend(("--provider", provider))
+            if projection.model:
+                command.extend(("--model", projection.model))
+            if edit_denied and shell_denied:
+                command.append("--no-profile")
+            return command
+        if harness_id == "dsh":
+            return [
+                str(executable),
+                "--profile",
+                "headless",
+                _prefixed_prompt(projection.system_prompt, prompt),
+            ]
+        if harness_id == "agy":
+            command = [
+                str(executable),
+                "--print",
+                "--output-format",
+                "json",
+                "--disable-slash-commands",
+            ]
+            if edit_denied or shell_denied:
+                command.extend(("--mode", "plan"))
+            if projection.model:
+                command.extend(("--model", projection.model))
+            command.append(_prefixed_prompt(projection.system_prompt, prompt))
+            return command
+        if harness_id in {"pi", "prime-agent"}:
+            command = [str(executable), "--print", "--mode", "json", "--no-session"]
+            if harness_id == "prime-agent":
+                command.extend(("--cwd", str(request.workspace)))
+            command.extend(("--append-system-prompt", projection.system_prompt))
+            if harness_id == "prime-agent" and (edit_denied or shell_denied):
+                command.append("--no-tools")
+            else:
+                excluded = []
+                if edit_denied:
+                    excluded.extend(("edit", "write"))
+                if shell_denied:
+                    excluded.append("bash")
+                if excluded:
+                    command.extend(("--exclude-tools", ",".join(excluded)))
+            if projection.model:
+                command.extend(("--model", _qualified_model(profile, projection.model)))
+            command.append(prompt)
+            return command
+        if harness_id == "openclaw":
+            return [
+                str(executable),
+                "agent",
+                "exec",
+                "--cwd",
+                str(request.workspace),
+                "--json",
+                _prefixed_prompt(projection.system_prompt, prompt),
+            ]
+        if harness_id == "kimi":
+            command = [
+                str(executable),
+                "--quiet",
+                "--plan",
+                "--work-dir",
+                str(request.workspace),
+            ]
+            if projection.model:
+                command.extend(("--model", projection.model))
+            command.extend(("--prompt", _prefixed_prompt(projection.system_prompt, prompt)))
+            return command
+        if harness_id == "anton":
+            return [
+                str(executable),
+                "--folder",
+                str(request.workspace),
+                "--no-update",
+            ]
         raise HarnessRunError(f"Harness {harness_id!r} is not executable in this MVP.", exit_code=4)
 
     def run(self, request: RunRequest) -> RunResult:
@@ -194,13 +298,18 @@ class CommandHarnessAdapter:
             process = subprocess.Popen(  # noqa: S603 - argv is built by a trusted adapter
                 command,
                 cwd=request.workspace,
-                stdin=subprocess.DEVNULL,
+                stdin=(
+                    subprocess.PIPE if self.descriptor.id == "anton" else subprocess.DEVNULL
+                ),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 shell=False,
                 text=True,
             )
-            stdout, stderr = process.communicate(timeout=request.timeout_seconds)
+            stdin_payload = _stdin_payload(self.descriptor.id, request)
+            stdout, stderr = process.communicate(
+                input=stdin_payload, timeout=request.timeout_seconds
+            )
         except subprocess.TimeoutExpired as exc:
             if process is not None:
                 process.kill()
@@ -237,6 +346,13 @@ class CommandHarnessAdapter:
                 stderr=stderr,
             )
         output, raw, native_session_id = _normalize_output(self.descriptor.id, stdout)
+        embedded_error = _find_error(raw) if raw else None
+        if not output and embedded_error:
+            raise HarnessRunError(
+                f"Harness {self.descriptor.id!r} failed: {embedded_error}",
+                exit_code=1,
+                stderr=stderr,
+            )
         return RunResult(
             harness_id=self.descriptor.id,
             output=output,
@@ -259,15 +375,57 @@ def _normalize_output(
     harness_id: str, stdout: str
 ) -> tuple[str, dict[str, Any] | None, str | None]:
     text = stdout.strip()
-    if harness_id in {"claude", "gemini", "magagent"}:
+    if harness_id in {
+        "claude",
+        "gemini",
+        "magagent",
+        "opencode",
+        "goose",
+        "agy",
+        "pi",
+        "prime-agent",
+        "openclaw",
+    }:
         try:
             payload = json.loads(text)
         except json.JSONDecodeError:
-            return text, None, None
-        output = _find_text(payload) or text
+            payload = _parse_json_lines(text)
+            if payload is None:
+                return text, None, None
+        if "events" in payload:
+            output = _find_assistant_text(payload)
+        else:
+            output = _find_text(payload)
+        output = output or ""
         session_id = _find_string(payload, ("session_id", "sessionId"))
         return output, payload, session_id
     return text, None, None
+
+
+def _parse_json_lines(text: str) -> dict[str, Any] | None:
+    values: list[Any] = []
+    for line in text.splitlines():
+        try:
+            values.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return {"events": values} if values else None
+
+
+def _stdin_payload(harness_id: str, request: RunRequest) -> str | None:
+    if harness_id == "anton":
+        return _prefixed_prompt(request.projection.system_prompt, request.prompt) + "\nexit\n"
+    return None
+
+
+def _profile_provider(profile: ProfileRecord) -> str | None:
+    provider = profile.document.get("spec", {}).get("model", {}).get("provider")
+    return provider if isinstance(provider, str) and provider else None
+
+
+def _qualified_model(profile: ProfileRecord, model: str) -> str:
+    provider = _profile_provider(profile)
+    return f"{provider}/{model}" if provider and "/" not in model else model
 
 
 def _find_text(value: Any) -> str | None:
@@ -283,6 +441,49 @@ def _find_text(value: Any) -> str | None:
     elif isinstance(value, list):
         for candidate in value:
             found = _find_text(candidate)
+            if found:
+                return found
+    return None
+
+
+def _find_assistant_text(value: Any) -> str | None:
+    candidates: list[str] = []
+
+    def visit(item: Any) -> None:
+        if isinstance(item, dict):
+            if item.get("role") == "assistant":
+                content = item.get("content")
+                if isinstance(content, str) and content.strip():
+                    candidates.append(content.strip())
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict):
+                            text = block.get("text")
+                            if isinstance(text, str) and text.strip():
+                                candidates.append(text.strip())
+            for child in item.values():
+                visit(child)
+        elif isinstance(item, list):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return candidates[-1] if candidates else None
+
+
+def _find_error(value: Any) -> str | None:
+    if isinstance(value, dict):
+        for key in ("errorMessage", "error_message"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+        for child in value.values():
+            found = _find_error(child)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for child in value:
+            found = _find_error(child)
             if found:
                 return found
     return None
@@ -318,6 +519,9 @@ def _projected_model(
         "codex": {"openai"},
         "claude": {"anthropic"},
         "gemini": {"google", "gemini"},
+        "agy": {"google", "gemini"},
+        "dsh": {"deepseek"},
+        "kimi": {"moonshot", "kimi"},
     }.get(harness_id)
     if not model_id or compatible is None or provider in compatible:
         return model_id, None
