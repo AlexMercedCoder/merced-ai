@@ -10,6 +10,8 @@ const state = {
   liveParticipants: {},
   groupDraft: [],
   deriveFrom: "",
+  harnessDetection: { refreshing: false, updated_at: null, cached: false, stale: true },
+  harnessPoll: 0,
   view: "conversations",
 };
 
@@ -23,7 +25,7 @@ const escapeHtml = (value = "") => String(value)
   .replaceAll("'", "&#039;");
 const titleCase = (value = "") => value.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const selected = (left, right) => left === right ? " selected" : "";
-const ready = (probe) => Boolean(probe?.path) && probe.status !== "probe_failed" && probe.status !== "incompatible";
+const ready = (probe) => Boolean(probe?.path) && !["detecting", "not_installed", "probe_failed", "incompatible"].includes(probe.status);
 const botHue = (name = "assistant") => [...name].reduce((value, char) => (value * 31 + char.charCodeAt(0)) % 360, 47);
 const initials = (name = "AI") => name.split(/[-_\s]+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 const identityStyle = (name) => `style="--bot-hue:${botHue(name)}"`;
@@ -67,6 +69,7 @@ async function authenticate() {
 async function refresh({ quiet = false } = {}) {
   if (!quiet) setBusy(true, "Refreshing workspace…");
   state.data = await (await api("/api/bootstrap")).json();
+  state.harnessDetection = state.data.harness_detection || state.harnessDetection;
   if (!state.activeBot || !state.data.bots.some((bot) => bot.name === state.activeBot)) {
     state.activeBot = state.data.bots[0]?.name || "";
   }
@@ -75,6 +78,34 @@ async function refresh({ quiet = false } = {}) {
   }
   render();
   setBusy(false);
+}
+
+const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function applyHarnessPayload(payload) {
+  state.data.harnesses = payload.harnesses;
+  state.harnessDetection = {
+    refreshing: payload.refreshing,
+    updated_at: payload.updated_at,
+    cached: payload.cached,
+    stale: payload.stale,
+  };
+  $("#harness-count").textContent = state.data.harnesses.filter(ready).length;
+  renderSelectors();
+  renderHarnessHealth();
+  if (state.view === "harnesses") renderManagement();
+}
+
+async function refreshHarnesses({ announce = false } = {}) {
+  const poll = ++state.harnessPoll;
+  let payload = await (await api("/api/harnesses/refresh", { method: "POST" })).json();
+  applyHarnessPayload(payload);
+  while (payload.refreshing && poll === state.harnessPoll) {
+    await pause(250);
+    payload = await (await api("/api/harnesses")).json();
+    applyHarnessPayload(payload);
+  }
+  if (announce && poll === state.harnessPoll) toast("Harness detection refreshed");
 }
 
 function currentBot() { return state.data.bots.find((item) => item.name === state.activeBot); }
@@ -161,11 +192,39 @@ function renderConversation() {
   bindCopyButtons();
 }
 
+function renderHarnessHealth() {
+  const probe = activeProbe();
+  const harnessId = activeHarnessId();
+  $("#active-harness").textContent = harnessId ? `${titleCase(harnessId)} · ${probe?.status || "detecting"}` : "No route";
+  [$("#route-status-dot"), $("#inspector-route-dot")].forEach((dot) => {
+    dot.classList.toggle("online", ready(probe));
+    dot.classList.toggle("detecting", probe?.status === "detecting");
+  });
+  const installed = state.data.harnesses.filter(ready);
+  const detecting = state.data.harnesses.filter((item) => item.status === "detecting").length;
+  $("#healthy-count").textContent = `${installed.length} ready`;
+  const detectionState = $("#harness-detection-state");
+  if (state.harnessDetection.refreshing) {
+    detectionState.textContent = `Detecting ${state.data.harnesses.length - detecting}/${state.data.harnesses.length}`;
+  } else if (state.harnessDetection.updated_at) {
+    detectionState.textContent = state.harnessDetection.cached
+      ? state.harnessDetection.stale ? "Previous result · refreshing" : "Cached · refreshing"
+      : "Detection complete";
+  } else {
+    detectionState.textContent = "Detection queued";
+  }
+  $("#refresh-harnesses").disabled = state.harnessDetection.refreshing;
+  $("#harness-list").setAttribute("aria-busy", String(state.harnessDetection.refreshing));
+  $("#harness-list").innerHTML = state.data.harnesses.map((item) => `
+    <button class="harness-item" data-harness="${escapeHtml(item.harness_id)}" ${ready(item) ? "" : "disabled"}>
+      <span class="status-dot ${ready(item) ? "online" : ""} ${item.status === "detecting" ? "detecting" : ""}"></span><strong>${escapeHtml(titleCase(item.harness_id))}</strong><small>${escapeHtml(item.status === "detecting" ? "detecting…" : item.status)}</small>
+    </button>`).join("");
+}
+
 async function renderInspector() {
   const bot = currentBot();
   const profile = currentProfile();
   const harnessId = activeHarnessId();
-  const probe = activeProbe();
   const participants = currentParticipants();
   $("#inspector-name").textContent = participants.length > 1 ? (currentSession()?.title || `${participants.length} collaborators`) : bot ? titleCase(bot.name) : "No bot selected";
   $("#inspector-description").textContent = participants.length > 1 ? "Each collaborator keeps an independent profile, route, and approval boundary." : profile?.description || "Create an OAP profile and bind it to a harness.";
@@ -173,14 +232,7 @@ async function renderInspector() {
   $("#inspector-participants").innerHTML = participants.map((item) => `<div class="inspector-participant" ${identityStyle(item.bot_name)}><div class="message-avatar bot-identity">${escapeHtml(initials(item.bot_name))}</div><div><strong>${escapeHtml(titleCase(item.bot_name))}</strong><small>${escapeHtml(titleCase(item.harness_id))} · ${escapeHtml(item.profile_name || "profile")}</small></div></div>`).join("");
   $("#route-profile").textContent = profile?.name || bot?.profile || "—";
   $("#route-harness").textContent = harnessId ? titleCase(harnessId) : "—";
-  $("#active-harness").textContent = harnessId ? `${titleCase(harnessId)} · ${probe?.status || "unknown"}` : "No route";
-  [$("#route-status-dot"), $("#inspector-route-dot")].forEach((dot) => dot.classList.toggle("online", ready(probe)));
-  const installed = state.data.harnesses.filter(ready);
-  $("#healthy-count").textContent = `${installed.length} ready`;
-  $("#harness-list").innerHTML = state.data.harnesses.map((item) => `
-    <button class="harness-item" data-harness="${escapeHtml(item.harness_id)}" ${ready(item) ? "" : "disabled"}>
-      <span class="status-dot ${ready(item) ? "online" : ""}"></span><strong>${escapeHtml(titleCase(item.harness_id))}</strong><small>${escapeHtml(item.status)}</small>
-    </button>`).join("");
+  renderHarnessHealth();
   $("#projection-level").textContent = "—";
   $("#approval-level").textContent = "—";
   $("#adjustment-list").innerHTML = "";
@@ -215,14 +267,15 @@ function renderManagement() {
   }[view];
   if (!copy) return;
   [$("#management-eyebrow").textContent, $("#management-title").textContent, $("#management-copy").textContent] = copy;
-  $("#management-action").hidden = view === "harnesses";
-  $("#management-action").textContent = view === "profiles" ? "Create profile" : "Create bot";
+  $("#management-action").hidden = false;
+  $("#management-action").disabled = view === "harnesses" && state.harnessDetection.refreshing;
+  $("#management-action").textContent = view === "profiles" ? "Create profile" : view === "bots" ? "Create bot" : state.harnessDetection.refreshing ? "Detecting…" : "Refresh detection";
   if (view === "profiles") {
     $("#management-list").innerHTML = state.data.profiles.map((item) => `<article class="management-card"><div><span class="card-kicker">REVISION ${item.revision} · ${escapeHtml(item.source)}</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.description)}</p><div class="tag-row"><span>${escapeHtml(item.model?.provider || "harness model")}</span><span>${escapeHtml(item.model?.id || "default")}</span><span>edit: ${escapeHtml(item.permissions?.edit || "inherit")}</span><span>shell: ${escapeHtml(item.permissions?.shell || "inherit")}</span></div></div><button class="secondary-button edit-profile" data-profile="${escapeHtml(item.name)}" ${item.editable ? "" : "disabled"}>${item.editable ? "Edit" : "Read only"}</button></article>`).join("") || emptyState("No profiles", "Create an OAP profile before making a bot.");
   } else if (view === "bots") {
     $("#management-list").innerHTML = state.data.bots.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.source)} BINDING</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.profile)} → ${escapeHtml(titleCase(item.harness.preferred))}</p><div class="tag-row">${item.harness.fallbacks.map((value) => `<span>fallback: ${escapeHtml(value)}</span>`).join("") || "<span>No fallbacks</span>"}</div></div><button class="secondary-button use-bot" data-bot="${escapeHtml(item.name)}">Open</button></article>`).join("") || emptyState("No bots", "Create a profile, then bind it to an installed harness.");
   } else {
-    $("#management-list").innerHTML = state.data.harnesses.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.status)}</span><h2><span class="status-dot ${ready(item) ? "online" : ""}"></span> ${escapeHtml(titleCase(item.harness_id))}</h2><p>${escapeHtml(item.path || "Executable not found")}</p><div class="tag-row"><span>${escapeHtml(item.transport || "no transport")}</span><span>${item.capabilities.streaming ? "streaming" : "atomic"}</span><span>${item.capabilities.approvals ? "approvals" : "no approval bridge"}</span></div></div><small>${escapeHtml((item.version || "No version reported").split("\n")[0])}</small></article>`).join("");
+    $("#management-list").innerHTML = state.data.harnesses.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.status === "detecting" ? "DETECTING…" : item.status)}</span><h2><span class="status-dot ${ready(item) ? "online" : ""} ${item.status === "detecting" ? "detecting" : ""}"></span> ${escapeHtml(titleCase(item.harness_id))}</h2><p>${escapeHtml(item.status === "detecting" ? "Checking executable and bounded version metadata…" : item.path || "Executable not found")}</p><div class="tag-row"><span>${escapeHtml(item.transport || "no transport")}</span><span>${item.capabilities.streaming ? "streaming" : "atomic"}</span><span>${item.capabilities.approvals ? "approvals" : "no approval bridge"}</span></div></div><small>${escapeHtml((item.version || (item.status === "detecting" ? "Previous result retained while checking" : "No version reported")).split("\n")[0])}</small></article>`).join("");
   }
 }
 
@@ -505,6 +558,7 @@ function bindEvents() {
   $("#recent-list").addEventListener("click", (event) => { const button = event.target.closest("[data-session]"); if (!button) return; const session = state.data.sessions.find((item) => item.id === button.dataset.session); state.activeSession = session.id; state.activeBot = session.bot_name; state.harnessOverride = ""; showView("conversations"); render(); closeNavigation(); });
   $("#session-search").addEventListener("input", renderRecents);
   $("#refresh-data").addEventListener("click", () => refresh().catch(showFatal));
+  $("#refresh-harnesses").addEventListener("click", () => refreshHarnesses({ announce: true }).catch((error) => toast(error.message)));
   $("#new-thread").addEventListener("click", createConversation);
   $("#new-group").addEventListener("click", () => openGroupEditor(false));
   $("#derive-group").addEventListener("click", () => openGroupEditor(true));
@@ -535,7 +589,11 @@ function bindEvents() {
       toast(state.deriveFrom ? "Derived conversation ready" : "Group conversation ready");
     } catch (error) { $("#group-error").textContent = error.message; }
   });
-  $("#management-action").addEventListener("click", () => state.view === "profiles" ? openProfileEditor() : openBotEditor());
+  $("#management-action").addEventListener("click", () => {
+    if (state.view === "profiles") openProfileEditor();
+    else if (state.view === "bots") openBotEditor();
+    else refreshHarnesses({ announce: true }).catch((error) => toast(error.message));
+  });
   $("#management-list").addEventListener("click", (event) => { const edit = event.target.closest(".edit-profile"); const use = event.target.closest(".use-bot"); if (edit) openProfileEditor(state.data.profiles.find((item) => item.name === edit.dataset.profile)); if (use) selectBot(use.dataset.bot); });
   $("#harness-list").addEventListener("click", (event) => { const button = event.target.closest("[data-harness]"); if (button && !currentSession()?.turns.length) { state.harnessOverride = button.dataset.harness; render(); } });
   $("#export-session").addEventListener("click", () => { const session = currentSession(); if (session) location.href = `/api/sessions/${encodeURIComponent(session.id)}/export`; });
@@ -564,6 +622,7 @@ async function boot() {
   bindEvents();
   await authenticate();
   await refresh();
+  refreshHarnesses().catch((error) => toast(`Harness detection: ${error.message}`));
 }
 
 boot().catch(showFatal);

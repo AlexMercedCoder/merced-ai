@@ -39,6 +39,12 @@ OAP profile(s) + bot binding(s) + user prompt
 - `cli.py`: human and JSON automation surfaces.
 - `webui_server.py`: loopback-first optional UI over the same application records.
 
+The UI bootstrap path never probes executables. It returns profiles, bots, sessions, and a cached
+or placeholder harness snapshot, then a separate authenticated endpoint starts one bounded
+background probe sequence. Results become visible per harness and a complete snapshot is written
+atomically for later launches. Routing still performs its own current probe before execution, so
+the UI cache cannot authorize a stale route.
+
 ## Adapter contract
 
 An adapter must probe availability, describe profile projection, build a noninteractive command,
@@ -57,6 +63,8 @@ credentials, provider traffic, approvals, sandboxing, tools, and final policy en
 - Group sessions own an ordered participant list. Each participant pins its bot, routed harness,
   and profile/spec snapshot; assistant turns carry bot and harness attribution.
 - Harness-native state, credentials, model catalogs, and provider logs remain harness-owned.
+- Cached UI probe snapshots contain only executable paths, bounded version output, capabilities,
+  status, and timestamps; they never contain provider credentials.
 
 ## Failure model
 

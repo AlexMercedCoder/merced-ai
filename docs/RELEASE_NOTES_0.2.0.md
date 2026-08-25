@@ -20,11 +20,13 @@ final policy enforcement.
   and explicit edit/shell permission requests.
 - Hardened fragment-token exchange, HTTP-only SameSite cookies, origin checks, CSP, framing and
   referrer protections, cache prevention, and loopback-only binding for the local UI.
+- Immediate workspace bootstrap with cached harness health, progressive background detection,
+  per-harness detecting/ready/failure states, and explicit refresh controls.
 
 ## Compatibility and validation
 
 - Python 3.11 through 3.14 are exercised across Ubuntu, macOS, and Windows.
-- The automated suite contains 65 tests: 64 local tests pass with 79.11% branch-aware coverage and
+- The automated suite contains 66 tests: 65 local tests pass with 79.65% branch-aware coverage and
   one dedicated Chromium test validates the real desktop/mobile collaboration workflow.
 - Chromium CI publishes current UI screenshots and preserves failure captures as an artifact.
 - Wheel and source distributions pass build and Twine metadata checks.

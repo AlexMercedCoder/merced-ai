@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,6 +12,7 @@ import pytest
 
 from merced_ai.harnesses.adapters.command import CommandHarnessAdapter, HarnessRunError
 from merced_ai.models import HarnessProbe, HarnessStatus, RunResult
+from merced_ai.paths import user_root
 from merced_ai.webui_server import create_web_app, run_web_ui
 
 
@@ -63,6 +66,81 @@ async def test_webui_exchanges_token_for_secure_local_cookie_and_headers(workspa
     assert bootstrap.status_code == 200
     assert logout.json() == {"authenticated": False}
     assert rejected_after_logout.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_webui_bootstrap_is_immediate_and_harness_detection_is_progressive_and_cached(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started = threading.Event()
+    release = threading.Event()
+
+    def controlled_probe(adapter: CommandHarnessAdapter) -> HarnessProbe:
+        started.set()
+        release.wait(timeout=2)
+        return HarnessProbe(
+            harness_id=adapter.descriptor.id,
+            status=HarnessStatus.READY,
+            path=Path(adapter.descriptor.executable_names[0]),
+            version="progressive 1.0",
+            transport=adapter.descriptor.transports[0],
+            capabilities=adapter.descriptor.capabilities,
+        )
+
+    monkeypatch.setattr(CommandHarnessAdapter, "probe", controlled_probe)
+    transport = httpx.ASGITransport(app=create_web_app(workspace, "secret-token"))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        await client.post("/api/auth", json={"token": "secret-token"})
+        before = time.monotonic()
+        bootstrap = await client.get("/api/bootstrap")
+        elapsed = time.monotonic() - before
+
+        assert elapsed < 1.0
+        assert bootstrap.json()["harness_detection"]["refreshing"] is False
+        assert {item["status"] for item in bootstrap.json()["harnesses"]} == {"detecting"}
+
+        refresh = await client.post("/api/harnesses/refresh")
+        assert refresh.status_code == 202
+        assert refresh.json()["refreshing"] is True
+        for _ in range(100):
+            if started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert started.is_set()
+        midway = await client.get("/api/harnesses")
+        assert midway.json()["refreshing"] is True
+        assert {item["status"] for item in midway.json()["harnesses"]} == {"detecting"}
+
+        release.set()
+        for _ in range(100):
+            completed = await client.get("/api/harnesses")
+            if not completed.json()["refreshing"]:
+                break
+            await asyncio.sleep(0.01)
+
+    assert completed.json()["refreshing"] is False
+    assert {item["status"] for item in completed.json()["harnesses"]} == {"ready"}
+    assert (user_root() / "cache" / "harness-probes.json").is_file()
+
+    cached_transport = httpx.ASGITransport(app=create_web_app(workspace, "secret-token"))
+    async with httpx.AsyncClient(
+        transport=cached_transport, base_url="http://test"
+    ) as cached_client:
+        await cached_client.post("/api/auth", json={"token": "secret-token"})
+        cached = await cached_client.get("/api/bootstrap")
+    assert cached.json()["harness_detection"]["cached"] is True
+    assert cached.json()["harness_detection"]["stale"] is False
+    assert {item["status"] for item in cached.json()["harnesses"]} == {"ready"}
+
+    (user_root() / "cache" / "harness-probes.json").write_text("{invalid", encoding="utf-8")
+    fallback_transport = httpx.ASGITransport(app=create_web_app(workspace, "secret-token"))
+    async with httpx.AsyncClient(
+        transport=fallback_transport, base_url="http://test"
+    ) as fallback_client:
+        await fallback_client.post("/api/auth", json={"token": "secret-token"})
+        fallback = await fallback_client.get("/api/bootstrap")
+    assert fallback.json()["harness_detection"]["cached"] is False
+    assert {item["status"] for item in fallback.json()["harnesses"]} == {"detecting"}
 
 
 @pytest.mark.anyio

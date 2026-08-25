@@ -11,6 +11,9 @@
 - Group creation now renders the returned session immediately instead of blocking on a second full
   harness probe; group dialogs keep adapter errors visible and completed refreshes clear stale
   loading text.
+- UI bootstrap now renders profiles, bots, sessions, and cached harness health without executing
+  probes. Bounded detection refreshes progressively in the background with per-harness states and
+  explicit refresh controls.
 - Added durable multi-bot conversations across CLI, API, and web UI with exact mentions,
   ask-everyone, named-recipient, and round-robin dispatch.
 - Added concurrent isolated fan-out with deterministic participant-order persistence, per-bot

@@ -22,6 +22,8 @@ merced-ai ui -C /path/to/workspace
 - Follow queued/running/completed/failed state progressively, cancel the shared run, and retry only
   a failed participant.
 - Review projection adjustments, effective authority, route health, versions, and capabilities.
+- Load workspace data immediately while bounded harness probes update independently in the
+  background; reuse cached health on later launches and refresh detection explicitly when needed.
 - Create and edit project-local OAP profiles, including provider/model and edit/shell permission
   requests. Fields outside the editor are preserved and the revision increments atomically.
 - Create bot bindings with ordered fallback harnesses.
@@ -78,3 +80,10 @@ screenshots as a workflow artifact. See [Group conversations](GROUP_CHAT.md).
 Group creation and participant derivation render from the mutation response immediately. They do
 not wait for a second harness discovery pass, which keeps the interface responsive on machines with
 many installed harnesses. Adapter or routing failures remain inside the open dialog for correction.
+
+Initial bootstrap follows the same rule: profiles, bots, sessions, and cached or placeholder
+harness entries render before any executable is invoked. The browser starts an authenticated
+background refresh, polls progressive results, and announces detecting/completed state. Each
+completed snapshot is stored atomically in the user Merced directory; results older than five
+minutes are labeled as previous while revalidation runs. The inspector and Harnesses view both
+provide an explicit refresh control.

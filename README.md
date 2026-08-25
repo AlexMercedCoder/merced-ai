@@ -97,7 +97,9 @@ can create profiles and bots, create single or group conversations, target `@men
 everyone concurrently, choose routes, approve or cancel runs, inspect authority and harness health,
 and search/resume/export attributed transcripts. Group setup has searchable ordered selection,
 progressive per-bot status, exact failed-bot retry, `@mention` completion, stable identities,
-conversation naming, and derived participant sets. See the [UI guide](docs/UI.md) and
+conversation naming, and derived participant sets. Workspace data renders before executable
+probing; cached harness health then refreshes progressively in the background. See the
+[UI guide](docs/UI.md) and
 [group-chat guide](docs/GROUP_CHAT.md) for the security, dispatch, and streaming boundaries.
 
 ![Merced AI desktop group conversation](docs/screenshots/merced-ai-group-desktop.jpg)

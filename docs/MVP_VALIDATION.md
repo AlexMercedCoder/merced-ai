@@ -5,7 +5,7 @@ range is Python 3.11–3.14.
 
 ## Automated suite
 
-The suite contains 65 tests: 64 local tests pass with 79.11% branch-aware coverage and one
+The suite contains 66 tests: 65 local tests pass with 79.65% branch-aware coverage and one
 dedicated Chromium test runs in CI. CI enforces a 70% minimum and
 is configured for Python 3.11 and 3.14 on Ubuntu plus Python 3.13 on macOS and Windows.
 
@@ -24,7 +24,8 @@ Covered behavior includes:
 - CLI profile/bot workflows, dry runs, JSON automation, and invalid-harness errors.
 - UI cookie authentication, security headers, cross-origin rejection, profile/model/permission
   editing, bot creation, session/export workflows, approval preflight, SSE lifecycle/tool/error
-  events, subprocess cancellation, responsive contracts, and accessibility structure.
+  events, subprocess cancellation, immediate bootstrap, progressive/cached harness detection,
+  corrupt-cache fallback, explicit refresh, responsive contracts, and accessibility structure.
 - Multi-bot mention/all/named/round-robin selection, deterministic response ordering, per-bot
   attribution, progressive lifecycle events, exact failed-bot retry, approval aggregation,
   naming/derivation, partial failures, group export, and CLI JSON automation.

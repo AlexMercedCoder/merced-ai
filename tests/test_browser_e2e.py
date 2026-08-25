@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import socket
 import threading
 import time
@@ -24,6 +25,7 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
 
     fake_codex = Path(__file__).parent / "fixtures" / "fake_codex.py"
     monkeypatch.setenv("MERCED_AI_CODEX_PATH", str(fake_codex))
+    monkeypatch.setenv("MERCED_AI_FAKE_CODEX_VERSION_DELAY", "0.5")
     for name, description in (
         ("reviewer", "Reviews correctness and concrete risks."),
         ("builder", "Proposes practical implementation steps."),
@@ -72,6 +74,7 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
                     f"requestfailed: {request.method} {request.url} {request.failure}"
                 ),
             )
+            opened_at = time.monotonic()
             page.goto(f"http://127.0.0.1:{port}/#token=browser-token")
             try:
                 expect(page.locator("#workspace-name")).not_to_have_text("Loading…", timeout=30_000)
@@ -79,6 +82,18 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
                 page.screenshot(path=screenshot_root / "merced-ai-browser-failure.png")
                 details = "; ".join(browser_errors) or "no browser errors captured"
                 raise AssertionError(f"{error}\nBrowser diagnostics: {details}") from error
+            assert time.monotonic() - opened_at < 2
+            expect(page.locator("#harness-detection-state")).to_contain_text("Detecting")
+            expect(page.locator("#harness-detection-state")).to_have_text(
+                "Detection complete", timeout=30_000
+            )
+            expect(page.locator("#healthy-count")).to_have_text(re.compile(r"^[1-9]\d* ready$"))
+            page.locator("#refresh-harnesses").click()
+            expect(page.locator("#refresh-harnesses")).to_be_disabled()
+            expect(page.locator("#harness-detection-state")).to_contain_text("Detecting")
+            expect(page.locator("#harness-detection-state")).to_have_text(
+                "Detection complete", timeout=30_000
+            )
 
             page.locator("#new-group").click()
             expect(page.locator("#group-dialog")).to_be_visible()

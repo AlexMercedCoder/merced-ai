@@ -6,6 +6,7 @@ import asyncio
 import json
 import secrets
 import threading
+import time
 import webbrowser
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,8 @@ from merced_ai.application import (
 from merced_ai.bots import BotError, create_bot, discover_bots
 from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import HarnessRunError
-from merced_ai.models import ProfileRecord, RunResult
+from merced_ai.models import HarnessProbe, ProfileRecord, RunResult
+from merced_ai.paths import ensure_user_layout
 from merced_ai.profiles import (
     ProfileError,
     create_profile,
@@ -46,6 +48,8 @@ except ImportError:  # pragma: no cover
 
 COOKIE_NAME = "merced_ai_ui"
 MAX_MESSAGE_CHARS = 100_000
+HARNESS_CACHE_SCHEMA = 1
+HARNESS_CACHE_MAX_AGE_SECONDS = 300
 
 
 class AuthInput(BaseModel):
@@ -135,6 +139,24 @@ def _raw_events(result: RunResult) -> list[dict[str, Any]]:
     return [item for item in events if isinstance(item, dict)][-100:]
 
 
+def _detecting_probe(descriptor: Any, previous: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = dict(previous or {})
+    payload.update(
+        {
+            "harness_id": descriptor.id,
+            "status": "detecting",
+            "capabilities": descriptor.capabilities.model_dump(mode="json"),
+            "capabilities_verified": False,
+            "warnings": ["Bounded executable detection is running in the background."],
+            "duration_ms": 0,
+        }
+    )
+    payload.setdefault("path", None)
+    payload.setdefault("version", None)
+    payload.setdefault("transport", None)
+    return payload
+
+
 def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
     if FastAPI is None:
         raise RuntimeError('Install the UI with: pip install "merced-ai[webui]"')
@@ -145,6 +167,86 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
     app.mount("/assets", StaticFiles(directory=static_root), name="assets")
     cancellations: dict[str, threading.Event] = {}
     cancellation_lock = threading.Lock()
+    registry = default_registry()
+    descriptors = registry.descriptors()
+    probe_lock = threading.Lock()
+    probe_refreshing = False
+    probe_updated_at: float | None = None
+    probe_cached = False
+    probe_cache_path = ensure_user_layout() / "cache" / "harness-probes.json"
+    probe_cache_path.parent.mkdir(parents=True, exist_ok=True)
+    probes: dict[str, dict[str, Any]] = {
+        descriptor.id: _detecting_probe(descriptor) for descriptor in descriptors
+    }
+
+    try:
+        cached_payload = json.loads(probe_cache_path.read_text(encoding="utf-8"))
+        if cached_payload.get("schema") == HARNESS_CACHE_SCHEMA:
+            cached_probes = {
+                item.harness_id: item.model_dump(mode="json")
+                for item in (
+                    HarnessProbe.model_validate(value)
+                    for value in cached_payload.get("harnesses", [])
+                )
+            }
+            if set(cached_probes) == {item.id for item in descriptors}:
+                probes = cached_probes
+                probe_updated_at = float(cached_payload["updated_at"])
+                probe_cached = True
+    except (OSError, ValueError, TypeError, KeyError):
+        pass
+
+    def probe_payload() -> dict[str, Any]:
+        with probe_lock:
+            updated_at = probe_updated_at
+            return {
+                "harnesses": [dict(probes[item.id]) for item in descriptors],
+                "refreshing": probe_refreshing,
+                "updated_at": updated_at,
+                "cached": probe_cached,
+                "stale": updated_at is None
+                or time.time() - updated_at > HARNESS_CACHE_MAX_AGE_SECONDS,
+            }
+
+    def refresh_probes() -> None:
+        nonlocal probe_cached, probe_refreshing, probe_updated_at
+        try:
+            for adapter in (registry.get(item.id) for item in descriptors):
+                result = adapter.probe().model_dump(mode="json")
+                with probe_lock:
+                    probes[adapter.descriptor.id] = result
+            completed_at = time.time()
+            with probe_lock:
+                probe_updated_at = completed_at
+                probe_cached = False
+                cache_payload = {
+                    "schema": HARNESS_CACHE_SCHEMA,
+                    "updated_at": completed_at,
+                    "harnesses": [dict(probes[item.id]) for item in descriptors],
+                }
+            try:
+                temporary = probe_cache_path.with_name(
+                    f".{probe_cache_path.name}.{uuid4().hex}.tmp"
+                )
+                temporary.write_text(json.dumps(cache_payload, indent=2), encoding="utf-8")
+                temporary.replace(probe_cache_path)
+            except OSError:
+                pass
+        finally:
+            with probe_lock:
+                probe_refreshing = False
+
+    def start_probe_refresh() -> bool:
+        nonlocal probe_cached, probe_refreshing
+        with probe_lock:
+            if probe_refreshing:
+                return False
+            probe_refreshing = True
+            probe_cached = False
+            for descriptor in descriptors:
+                probes[descriptor.id] = _detecting_probe(descriptor, probes.get(descriptor.id))
+        threading.Thread(target=refresh_probes, daemon=True, name="merced-ai-probes").start()
+        return True
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Any:
@@ -171,12 +273,14 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
 
     def bootstrap_payload() -> dict[str, Any]:
         profiles = discover_profiles(workspace)
+        detection = probe_payload()
         return {
             "workspace": str(workspace),
             "profiles": [_profile_payload(item, workspace) for item in profiles],
             "bots": [item.model_dump(mode="json") for item in discover_bots(workspace)],
             "sessions": [item.model_dump(mode="json") for item in SessionStore(workspace).list()],
-            "harnesses": [item.model_dump(mode="json") for item in default_registry().probe_all()],
+            "harnesses": detection.pop("harnesses"),
+            "harness_detection": detection,
         }
 
     @app.get("/", response_class=HTMLResponse)
@@ -210,6 +314,17 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             return bootstrap_payload()
         except (BotError, ProfileError, ValueError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/harnesses")
+    async def harnesses(request: Request) -> dict[str, Any]:
+        authorize(request)
+        return probe_payload()
+
+    @app.post("/api/harnesses/refresh", status_code=202)
+    async def harnesses_refresh(request: Request) -> dict[str, Any]:
+        authorize(request, mutation=True)
+        start_probe_refresh()
+        return probe_payload()
 
     @app.get("/api/projection/{bot_name}")
     async def projection(

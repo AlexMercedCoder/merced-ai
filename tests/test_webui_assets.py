@@ -63,6 +63,7 @@ def test_webui_javascript_wires_primary_product_controls() -> None:
         "#cancel-run",
         "#bot-select",
         "#harness-select",
+        "#refresh-harnesses",
         "#dispatch-select",
         "#group-form",
         "#mention-menu",
@@ -93,3 +94,4 @@ def test_webui_styles_include_responsive_and_reduced_motion_contracts() -> None:
     assert ".sidebar.open" in styles
     assert ":focus-visible" in styles
     assert ".sr-only" in styles
+    assert ".status-dot.detecting" in styles

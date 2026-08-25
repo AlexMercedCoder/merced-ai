@@ -19,6 +19,12 @@ to its source session without copying or mutating the source transcript.
 User-global Merced AI data follows the platform configuration directory. Set `MERCED_AI_HOME` to
 an explicit directory for automation, tests, or portable installations.
 
+The optional UI stores its last complete harness-health snapshot at
+`$MERCED_AI_HOME/cache/harness-probes.json` (or the equivalent platform configuration directory).
+It contains executable paths, bounded version output, capabilities, statuses, and a timestamp—no
+provider credentials. The UI immediately revalidates the snapshot in the background and labels
+results older than five minutes as previous until detection completes.
+
 ## Profiles and bots
 
 Create and validate a profile:
