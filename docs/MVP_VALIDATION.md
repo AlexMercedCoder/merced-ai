@@ -5,14 +5,15 @@ range is Python 3.11–3.14.
 
 ## Automated suite
 
-The suite contains 57 tests and reports 79.32% branch-aware coverage. CI enforces a 70% minimum and
+The suite contains 63 tests and reports 78.75% branch-aware coverage. CI enforces a 70% minimum and
 is configured for Python 3.11 and 3.14 on Ubuntu plus Python 3.13 on macOS and Windows.
 
 Covered behavior includes:
 
 - OAP parsing, validation, profile/spec digests, secret rejection, discovery precedence, minimal
   authoring, and prompt assembly.
-- Bot serialization, fallback metadata, atomic sessions, transcript construction, and resume.
+- Bot serialization, fallback metadata, atomic sessions, transcript construction, resume, and
+  transparent loading of legacy one-bot session JSON.
 - Registry isolation, per-harness executable overrides, OS-separated search paths, Windows
   environment-backed bins, private rootless prefixes, PATHEXT-preserving fallback lookup, bounded
   Unicode-safe version probes, and shell-free execution.
@@ -23,6 +24,8 @@ Covered behavior includes:
 - UI cookie authentication, security headers, cross-origin rejection, profile/model/permission
   editing, bot creation, session/export workflows, approval preflight, SSE lifecycle/tool/error
   events, subprocess cancellation, responsive contracts, and accessibility structure.
+- Multi-bot mention/all/named/round-robin selection, deterministic response ordering, per-bot
+  attribution, approval aggregation, partial failures, group export, and CLI JSON automation.
 
 Validation commands:
 
@@ -72,6 +75,10 @@ harnesses, including Anton's repaired environment and rootless OpenClaw. Optiona
 remain covered by the automated UI suite and require a separate extra installation at release time.
 The real Uvicorn server also completed an authenticated profile, bot, session, and streamed-message
 workflow against a deterministic fake Codex executable.
+
+Group behavior is validated with deterministic fake adapters rather than paid providers: each
+participant traverses the same already-qualified adapter contract. The suite verifies isolated
+per-bot prompts/routes and concurrent fan-out code paths without sending model traffic.
 
 ## Known boundaries
 

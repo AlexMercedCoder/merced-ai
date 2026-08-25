@@ -265,6 +265,108 @@ async def test_webui_rejects_cross_origin_mutations(workspace: Path) -> None:
     assert invalid_session.status_code == 409
 
 
+@pytest.mark.anyio
+async def test_webui_group_chat_parallel_results_are_ordered_and_attributed(
+    workspace: Path, ready_harnesses: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def inline(function: Callable[..., object], *args: object) -> object:
+        return function(*args)
+
+    def fake_run(
+        _adapter: CommandHarnessAdapter, request: object, _cancellation: object
+    ) -> RunResult:
+        profile = request.profile.name  # type: ignore[attr-defined]
+        if profile == "tester":
+            raise HarnessRunError("tester provider unavailable", exit_code=5)
+        return RunResult(
+            harness_id=request.harness_id,  # type: ignore[attr-defined]
+            output=f"{profile} response",
+            exit_code=0,
+            duration_ms=10,
+        )
+
+    monkeypatch.setattr(CommandHarnessAdapter, "run_cancellable", fake_run)
+    monkeypatch.setattr("merced_ai.webui_server.asyncio.to_thread", inline)
+    async with authenticated_client(workspace) as (client, _):
+        for name in ("reviewer", "builder", "tester"):
+            profile = await client.post(
+                "/api/profiles",
+                json={
+                    "name": name,
+                    "description": f"{name} profile",
+                    "instructions": f"Act as {name}.",
+                    "edit_permission": "deny",
+                    "shell_permission": "deny",
+                },
+            )
+            assert profile.status_code == 201
+            bot = await client.post(
+                "/api/bots",
+                json={"name": name, "profile": name, "harness": "codex"},
+            )
+            assert bot.status_code == 201
+        created = await client.post(
+            "/api/sessions",
+            json={"bot_names": ["reviewer", "builder", "tester"], "mode": "mentions"},
+        )
+        session_id = created.json()["id"]
+        response = await client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"content": "Review together", "dispatch": "all"},
+        )
+        exported = await client.get(f"/api/sessions/{session_id}/export")
+        bootstrap = await client.get("/api/bootstrap")
+
+    assert created.status_code == 201
+    assert created.json()["kind"] == "group"
+    assert [item["bot_name"] for item in created.json()["participants"]] == [
+        "reviewer",
+        "builder",
+        "tester",
+    ]
+    assert response.text.index("reviewer response") < response.text.index("builder response")
+    assert "event: participant_error" in response.text
+    assert "tester provider unavailable" in response.text
+    assert '"completed": 2' in response.text
+    assert '"failed": 1' in response.text
+    session = next(item for item in bootstrap.json()["sessions"] if item["id"] == session_id)
+    assert [turn.get("bot_name") for turn in session["turns"]] == [None, "reviewer", "builder"]
+    assert "## reviewer (codex)" in exported.text
+    assert "## builder (codex)" in exported.text
+
+
+@pytest.mark.anyio
+async def test_webui_group_validation_and_approval_aggregation(
+    workspace: Path, ready_harnesses: None
+) -> None:
+    async with authenticated_client(workspace) as (client, _):
+        for name in ("writer", "operator"):
+            await client.post(
+                "/api/profiles",
+                json={
+                    "name": name,
+                    "description": f"{name} profile",
+                    "instructions": f"Act as {name}.",
+                },
+            )
+            await client.post("/api/bots", json={"name": name, "profile": name, "harness": "codex"})
+        too_small = await client.post("/api/sessions", json={"bot_names": ["writer"]})
+        duplicate = await client.post("/api/sessions", json={"bot_names": ["writer", "writer"]})
+        created = await client.post(
+            "/api/sessions", json={"bot_names": ["writer", "operator"], "mode": "all"}
+        )
+        approval = await client.post(
+            f"/api/sessions/{created.json()['id']}/messages",
+            json={"content": "Make changes", "dispatch": "all"},
+        )
+
+    assert too_small.status_code == 201  # one-name lists retain single-session compatibility
+    assert duplicate.status_code == 422
+    assert "event: approval_required" in approval.text
+    assert '"bot_name": "writer"' in approval.text
+    assert '"bot_name": "operator"' in approval.text
+
+
 def test_webui_rejects_non_loopback_binding(workspace: Path) -> None:
     with pytest.raises(ValueError, match="loopback-only"):
         run_web_ui(workspace, host="0.0.0.0", open_browser=False)

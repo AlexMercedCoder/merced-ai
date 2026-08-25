@@ -14,7 +14,7 @@ tools, authentication, sandboxing, approvals, and final policy enforcement.
 - Reference OAP validation, digest calculation, profile discovery, and minimal profile authoring.
 - Project-local and user-global bot bindings with preferred and fallback harnesses.
 - Honest native, projected, degraded, and unsupported profile projection reports.
-- One-shot bot runs and multi-turn local chat.
+- One-shot bot runs, multi-turn local chat, and attributed multi-bot group conversations.
 - Durable, atomic project-local conversation sessions with resume support.
 - Machine-readable JSON output for inventory, profiles, bots, dry runs, and results.
 - Bounded subprocess execution without a shell, with timeout and Ctrl+C cancellation.
@@ -78,6 +78,8 @@ Run or chat:
 ```bash
 merced-ai ask reviewer "Review the current diff"
 merced-ai chat reviewer
+merced-ai group chat reviewer builder tester
+merced-ai group ask reviewer builder tester --prompt "Give independent assessments" --json
 merced-ai session list
 merced-ai session resume <session-id>
 ```
@@ -91,10 +93,10 @@ merced-ai ui
 
 The UI binds to loopback and exchanges an ephemeral fragment token for an HTTP-only local session.
 It uses the same profile, bot, routing, projection, session, and harness services as the CLI. You
-can create profiles and bots, choose a route, chat through a normalized lifecycle stream, approve
-or cancel runs, inspect effective authority and harness health, search/resume/export conversations,
-and use responsive light or dark layouts. See the [UI guide](docs/UI.md) for the security and
-streaming boundaries.
+can create profiles and bots, create single or group conversations, target `@mentioned` bots or ask
+everyone concurrently, choose routes, approve or cancel runs, inspect authority and harness health,
+and search/resume/export attributed transcripts. See the [UI guide](docs/UI.md) and
+[group-chat guide](docs/GROUP_CHAT.md) for the security, dispatch, and streaming boundaries.
 
 ![Merced AI desktop UI](docs/screenshots/merced-ai-ui-desktop.jpg)
 

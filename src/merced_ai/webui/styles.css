@@ -124,6 +124,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .welcome-block .bot-orb { margin: 0 auto 17px; }
 .welcome-block h1 { font-family: Georgia, "Times New Roman", serif; font-size: clamp(28px, 3vw, 40px); letter-spacing: -.035em; margin: 0; font-weight: 500; }
 .welcome-block p { color: var(--muted); line-height: 1.65; font-size: 13px; max-width: 430px; margin: 12px auto 0; }
+.participant-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 14px; }
+.participant-chip { padding: 5px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: #20201c; font-size: 9px; }
+.participant-chip::before { content: "✦"; margin-right: 5px; color: var(--accent); }
 .message { max-width: 680px; margin: 23px auto; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; }
 .message.user { grid-template-columns: minmax(0, 1fr); }
 .message.user .message-body { justify-self: end; max-width: 78%; background: #292923; border: 1px solid #383832; border-radius: 16px 16px 4px 16px; padding: 11px 14px; }
@@ -155,6 +158,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .composer-tools { justify-content: space-between; }
 .run-controls { display: flex; gap: 8px; }
 .mode-label { padding: 7px 9px; color: var(--muted); font-size: 10px; }
+.dispatch-picker { gap: 5px; padding: 3px 5px; color: var(--muted); font-size: 9px; }
+.dispatch-picker select { max-width: 150px; border: 0; background: transparent; color: var(--text); font-size: 10px; }
 .cancel-button { border: 1px solid #5a4136; border-radius: 9px; padding: 0 10px; background: #30231e; color: #f4b18d; cursor: pointer; font-size: 10px; }
 .mode-button { padding: 7px 9px; color: var(--muted); font-size: 10px; }
 .spark { color: var(--accent); margin-right: 5px; }

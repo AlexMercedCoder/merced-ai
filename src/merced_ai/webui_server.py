@@ -12,9 +12,16 @@ from typing import Any
 from urllib.parse import urlsplit
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from merced_ai.application import RoutingError, prepare_run
+from merced_ai.application import (
+    PreparedRun,
+    RoutingError,
+    participant_from_run,
+    prepare_group,
+    prepare_group_turn,
+    prepare_run,
+)
 from merced_ai.bots import BotError, create_bot, discover_bots
 from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import HarnessRunError
@@ -26,7 +33,7 @@ from merced_ai.profiles import (
     resolve_profile,
     update_profile,
 )
-from merced_ai.sessions import SessionStore, transcript_prompt
+from merced_ai.sessions import SessionStore
 
 try:  # Optional dependency boundary.
     from fastapi import FastAPI, HTTPException, Request
@@ -72,13 +79,27 @@ class BotInput(BaseModel):
 
 
 class SessionInput(BaseModel):
-    bot_name: str
+    bot_name: str | None = None
+    bot_names: list[str] = Field(default_factory=list, max_length=12)
     harness: str | None = None
+    mode: str = "mentions"
+
+    @model_validator(mode="after")
+    def validate_participants(self) -> SessionInput:
+        names = self.bot_names or ([self.bot_name] if self.bot_name else [])
+        if not names:
+            raise ValueError("select at least one bot")
+        if len(names) != len(set(names)):
+            raise ValueError("bot names must be unique")
+        if self.mode not in {"mentions", "all", "round_robin"}:
+            raise ValueError("mode must be mentions, all, or round_robin")
+        return self
 
 
 class MessageInput(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     approved: bool = False
+    dispatch: str | None = Field(default=None, max_length=100)
 
 
 def _sse(event: str, payload: dict[str, Any]) -> str:
@@ -260,17 +281,27 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
     @app.post("/api/sessions", status_code=201)
     async def session_create(payload: SessionInput, request: Request) -> dict[str, Any]:
         authorize(request, mutation=True)
+        names = tuple(payload.bot_names or ([payload.bot_name] if payload.bot_name else []))
         try:
-            prepared = prepare_run(
-                payload.bot_name,
-                "Start the conversation.",
-                workspace,
-                harness_override=payload.harness,
-            )
+            if len(names) == 1:
+                prepared_runs = (
+                    prepare_run(
+                        names[0],
+                        "Start the conversation.",
+                        workspace,
+                        harness_override=payload.harness,
+                    ),
+                )
+            else:
+                if payload.harness:
+                    raise ValueError("group sessions use each bot's pinned harness route")
+                prepared_runs = prepare_group(names, workspace)
         except (BotError, ProfileError, RoutingError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        session = SessionStore(workspace).create(
-            payload.bot_name, prepared.request.harness_id, prepared.profile
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        session = SessionStore(workspace).create_group(
+            tuple(participant_from_run(item) for item in prepared_runs), mode=payload.mode
         )
         return session.model_dump(mode="json")
 
@@ -281,9 +312,16 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             session = SessionStore(workspace).load(session_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        lines = [f"# {session.bot_name} conversation", ""]
+        title = (
+            ", ".join(item.bot_name for item in session.participants)
+            if session.kind == "group"
+            else session.bot_name
+        )
+        lines = [f"# {title} conversation", ""]
         for turn in session.turns:
-            lines.extend((f"## {turn.role.title()}", "", turn.content, ""))
+            speaker = turn.bot_name or turn.role.title()
+            route = f" ({turn.harness_id})" if turn.harness_id else ""
+            lines.extend((f"## {speaker}{route}", "", turn.content, ""))
         return PlainTextResponse(
             "\n".join(lines),
             headers={"Content-Disposition": f'attachment; filename="{session.id}.md"'},
@@ -298,20 +336,29 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
         store = SessionStore(workspace)
         try:
             session = store.load(session_id)
-            expanded = transcript_prompt(session, payload.content.strip())
-            prepared = prepare_run(
-                session.bot_name, expanded, workspace, harness_override=session.harness_id
+            prepared_runs = prepare_group_turn(
+                session,
+                payload.content.strip(),
+                workspace,
+                dispatch=payload.dispatch,
             )
         except (ValueError, BotError, ProfileError, RoutingError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        if _approval_needed(prepared.profile) and not payload.approved:
+        approvals = [item for item in prepared_runs if _approval_needed(item.profile)]
+        if approvals and not payload.approved:
 
             async def approval_stream() -> Any:
                 yield _sse(
                     "approval_required",
                     {
                         "message": "This profile may allow workspace edits or shell commands.",
-                        "harness_id": prepared.request.harness_id,
+                        "participants": [
+                            {
+                                "bot_name": item.bot.name,
+                                "harness_id": item.request.harness_id,
+                            }
+                            for item in approvals
+                        ],
                         "authority": "Harness policy remains authoritative.",
                     },
                 )
@@ -324,38 +371,79 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             cancellations[run_id] = cancellation
 
         async def event_stream() -> Any:
-            yield _sse("run_started", {"run_id": run_id, "harness_id": prepared.request.harness_id})
+            routes = [
+                {"bot_name": item.bot.name, "harness_id": item.request.harness_id}
+                for item in prepared_runs
+            ]
+            yield _sse(
+                "run_started",
+                {
+                    "run_id": run_id,
+                    "harness_id": prepared_runs[0].request.harness_id,
+                    "participants": routes,
+                },
+            )
             store.append(session, "user", payload.content.strip())
-            try:
+
+            async def run_one(prepared: PreparedRun) -> RunResult:
                 adapter = default_registry().get(prepared.request.harness_id)
                 if hasattr(adapter, "run_cancellable"):
-                    result = await asyncio.to_thread(
+                    return await asyncio.to_thread(
                         adapter.run_cancellable,
                         prepared.request,
-                        cancellation,  # type: ignore[attr-defined]
+                        cancellation,
                     )
-                else:  # pragma: no cover
-                    result = await asyncio.to_thread(adapter.run, prepared.request)
-            except HarnessRunError as exc:
-                event = "run_cancelled" if exc.exit_code == 130 else "run_error"
-                yield _sse(event, {"run_id": run_id, "message": str(exc)})
-                return
+                return await asyncio.to_thread(adapter.run, prepared.request)  # pragma: no cover
+
+            try:
+                results = await asyncio.gather(
+                    *(run_one(item) for item in prepared_runs), return_exceptions=True
+                )
             finally:
                 with cancellation_lock:
                     cancellations.pop(run_id, None)
-            for native_event in _raw_events(result):
-                yield _sse("tool_event", {"run_id": run_id, "event": native_event})
-            store.append(session, "assistant", result.output)
-            yield _sse(
-                "assistant_message",
-                {
+            completed = 0
+            failed = 0
+            for prepared, result in zip(prepared_runs, results, strict=True):
+                identity = {
                     "run_id": run_id,
-                    "content": result.output,
-                    "duration_ms": result.duration_ms,
-                    "harness_id": result.harness_id,
-                },
+                    "bot_name": prepared.bot.name,
+                    "harness_id": prepared.request.harness_id,
+                }
+                if isinstance(result, BaseException):
+                    failed += 1
+                    cancelled = isinstance(result, HarnessRunError) and result.exit_code == 130
+                    if len(prepared_runs) == 1:
+                        error_event = "run_cancelled" if cancelled else "run_error"
+                    else:
+                        error_event = "participant_cancelled" if cancelled else "participant_error"
+                    yield _sse(
+                        error_event,
+                        {**identity, "message": str(result)},
+                    )
+                    continue
+                completed += 1
+                for native_event in _raw_events(result):
+                    yield _sse("tool_event", {**identity, "event": native_event})
+                store.append(
+                    session,
+                    "assistant",
+                    result.output,
+                    bot_name=prepared.bot.name,
+                    harness_id=result.harness_id,
+                )
+                yield _sse(
+                    "assistant_message",
+                    {
+                        **identity,
+                        "content": result.output,
+                        "duration_ms": result.duration_ms,
+                    },
+                )
+            yield _sse(
+                "run_finished",
+                {"run_id": run_id, "completed": completed, "failed": failed},
             )
-            yield _sse("run_finished", {"run_id": run_id})
 
         return StreamingResponse(
             event_stream(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"}

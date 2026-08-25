@@ -6,7 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class HarnessStatus(StrEnum):
@@ -143,6 +143,19 @@ class RunResult(BaseModel):
 class ConversationTurn(BaseModel):
     role: Literal["user", "assistant"]
     content: str
+    bot_name: str | None = None
+    harness_id: str | None = None
+
+
+class SessionParticipant(BaseModel):
+    """A bot and its immutable route/profile snapshot within a conversation."""
+
+    bot_name: str
+    harness_id: str
+    profile_name: str
+    profile_revision: int
+    profile_digest: str
+    spec_digest: str
 
 
 class SessionRecord(BaseModel):
@@ -156,4 +169,25 @@ class SessionRecord(BaseModel):
     spec_digest: str
     created_at: str
     updated_at: str
+    kind: Literal["single", "group"] = "single"
+    mode: Literal["mentions", "all", "round_robin"] = "mentions"
+    participants: list[SessionParticipant] = Field(default_factory=list)
     turns: list[ConversationTurn] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def populate_legacy_participant(self) -> SessionRecord:
+        """Make pre-group-chat session JSON usable without an on-disk migration."""
+        if not self.participants:
+            self.participants.append(
+                SessionParticipant(
+                    bot_name=self.bot_name,
+                    harness_id=self.harness_id,
+                    profile_name=self.profile_name,
+                    profile_revision=self.profile_revision,
+                    profile_digest=self.profile_digest,
+                    spec_digest=self.spec_digest,
+                )
+            )
+        if len(self.participants) > 1:
+            self.kind = "group"
+        return self

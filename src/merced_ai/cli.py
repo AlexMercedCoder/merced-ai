@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -12,11 +13,18 @@ from rich.markdown import Markdown
 from rich.table import Table
 
 from merced_ai import __version__
-from merced_ai.application import RoutingError, execute, prepare_run
+from merced_ai.application import (
+    RoutingError,
+    execute,
+    participant_from_run,
+    prepare_group,
+    prepare_group_turn,
+    prepare_run,
+)
 from merced_ai.bots import BotError, create_bot, discover_bots, resolve_bot
 from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import HarnessRunError
-from merced_ai.models import HarnessProbe, ProfileProjection
+from merced_ai.models import HarnessProbe, ProfileProjection, RunResult, SessionRecord
 from merced_ai.paths import ensure_project_layout, ensure_user_layout
 from merced_ai.profiles import (
     ProfileError,
@@ -36,10 +44,12 @@ harness_app = typer.Typer(help="Discover and inspect installed agent harnesses."
 profile_app = typer.Typer(help="Create, validate, and inspect Open Agent Profiles.")
 bot_app = typer.Typer(help="Bind portable profiles to local harness preferences.")
 session_app = typer.Typer(help="Inspect durable local conversation sessions.")
+group_app = typer.Typer(help="Collaborate with multiple OAP bots in one conversation.")
 app.add_typer(harness_app, name="harness")
 app.add_typer(profile_app, name="profile")
 app.add_typer(bot_app, name="bot")
 app.add_typer(session_app, name="session")
+app.add_typer(group_app, name="group")
 console = Console()
 error_console = Console(stderr=True)
 DEFAULT_WORKSPACE = Path.cwd()
@@ -404,6 +414,126 @@ def _chat_loop(
         console.print(Markdown(result.output))
 
 
+@group_app.command("ask")
+def group_ask(
+    bot_names: Annotated[list[str], typer.Argument(help="Two or more bot names.")],
+    prompt: Annotated[str, typer.Option("--prompt", "-p", help="Message sent to the group.")],
+    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    mode: Annotated[str, typer.Option(help="mentions, all, or round_robin")] = "all",
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Send one message to a new group conversation."""
+    session = _create_group_session(tuple(bot_names), workspace, mode)
+    results = _run_group_turn(session, prompt, workspace, dispatch=mode)
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    "session_id": session.id,
+                    "responses": [
+                        {
+                            "bot_name": name,
+                            **(
+                                {"error": str(result)}
+                                if isinstance(result, BaseException)
+                                else result.model_dump(mode="json")
+                            ),
+                        }
+                        for name, result in results
+                    ],
+                },
+                indent=2,
+            )
+        )
+        return
+    _render_group_results(results)
+
+
+@group_app.command("chat")
+def group_chat(
+    bot_names: Annotated[list[str], typer.Argument(help="Two or more bot names.")],
+    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    mode: Annotated[str, typer.Option(help="mentions, all, or round_robin")] = "mentions",
+) -> None:
+    """Chat with a group; use @bot, /all, /round-robin, /exit, or /quit."""
+    session = _create_group_session(tuple(bot_names), workspace, mode)
+    _group_chat_loop(session, workspace)
+
+
+def _create_group_session(bot_names: tuple[str, ...], workspace: Path, mode: str) -> SessionRecord:
+    if mode not in {"mentions", "all", "round_robin"}:
+        _fail("mode must be mentions, all, or round_robin", 2)
+    try:
+        prepared = prepare_group(bot_names, workspace)
+        return SessionStore(workspace).create_group(
+            tuple(participant_from_run(item) for item in prepared), mode=mode
+        )
+    except (ValueError, BotError, ProfileError, RoutingError) as exc:
+        _fail(str(exc), 2)
+
+
+def _run_group_turn(
+    session: SessionRecord,
+    prompt: str,
+    workspace: Path,
+    *,
+    dispatch: str | None = None,
+) -> list[tuple[str, RunResult | Exception]]:
+    try:
+        prepared_runs = prepare_group_turn(session, prompt, workspace, dispatch=dispatch)
+    except (ValueError, BotError, ProfileError, RoutingError) as exc:
+        _fail(str(exc), 2)
+    store = SessionStore(workspace)
+    store.append(session, "user", prompt)
+    with ThreadPoolExecutor(max_workers=len(prepared_runs)) as pool:
+        futures = [pool.submit(execute, item) for item in prepared_runs]
+        results: list[tuple[str, RunResult | Exception]] = []
+        for prepared, future in zip(prepared_runs, futures, strict=True):
+            try:
+                result = future.result()
+                store.append(
+                    session,
+                    "assistant",
+                    result.output,
+                    bot_name=prepared.bot.name,
+                    harness_id=result.harness_id,
+                )
+                results.append((prepared.bot.name, result))
+            except Exception as exc:  # Keep healthy group participants useful on partial failure.
+                results.append((prepared.bot.name, exc))
+    return results
+
+
+def _render_group_results(results: list[tuple[str, RunResult | Exception]]) -> None:
+    for bot_name, result in results:
+        console.print(f"\n[bold violet]{bot_name}>[/bold violet]")
+        if isinstance(result, BaseException):
+            console.print(f"[red]{result}[/red]")
+        else:
+            console.print(Markdown(result.output))
+            console.print(f"[dim]{result.harness_id} · {result.duration_ms} ms[/dim]")
+
+
+def _group_chat_loop(session: SessionRecord, workspace: Path) -> None:
+    names = ", ".join(item.bot_name for item in session.participants)
+    console.print(f"Group chat with [bold]{names}[/bold] · {session.mode} · {session.id}")
+    while True:
+        try:
+            prompt = console.input("[bold cyan]you>[/bold cyan] ").strip()
+        except (EOFError, KeyboardInterrupt):
+            break
+        if not prompt:
+            continue
+        if prompt in {"/exit", "/quit"}:
+            break
+        dispatch = None
+        if prompt.startswith("/all "):
+            dispatch, prompt = "all", prompt[5:].strip()
+        elif prompt.startswith("/round-robin "):
+            dispatch, prompt = "round_robin", prompt[13:].strip()
+        _render_group_results(_run_group_turn(session, prompt, workspace, dispatch=dispatch))
+
+
 @session_app.command("list")
 def session_list(
     workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
@@ -418,9 +548,11 @@ def session_list(
     for column in ("Session", "Bot", "Harness", "Turns", "Updated"):
         table.add_column(column)
     for item in records:
-        table.add_row(
-            item.id, item.bot_name, item.harness_id, str(len(item.turns)), item.updated_at
+        bot_label = ", ".join(participant.bot_name for participant in item.participants)
+        harness_label = ", ".join(
+            dict.fromkeys(participant.harness_id for participant in item.participants)
         )
+        table.add_row(item.id, bot_label, harness_label, str(len(item.turns)), item.updated_at)
     console.print(table)
 
 
@@ -438,9 +570,10 @@ def session_show(
     if json_output:
         typer.echo(record.model_dump_json(indent=2))
         return
-    console.print(f"[bold]{record.id}[/bold] · {record.bot_name} · {record.harness_id}")
+    participants = ", ".join(item.bot_name for item in record.participants)
+    console.print(f"[bold]{record.id}[/bold] · {participants} · {record.mode}")
     for turn in record.turns:
-        console.print(f"\n[bold]{turn.role}>[/bold]")
+        console.print(f"\n[bold]{turn.bot_name or turn.role}>[/bold]")
         console.print(Markdown(turn.content))
 
 
@@ -454,7 +587,10 @@ def session_resume(
         record = SessionStore(workspace).load(session_id)
     except ValueError as exc:
         _fail(str(exc), 2)
-    _chat_loop(record.bot_name, workspace, resume_session=session_id)
+    if record.kind == "group":
+        _group_chat_loop(record, workspace)
+    else:
+        _chat_loop(record.bot_name, workspace, resume_session=session_id)
 
 
 def _render_probe_table(probes: tuple[HarnessProbe, ...]) -> None:

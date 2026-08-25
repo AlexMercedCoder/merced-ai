@@ -4,7 +4,7 @@ Merced AI is a broker, not an agent runtime. It turns portable identity and poli
 bounded invocation of an existing harness while preserving clear ownership boundaries.
 
 ```text
-OAP profile + bot binding + user prompt
+OAP profile(s) + bot binding(s) + user prompt
                  |
                  v
         profile discovery/validation
@@ -13,10 +13,13 @@ OAP profile + bot binding + user prompt
        harness registry and detection
                  |
                  v
-         adapter profile projection
+    participant selection and routing
                  |
                  v
-      shell-free bounded subprocess
+         adapter profile projection(s)
+                 |
+                 v
+    shell-free bounded subprocess(es)
                  |
                  v
        normalized result + session log
@@ -31,7 +34,8 @@ OAP profile + bot binding + user prompt
 - `harnesses/adapters/command.py`: provider-aware profile projection, argv construction, execution,
   cancellation, and output normalization.
 - `application.py`: routing and run preparation.
-- `sessions.py`: atomic normalized session persistence.
+- `sessions.py`: atomic normalized session persistence, exact mention selection, and deterministic
+  group dispatch.
 - `cli.py`: human and JSON automation surfaces.
 - `webui_server.py`: loopback-first optional UI over the same application records.
 
@@ -50,6 +54,8 @@ credentials, provider traffic, approvals, sandboxing, tools, and final policy en
 - OAP profiles own portable identity, instructions, model preference, and bounded learned state.
 - Bot bindings own local harness preference and fallback metadata.
 - Sessions own normalized conversational history and pinned profile/spec digests.
+- Group sessions own an ordered participant list. Each participant pins its bot, routed harness,
+  and profile/spec snapshot; assistant turns carry bot and harness attribution.
 - Harness-native state, credentials, model catalogs, and provider logs remain harness-owned.
 
 ## Failure model
@@ -58,6 +64,11 @@ Discovery failures are isolated. A run is attempted only against an available ad
 interrupt, process-start, nonzero-exit, and structured in-stream failures become bounded
 `HarnessRunError` results. Automatic fallback stops once a request has begun to prevent duplicate
 paid or mutating work.
+
+Group fan-out prepares an isolated prompt and route for each selected participant, executes the
+bounded harness processes concurrently, then normalizes and saves results in participant order.
+Participant failures are isolated. A shared cancellation signal reaches all processes in that
+user-triggered fan-out. There is deliberately no automatic assistant-to-assistant turn scheduler.
 
 ## Security boundaries
 

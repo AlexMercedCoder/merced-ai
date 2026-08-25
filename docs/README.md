@@ -12,6 +12,8 @@ Use this index as the release documentation entry point.
 - [Architecture](ARCHITECTURE.md): component boundaries, execution flow, data ownership, and
   security model.
 - [Local web UI](UI.md): workflows, approval model, browser security, streaming, and validation.
+- [Group conversations](GROUP_CHAT.md): participants, dispatch modes, deterministic fan-out,
+  cancellation, partial failures, and session compatibility.
 - [Troubleshooting](TROUBLESHOOTING.md): diagnosis by status and harness-specific recovery.
 - [MVP validation](MVP_VALIDATION.md): automated, packaging, and live-test evidence.
 - [Release process](RELEASING.md): maintainer checklist from versioning through post-release

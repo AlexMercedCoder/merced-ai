@@ -10,7 +10,7 @@ Initial package: `merced_ai`
 Merced AI is a local-first broker for existing AI agent harnesses. It does not implement its own
 model loop, tool runtime, or provider layer. Instead, it discovers installed harnesses, normalizes
 their capabilities behind adapters, and lets users create durable bots from Open Agent Profile
-(OAP) documents. Users can chat and collaborate with those bots through a CLI and, later, an
+(OAP) documents. Users can chat and collaborate with one or several bots through a CLI and an
 optional local web UI.
 
 OAP describes who a bot is and what it has learned. The selected harness remains responsible for
@@ -41,6 +41,7 @@ instead supplies the missing client and portability layer.
 8. Support reviewed OAP state writeback without allowing a profile to widen its own authority.
 9. Offer an optional loopback-first web UI using the same application service as the CLI.
 10. Make third-party harness adapters testable and installable without modifying the core.
+11. Let users convene multiple independently routed OAP bots in an attributed, bounded room.
 
 ## 4. Non-goals
 
@@ -50,7 +51,7 @@ instead supplies the missing client and portability layer.
 - Circumventing a harness's authentication, approvals, sandbox, or policy.
 - Treating OAP as an agent-to-agent wire protocol.
 - Installing harnesses or network packages automatically during discovery.
-- Multi-bot autonomous orchestration in the first release.
+- Autonomous or recursive bot-to-bot orchestration; every group turn remains user-triggered.
 - Remote, multi-user hosting in the first release.
 
 ## 5. Users and primary stories
@@ -98,8 +99,16 @@ profile by default.
 
 ### Session
 
-A durable Merced AI record linked to a bot and a harness-native session identifier. The OAP profile
-revision and spec digest are pinned when the session starts.
+A durable Merced AI record linked to one or more ordered bot participants. Each participant pins
+its routed harness, OAP profile revision, profile digest, and spec digest when the session starts.
+Assistant turns retain bot and harness attribution. Legacy one-bot fields remain readable.
+
+### Group conversation
+
+A session with two to twelve bots. Explicit mentions, ask-everyone, named-recipient, and round-robin
+dispatch choose participants. Multi-recipient work runs concurrently but results are committed in
+participant order. Participant failure is isolated, cancellation is shared, and no assistant
+response automatically triggers another bot.
 
 ## 7. Core architecture
 
@@ -273,6 +282,8 @@ merced-ai profile list|show|validate|create|edit|clone|import|export|diff|effect
 merced-ai bot list|show|create|edit|delete|test
 merced-ai chat <bot>
 merced-ai ask <bot> <prompt>
+merced-ai group chat <bot> <bot> [<bot>...]
+merced-ai group ask <bot> <bot> [<bot>...] --prompt <prompt> [--json]
 merced-ai run <bot> <prompt>
 merced-ai session list|show|resume|cancel|export
 merced-ai approval list|allow|deny
@@ -298,6 +309,7 @@ Initial surfaces:
 
 - bot and profile navigation
 - conversation workspace
+- single- and multi-bot conversation creation with participant/dispatch controls
 - harness and model selection
 - effective-authority and profile-projection review
 - streamed tool activity
@@ -306,8 +318,8 @@ Initial surfaces:
 - state-delta inbox
 - harness health and session history
 
-The default server binds to `127.0.0.1` and uses an ephemeral access token. LAN binding requires an
-explicit flag and security warning. UI code cannot widen broker or harness permissions.
+The server binds only to loopback and uses an ephemeral access token. UI code cannot widen broker
+or harness permissions.
 
 ## 14. Persistence
 
@@ -350,7 +362,8 @@ events required for continuity, audit, and OAP reconciliation, subject to config
 The shipped MVP cuts a usable vertical slice across M0 through M3. It uses qualified structured
 subprocess transports for the first release; generic ACP streaming, live approval forwarding, and
 native harness-session resume remain the next M3 increments. Local Merced AI sessions are durable
-and resumable now by replaying a bounded transcript.
+and resumable now by replaying a bounded attributed transcript. M5's delivered UI also includes
+bounded multi-bot rooms without autonomous agent loops.
 
 ### M0: Scaffold
 
@@ -396,6 +409,7 @@ Exit: OAP conformance and hostile-input suites pass for implemented Level 2 beha
 
 - Thin browser client over the application service.
 - Profile/bot management, chat, approvals, projections, health, and history.
+- Attributed group rooms with deterministic concurrent fan-out and participant-level failures.
 
 Exit: CLI and UI produce equivalent application-level results.
 
@@ -421,7 +435,6 @@ Exit: CLI and UI produce equivalent application-level results.
 
 These can be settled after M0 without invalidating the architecture:
 
-- Whether multi-bot rooms enter M5 or remain a post-1.0 feature.
 - Final rules for automatic fallback between harnesses.
 - Whether the web UI ships inside the Python wheel or as a separately versioned artifact.
 - Adapter distribution through Python entry points, a signed registry, or both.

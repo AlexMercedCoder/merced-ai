@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from merced_ai.cli import app
-from merced_ai.models import HarnessProbe, HarnessStatus
+from merced_ai.models import HarnessProbe, HarnessStatus, RunResult
 from merced_ai.profiles import resolve_profile
 from merced_ai.sessions import SessionStore
 
@@ -127,3 +127,81 @@ def test_cli_rejects_unknown_harness(workspace: Path) -> None:
     )
     assert result.exit_code == 2
     assert "Unknown harness" in result.output
+
+
+def test_cli_group_ask_is_attributed_and_deterministic(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.CommandHarnessAdapter.probe",
+        lambda adapter: HarnessProbe(
+            harness_id=adapter.descriptor.id,
+            status=HarnessStatus.READY,
+            path=Path(adapter.descriptor.executable_names[0]),
+            transport=adapter.descriptor.transports[0],
+            capabilities=adapter.descriptor.capabilities,
+        ),
+    )
+    for name in ("reviewer", "tester"):
+        created = runner.invoke(
+            app,
+            [
+                "profile",
+                "create",
+                name,
+                "--description",
+                f"{name} profile",
+                "--instructions",
+                f"Act as {name}.",
+                "-C",
+                str(workspace),
+            ],
+        )
+        assert created.exit_code == 0, created.output
+        bound = runner.invoke(
+            app,
+            [
+                "bot",
+                "create",
+                name,
+                "--profile",
+                name,
+                "--harness",
+                "codex",
+                "-C",
+                str(workspace),
+            ],
+        )
+        assert bound.exit_code == 0, bound.output
+
+    monkeypatch.setattr(
+        "merced_ai.cli.execute",
+        lambda prepared: RunResult(
+            harness_id="codex",
+            output=prepared.request.prompt,
+            exit_code=0,
+            duration_ms=1,
+        ),
+    )
+    result = runner.invoke(
+        app,
+        [
+            "group",
+            "ask",
+            "reviewer",
+            "tester",
+            "--prompt",
+            "Review together",
+            "--json",
+            "-C",
+            str(workspace),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert [item["bot_name"] for item in payload["responses"]] == ["reviewer", "tester"]
+    assert "You are reviewer; respond only as reviewer." in payload["responses"][0]["output"]
+    assert "You are tester; respond only as tester." in payload["responses"][1]["output"]
+    session = SessionStore(workspace).load(payload["session_id"])
+    assert [turn.bot_name for turn in session.turns[1:]] == ["reviewer", "tester"]

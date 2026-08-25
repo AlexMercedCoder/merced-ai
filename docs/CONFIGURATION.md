@@ -8,6 +8,11 @@
 .merced-ai/sessions/        normalized local conversation sessions
 ```
 
+Sessions may contain one bot or an ordered group. Group records pin profile/spec digests and the
+routed harness separately for every participant; assistant turns record their `bot_name` and
+`harness_id`. Existing single-bot session files are upgraded in memory when read and remain
+compatible. See [Group conversations](GROUP_CHAT.md).
+
 User-global Merced AI data follows the platform configuration directory. Set `MERCED_AI_HOME` to
 an explicit directory for automation, tests, or portable installations.
 

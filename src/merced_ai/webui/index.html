@@ -62,6 +62,7 @@
             <select id="harness-select"><option value="">Bot default</option></select>
           </div>
           <div class="top-actions">
+            <button id="new-group" class="subtle-button"><span>＋</span> Group</button>
             <button id="export-session" class="subtle-button" disabled>Export</button>
             <button id="toggle-inspector" class="subtle-button" aria-expanded="true"><span>⌘</span> Inspect</button>
           </div>
@@ -74,6 +75,7 @@
               <div class="bot-orb large"><span>✦</span></div>
               <h1 id="conversation-title">Your harness-native collaborator</h1>
               <p id="welcome-copy">Choose a bot to start a secure local conversation.</p>
+              <div id="participant-list" class="participant-list" aria-label="Conversation participants"></div>
             </div>
             <div id="message-list"></div>
             <div id="activity-list" class="activity-list" aria-live="polite"></div>
@@ -83,7 +85,7 @@
             <form id="composer" class="composer">
               <textarea id="message-input" aria-label="Message" placeholder="Message your bot…" rows="1" maxlength="100000"></textarea>
               <div class="composer-tools">
-                <div><span id="composer-mode" class="mode-label"><span class="spark">✦</span> Collaborate</span></div>
+                <div class="dispatch-picker"><span class="spark">✦</span><label for="dispatch-select">Send to</label><select id="dispatch-select" aria-label="Choose group recipients"><option value="mentions">Mentioned bot</option></select></div>
                 <div class="run-controls">
                   <button id="cancel-run" class="cancel-button" type="button" hidden>Cancel</button>
                   <button id="send-message" class="send-button" type="submit" aria-label="Send message">↑</button>

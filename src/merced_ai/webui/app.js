@@ -64,7 +64,7 @@ async function refresh({ quiet = false } = {}) {
     state.activeBot = state.data.bots[0]?.name || "";
   }
   if (!state.activeSession || !state.data.sessions.some((item) => item.id === state.activeSession)) {
-    state.activeSession = state.data.sessions.find((item) => item.bot_name === state.activeBot)?.id || "";
+    state.activeSession = state.data.sessions.find((item) => item.participants?.some((participant) => participant.bot_name === state.activeBot))?.id || "";
   }
   render();
   setBusy(false);
@@ -72,6 +72,11 @@ async function refresh({ quiet = false } = {}) {
 
 function currentBot() { return state.data.bots.find((item) => item.name === state.activeBot); }
 function currentSession() { return state.data.sessions.find((item) => item.id === state.activeSession); }
+function currentParticipants() {
+  const session = currentSession();
+  if (session?.participants?.length) return session.participants;
+  return currentBot() ? [{ bot_name: currentBot().name, harness_id: activeHarnessId() }] : [];
+}
 function currentProfile() {
   const bot = currentBot();
   return bot && state.data.profiles.find((item) => item.name === bot.profile || item.path === bot.profile);
@@ -98,33 +103,45 @@ function renderSelectors() {
   botSelect.innerHTML = `<option value="">Select a bot</option>${state.data.bots.map((bot) => `<option value="${escapeHtml(bot.name)}"${selected(bot.name, state.activeBot)}>${escapeHtml(titleCase(bot.name))}</option>`).join("")}`;
   const harnessSelect = $("#harness-select");
   harnessSelect.innerHTML = `<option value="">Bot default</option>${state.data.harnesses.map((probe) => `<option value="${escapeHtml(probe.harness_id)}"${selected(probe.harness_id, state.harnessOverride)} ${ready(probe) ? "" : "disabled"}>${escapeHtml(titleCase(probe.harness_id))} · ${escapeHtml(probe.status)}</option>`).join("")}`;
-  harnessSelect.disabled = !currentBot() || Boolean(state.activeRun);
+  harnessSelect.disabled = !currentBot() || currentParticipants().length > 1 || Boolean(state.activeRun);
+  const dispatch = $("#dispatch-select");
+  const participants = currentParticipants();
+  const isGroup = participants.length > 1;
+  dispatch.innerHTML = isGroup
+    ? `<option value="mentions">Mentioned / first bot</option><option value="all">Ask everyone</option><option value="round_robin">Round robin</option>${participants.map((item) => `<option value="${escapeHtml(item.bot_name)}">Only ${escapeHtml(titleCase(item.bot_name))}</option>`).join("")}`
+    : `<option value="mentions">Active bot</option>`;
+  dispatch.value = isGroup ? (currentSession()?.mode || "mentions") : "mentions";
+  dispatch.disabled = !currentBot() || Boolean(state.activeRun);
 }
 
 function renderRecents() {
   const query = $("#session-search").value.trim().toLowerCase();
   const sessions = state.data.sessions.filter((session) => {
-    const text = `${session.bot_name} ${session.turns.map((turn) => turn.content).join(" ")}`.toLowerCase();
+    const text = `${(session.participants || []).map((item) => item.bot_name).join(" ")} ${session.bot_name} ${session.turns.map((turn) => turn.content).join(" ")}`.toLowerCase();
     return !query || text.includes(query);
   });
   $("#recent-list").innerHTML = sessions.length ? sessions.slice(0, 30).map((item) => `
     <button class="recent-item${selected(item.id, state.activeSession)}" data-session="${escapeHtml(item.id)}">
       <strong>${escapeHtml(item.turns[0]?.content || `${titleCase(item.bot_name)} conversation`)}</strong>
-      <small>${escapeHtml(titleCase(item.bot_name))} · ${new Date(item.updated_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</small>
+      <small>${escapeHtml((item.participants || [{ bot_name: item.bot_name }]).map((participant) => titleCase(participant.bot_name)).join(", "))} · ${new Date(item.updated_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</small>
     </button>`).join("") : `<div class="empty-mini">${query ? "No matching conversations" : "No conversations yet"}</div>`;
 }
 
 function messageTemplate(turn) {
   if (turn.role === "user") return `<article class="message user"><div class="message-body">${markdown(turn.content)}</div></article>`;
-  return `<article class="message assistant"><div class="message-avatar">✦</div><div class="message-body">${markdown(turn.content)}<div class="message-meta"><span>Harness response</span><span>Profile-pinned</span></div></div></article>`;
+  const speaker = turn.bot_name ? titleCase(turn.bot_name) : "Assistant";
+  return `<article class="message assistant"><div class="message-avatar" aria-label="${escapeHtml(speaker)}">✦</div><div class="message-body"><strong class="message-speaker">${escapeHtml(speaker)}</strong>${markdown(turn.content)}<div class="message-meta"><span>${escapeHtml(turn.harness_id || "Harness response")}</span><span>Profile-pinned</span></div></div></article>`;
 }
 
 function renderConversation() {
   const bot = currentBot();
   const profile = currentProfile();
   const session = currentSession();
-  $("#conversation-title").textContent = bot ? (session?.turns.length ? `Working with ${titleCase(bot.name)}` : `Meet ${titleCase(bot.name)}`) : "Your harness-native collaborator";
-  $("#welcome-copy").textContent = profile?.description || "Choose a bot to start a secure local conversation.";
+  const participants = currentParticipants();
+  const group = participants.length > 1;
+  $("#conversation-title").textContent = group ? `Collaborating with ${participants.length} bots` : bot ? (session?.turns.length ? `Working with ${titleCase(bot.name)}` : `Meet ${titleCase(bot.name)}`) : "Your harness-native collaborator";
+  $("#welcome-copy").textContent = group ? "Use @bot to target collaborators, or choose Ask everyone or Round robin below." : profile?.description || "Choose a bot to start a secure local conversation.";
+  $("#participant-list").innerHTML = participants.map((item) => `<span class="participant-chip">${escapeHtml(titleCase(item.bot_name))} · ${escapeHtml(titleCase(item.harness_id))}</span>`).join("");
   $("#message-list").innerHTML = session?.turns.map(messageTemplate).join("") || "";
   $("#export-session").disabled = !session;
   $("#message-input").disabled = !bot || Boolean(state.activeRun);
@@ -201,9 +218,34 @@ function toast(message) { const node = $("#toast"); node.textContent = message; 
 async function selectBot(name) {
   state.activeBot = name;
   state.harnessOverride = "";
-  state.activeSession = state.data.sessions.find((item) => item.bot_name === name)?.id || "";
+  state.activeSession = state.data.sessions.find((item) => item.kind !== "group" && item.bot_name === name)?.id || "";
   showView("conversations");
   render();
+}
+
+function openGroupEditor() {
+  if (state.data.bots.length < 2) { showView("bots"); toast("Create at least two bots first"); return; }
+  openEditor({
+    title: "Create group conversation",
+    eyebrow: "MULTI-BOT COLLABORATION",
+    fields: field("Bots", "bots", state.data.bots.slice(0, 2).map((item) => item.name).join(", "), { required: true })
+      + field("Default dispatch", "mode", "mentions", { required: true, select: [
+        { value: "mentions", label: "Explicit @mentions / first bot" },
+        { value: "all", label: "Ask everyone" },
+        { value: "round_robin", label: "Round robin" },
+      ] }),
+    submit: async (values) => {
+      const botNames = values.bots.split(",").map((item) => item.trim()).filter(Boolean);
+      const known = new Set(state.data.bots.map((item) => item.name));
+      if (botNames.length < 2) throw new Error("Choose at least two comma-separated bots.");
+      if (botNames.some((name) => !known.has(name))) throw new Error("Every group participant must be an existing bot.");
+      const session = await (await api("/api/sessions", { method: "POST", body: JSON.stringify({ bot_names: botNames, mode: values.mode }) })).json();
+      state.data.sessions.unshift(session);
+      state.activeSession = session.id;
+      state.activeBot = session.bot_name;
+      showView("conversations");
+    },
+  });
 }
 
 async function createConversation() {
@@ -256,7 +298,8 @@ async function sendPrompt(approved = false) {
   $("#message-input").disabled = true;
   $("#send-message").disabled = true;
   try {
-    const response = await api(`/api/sessions/${encodeURIComponent(session.id)}/messages`, { method: "POST", body: JSON.stringify({ content, approved }) });
+    const dispatch = currentParticipants().length > 1 ? $("#dispatch-select").value : null;
+    const response = await api(`/api/sessions/${encodeURIComponent(session.id)}/messages`, { method: "POST", body: JSON.stringify({ content, approved, dispatch }) });
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -269,6 +312,10 @@ async function sendPrompt(approved = false) {
         const item = parseSseBlock(block);
         if (item.event === "approval_required") {
           setBusy(false, item.payload.authority);
+          const approvalNames = (item.payload.participants || []).map((participant) => `${titleCase(participant.bot_name)} via ${titleCase(participant.harness_id)}`);
+          $("#approval-copy").textContent = approvalNames.length
+            ? `Approval is required for: ${approvalNames.join(", ")}.`
+            : item.payload.message;
           if (await approval()) return sendPrompt(true);
           state.pendingPrompt = "";
           return;
@@ -278,18 +325,21 @@ async function sendPrompt(approved = false) {
           session.turns.push({ role: "user", content });
           $("#message-input").value = "";
           $("#cancel-run").hidden = false;
-          $("#composer-status").textContent = `Running through ${titleCase(item.payload.harness_id)}…`;
+          const routes = item.payload.participants || [{ harness_id: item.payload.harness_id }];
+          $("#composer-status").textContent = `Running ${routes.length} collaborator${routes.length === 1 ? "" : "s"}…`;
           renderConversation();
           scrollThread();
         } else if (item.event === "tool_event") {
           addActivity("Harness activity", summarizeEvent(item.payload.event));
         } else if (item.event === "assistant_message") {
-          session.turns.push({ role: "assistant", content: item.payload.content });
+          session.turns.push({ role: "assistant", content: item.payload.content, bot_name: item.payload.bot_name, harness_id: item.payload.harness_id });
           renderConversation();
           $("#composer-status").textContent = `${titleCase(item.payload.harness_id)} completed in ${(item.payload.duration_ms / 1000).toFixed(1)}s`;
           scrollThread();
-        } else if (item.event === "run_error" || item.event === "run_cancelled") {
-          addActivity(item.event === "run_cancelled" ? "Run cancelled" : "Harness error", item.payload.message, true, item.event === "run_error");
+        } else if (["run_error", "run_cancelled", "participant_error", "participant_cancelled"].includes(item.event)) {
+          const cancelled = item.event.includes("cancelled");
+          const speaker = item.payload.bot_name ? `${titleCase(item.payload.bot_name)} · ` : "";
+          addActivity(cancelled ? `${speaker}Run cancelled` : `${speaker}Harness error`, item.payload.message, true, !cancelled);
           $("#composer-status").textContent = item.payload.message;
         }
       }
@@ -397,6 +447,7 @@ function bindEvents() {
   $("#session-search").addEventListener("input", renderRecents);
   $("#refresh-data").addEventListener("click", () => refresh().catch(showFatal));
   $("#new-thread").addEventListener("click", createConversation);
+  $("#new-group").addEventListener("click", openGroupEditor);
   $("#composer").addEventListener("submit", (event) => { event.preventDefault(); sendPrompt(); });
   $("#message-input").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("#composer").requestSubmit(); } });
   $("#message-input").addEventListener("input", (event) => { event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; });

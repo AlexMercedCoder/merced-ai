@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added durable multi-bot conversations across CLI, API, and web UI with exact mentions,
+  ask-everyone, named-recipient, and round-robin dispatch.
+- Added concurrent isolated fan-out with deterministic participant-order persistence, per-bot
+  attribution/tool/error events, approval aggregation, partial-failure containment, shared
+  cancellation, Markdown export attribution, and legacy session compatibility.
 - Turned the optional web UI into a functional local collaboration workspace with bot and harness
   selection, conversation creation/resume/search/export, normalized SSE run lifecycles, safe
   Markdown/code rendering, retries, and cancellable harness subprocesses.

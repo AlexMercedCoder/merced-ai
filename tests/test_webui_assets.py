@@ -56,10 +56,12 @@ def test_webui_javascript_wires_primary_product_controls() -> None:
 
     for control in (
         "#new-thread",
+        "#new-group",
         "#composer",
         "#cancel-run",
         "#bot-select",
         "#harness-select",
+        "#dispatch-select",
         "#management-action",
         "#session-search",
         "#open-navigation",
@@ -71,6 +73,7 @@ def test_webui_javascript_wires_primary_product_controls() -> None:
     assert "history.replaceState" in script
     assert "/api/auth" in script
     assert "approval_required" in script
+    assert "participant_error" in script
     assert "tool_event" in script
     assert "navigator.clipboard.writeText" in script
     assert "localStorage.setItem" in script

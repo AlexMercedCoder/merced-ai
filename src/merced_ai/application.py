@@ -6,8 +6,17 @@ from pathlib import Path
 
 from merced_ai.bots import resolve_bot
 from merced_ai.harnesses.registry import HarnessRegistry, default_registry
-from merced_ai.models import BotBinding, ProfileProjection, ProfileRecord, RunRequest, RunResult
+from merced_ai.models import (
+    BotBinding,
+    ProfileProjection,
+    ProfileRecord,
+    RunRequest,
+    RunResult,
+    SessionParticipant,
+    SessionRecord,
+)
 from merced_ai.profiles import resolve_profile
+from merced_ai.sessions import select_participants, transcript_prompt
 
 
 class RoutingError(RuntimeError):
@@ -56,6 +65,60 @@ def prepare_run(
 def execute(prepared: PreparedRun, registry: HarnessRegistry | None = None) -> RunResult:
     registry = registry or default_registry()
     return registry.get(prepared.request.harness_id).run(prepared.request)
+
+
+def participant_from_run(prepared: PreparedRun) -> SessionParticipant:
+    return SessionParticipant(
+        bot_name=prepared.bot.name,
+        harness_id=prepared.request.harness_id,
+        profile_name=prepared.profile.name,
+        profile_revision=prepared.profile.revision,
+        profile_digest=prepared.profile.profile_digest,
+        spec_digest=prepared.profile.spec_digest,
+    )
+
+
+def prepare_group(
+    bot_names: tuple[str, ...],
+    workspace: Path,
+    *,
+    registry: HarnessRegistry | None = None,
+) -> tuple[PreparedRun, ...]:
+    """Resolve every participant before a group session is written."""
+    if len(bot_names) < 2:
+        raise ValueError("a group conversation requires at least two bots")
+    if len(bot_names) > 12:
+        raise ValueError("a group conversation supports at most twelve bots")
+    if len(set(bot_names)) != len(bot_names):
+        raise ValueError("group bot names must be unique")
+    registry = registry or default_registry()
+    return tuple(
+        prepare_run(name, "Start the group conversation.", workspace, registry=registry)
+        for name in bot_names
+    )
+
+
+def prepare_group_turn(
+    session: SessionRecord,
+    prompt: str,
+    workspace: Path,
+    *,
+    dispatch: str | None = None,
+    registry: HarnessRegistry | None = None,
+) -> tuple[PreparedRun, ...]:
+    """Prepare isolated prompts for the selected group participants."""
+    registry = registry or default_registry()
+    selected = select_participants(session, prompt, dispatch=dispatch)
+    return tuple(
+        prepare_run(
+            item.bot_name,
+            transcript_prompt(session, prompt, recipient=item.bot_name),
+            workspace,
+            harness_override=item.harness_id,
+            registry=registry,
+        )
+        for item in selected
+    )
 
 
 def _route_harness(
