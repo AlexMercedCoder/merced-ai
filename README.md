@@ -100,10 +100,10 @@ progressive per-bot status, exact failed-bot retry, `@mention` completion, stabl
 conversation naming, and derived participant sets. See the [UI guide](docs/UI.md) and
 [group-chat guide](docs/GROUP_CHAT.md) for the security, dispatch, and streaming boundaries.
 
-![Merced AI desktop UI](docs/screenshots/merced-ai-ui-desktop.jpg)
+![Merced AI desktop group conversation](docs/screenshots/merced-ai-group-desktop.jpg)
 
 The layout is responsive down to a compact mobile collaboration view. See the
-[mobile UI screenshot](docs/screenshots/merced-ai-ui-mobile.jpg).
+[mobile group-chat screenshot](docs/screenshots/merced-ai-group-mobile.jpg).
 
 Use `-C PATH` on project-aware commands to select another workspace. Use `--json` on read and
 one-shot commands for automation.

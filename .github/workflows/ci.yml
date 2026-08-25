@@ -41,7 +41,7 @@ jobs:
         env:
           MERCED_AI_BROWSER_E2E: "1"
           MERCED_AI_SCREENSHOT_DIR: docs/screenshots/qa
-      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+      - if: always() && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
         uses: actions/upload-artifact@v4
         with:
           name: merced-ai-ui-screenshots

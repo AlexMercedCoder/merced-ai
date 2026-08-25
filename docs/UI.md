@@ -74,3 +74,7 @@ deterministic result order, attribution, approval aggregation, partial failures,
 run cancellation contracts. Dedicated Chromium CI validates ordered group creation, progressive
 responses, mention completion, derived-room controls, and desktop/mobile layouts, then publishes
 screenshots as a workflow artifact. See [Group conversations](GROUP_CHAT.md).
+
+Group creation and participant derivation render from the mutation response immediately. They do
+not wait for a second harness discovery pass, which keeps the interface responsive on machines with
+many installed harnesses. Adapter or routing failures remain inside the open dialog for correction.

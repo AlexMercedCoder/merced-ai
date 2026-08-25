@@ -23,7 +23,7 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
     from merced_ai.webui_server import create_web_app
 
     fake_codex = Path(__file__).parent / "fixtures" / "fake_codex.py"
-    monkeypatch.setenv("MERCED_AI_CODEX_EXECUTABLE", str(fake_codex))
+    monkeypatch.setenv("MERCED_AI_CODEX_PATH", str(fake_codex))
     for name, description in (
         ("reviewer", "Reviews correctness and concrete risks."),
         ("builder", "Proposes practical implementation steps."),
@@ -63,15 +63,31 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             page = browser.new_page(viewport={"width": 1440, "height": 980})
+            browser_errors: list[str] = []
+            page.on("console", lambda message: browser_errors.append(f"console: {message.text}"))
+            page.on("pageerror", lambda error: browser_errors.append(f"pageerror: {error}"))
+            page.on(
+                "requestfailed",
+                lambda request: browser_errors.append(
+                    f"requestfailed: {request.method} {request.url} {request.failure}"
+                ),
+            )
             page.goto(f"http://127.0.0.1:{port}/#token=browser-token")
-            expect(page.locator("#workspace-name")).not_to_have_text("Loading…")
+            try:
+                expect(page.locator("#workspace-name")).not_to_have_text("Loading…", timeout=30_000)
+            except AssertionError as error:
+                page.screenshot(path=screenshot_root / "merced-ai-browser-failure.png")
+                details = "; ".join(browser_errors) or "no browser errors captured"
+                raise AssertionError(f"{error}\nBrowser diagnostics: {details}") from error
 
             page.locator("#new-group").click()
             expect(page.locator("#group-dialog")).to_be_visible()
             expect(page.locator('#group-options input[type="checkbox"]:checked')).to_have_count(2)
             page.locator("#group-title").fill("Release readiness council")
             page.locator('#group-options input[value="tester"]').check()
+            expect(page.locator("#group-selected .group-selection")).to_have_count(3)
             page.locator("#group-submit").click()
+            expect(page.locator("#group-dialog")).not_to_be_visible()
             expect(page.locator("#conversation-title")).to_have_text("Release readiness council")
             expect(page.locator("#participant-list .participant-chip")).to_have_count(3)
 
@@ -79,6 +95,8 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
             page.locator("#message-input").fill("Assess the release candidate independently.")
             page.locator("#send-message").click()
             expect(page.locator(".message.assistant")).to_have_count(3, timeout=15_000)
+            expect(page.locator("#message-input")).to_be_enabled(timeout=15_000)
+            expect(page.locator(".pending-response")).to_have_count(0)
             expect(page.locator(".message-speaker")).to_have_count(3)
             expect(page.locator(".activity")).to_have_count(3)
 
@@ -98,11 +116,15 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
             expect(page.locator("#group-dialog-title")).to_have_text(
                 "Start with different participants"
             )
-            page.locator("#group-dialog").locator('button[value="cancel"]').click()
+            page.locator("#group-dialog").locator(".group-cancel").last.click()
 
             mobile = browser.new_page(viewport={"width": 390, "height": 844})
             mobile.goto(f"http://127.0.0.1:{port}/#token=browser-token")
-            expect(mobile.locator("#conversation-title")).to_be_visible()
+            expect(mobile.locator("#workspace-name")).not_to_have_text("Loading…", timeout=30_000)
+            expect(mobile.locator("#conversation-title")).to_have_text("Release readiness council")
+            expect(mobile.locator("#composer-status")).to_have_text("")
+            mobile.locator(".message.assistant").last.scroll_into_view_if_needed()
+            mobile.evaluate("document.activeElement?.blur()")
             mobile.screenshot(
                 path=screenshot_root / "merced-ai-group-mobile.jpg",
                 type="jpeg",

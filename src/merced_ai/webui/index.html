@@ -157,8 +157,8 @@
     </dialog>
 
     <dialog id="group-dialog" class="dialog group-dialog">
-      <form id="group-form" method="dialog">
-        <header><div><span class="eyebrow">MULTI-BOT COLLABORATION</span><h2 id="group-dialog-title">Create group conversation</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></header>
+      <form id="group-form">
+        <header><div><span class="eyebrow">MULTI-BOT COLLABORATION</span><h2 id="group-dialog-title">Create group conversation</h2></div><button class="icon-button group-cancel" type="button" aria-label="Close">×</button></header>
         <div class="group-fields">
           <label>Conversation name<input id="group-title" maxlength="120" placeholder="Design review room" /></label>
           <label>Default dispatch<select id="group-mode"><option value="mentions">Explicit mentions / first bot</option><option value="all">Ask everyone</option><option value="round_robin">Round robin</option></select></label>
@@ -166,7 +166,7 @@
           <div class="group-columns full-field"><div><strong>Available bots</strong><div id="group-options" class="group-options"></div></div><div><strong>Participant order</strong><div id="group-selected" class="group-selected"></div></div></div>
         </div>
         <p id="group-error" class="form-error" role="alert"></p>
-        <footer><button class="secondary-button" value="cancel">Cancel</button><button id="group-submit" class="primary-button" value="default">Create conversation</button></footer>
+        <footer><button class="secondary-button group-cancel" type="button">Cancel</button><button id="group-submit" class="primary-button" type="submit">Create conversation</button></footer>
       </form>
     </dialog>
 

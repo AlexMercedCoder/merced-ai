@@ -8,6 +8,9 @@
 - Group runs now expose progressive per-participant status and responses while committing durable
   results in deterministic participant order. Failed-bot retries target only that bot.
 - Added dedicated Chromium UI validation and desktop/mobile group-chat screenshot artifacts to CI.
+- Group creation now renders the returned session immediately instead of blocking on a second full
+  harness probe; group dialogs keep adapter errors visible and completed refreshes clear stale
+  loading text.
 - Added durable multi-bot conversations across CLI, API, and web UI with exact mentions,
   ask-everyone, named-recipient, and round-robin dispatch.
 - Added concurrent isolated fan-out with deterministic participant-order persistence, per-bot

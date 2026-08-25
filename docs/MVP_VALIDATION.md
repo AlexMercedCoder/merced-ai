@@ -5,7 +5,7 @@ range is Python 3.11–3.14.
 
 ## Automated suite
 
-The suite contains 64 tests: 63 local tests pass with 79.06% branch-aware coverage and one
+The suite contains 64 tests: 63 local tests pass with 78.97% branch-aware coverage and one
 dedicated Chromium test runs in CI. CI enforces a 70% minimum and
 is configured for Python 3.11 and 3.14 on Ubuntu plus Python 3.13 on macOS and Windows.
 
@@ -29,7 +29,8 @@ Covered behavior includes:
   attribution, progressive lifecycle events, exact failed-bot retry, approval aggregation,
   naming/derivation, partial failures, group export, and CLI JSON automation.
 - Real Chromium coverage for searchable ordered group creation, progressive responses, stable
-  attribution, mention completion, derived-room controls, and desktop/mobile screenshots.
+  attribution, completion synchronization, mention completion, derived-room controls, error-safe
+  dialog behavior, stale-status clearing, and desktop/mobile screenshots.
 
 Validation commands:
 

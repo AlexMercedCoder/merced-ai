@@ -227,7 +227,10 @@ function renderManagement() {
 }
 
 function emptyState(title, copy) { return `<div class="empty-state"><div class="bot-orb large">✦</div><h2>${title}</h2><p>${copy}</p></div>`; }
-function setBusy(busy, message = "") { $("#thread").setAttribute("aria-busy", String(busy)); if (message) $("#composer-status").textContent = message; }
+function setBusy(busy, message = "") {
+  $("#thread").setAttribute("aria-busy", String(busy));
+  if (message || !busy) $("#composer-status").textContent = message;
+}
 function toast(message) { const node = $("#toast"); node.textContent = message; node.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => { node.hidden = true; }, 3500); }
 
 async function selectBot(name) {
@@ -513,9 +516,25 @@ function bindEvents() {
   $("#cancel-run").addEventListener("click", cancelRun);
   $("#activity-list").addEventListener("click", (event) => { const retry = event.target.closest(".retry-run"); if (retry && state.lastPrompt) { state.pendingPrompt = state.lastPrompt; state.pendingDispatch = retry.dataset.bot || ""; sendPrompt(); } });
   $("#group-search").addEventListener("input", renderGroupPicker);
+  $$(".group-cancel").forEach((button) => button.addEventListener("click", () => $("#group-dialog").close()));
   $("#group-options").addEventListener("change", (event) => { const checkbox = event.target.closest('input[type="checkbox"]'); if (!checkbox) return; state.groupDraft = checkbox.checked ? [...state.groupDraft, checkbox.value] : state.groupDraft.filter((name) => name !== checkbox.value); renderGroupPicker(); });
   $("#group-selected").addEventListener("click", (event) => { const row = event.target.closest("[data-name]"); if (!row) return; const index = state.groupDraft.indexOf(row.dataset.name); if (event.target.closest("[data-remove]")) state.groupDraft.splice(index, 1); else if (event.target.closest('[data-move="up"]') && index > 0) [state.groupDraft[index - 1], state.groupDraft[index]] = [state.groupDraft[index], state.groupDraft[index - 1]]; else if (event.target.closest('[data-move="down"]') && index < state.groupDraft.length - 1) [state.groupDraft[index + 1], state.groupDraft[index]] = [state.groupDraft[index], state.groupDraft[index + 1]]; renderGroupPicker(); });
-  $("#group-form").addEventListener("submit", async (event) => { event.preventDefault(); if (state.groupDraft.length < 2) { $("#group-error").textContent = "Select at least two bots."; return; } const payload = { bot_names: state.groupDraft, mode: $("#group-mode").value, title: $("#group-title").value.trim() || null }; const path = state.deriveFrom ? `/api/sessions/${encodeURIComponent(state.deriveFrom)}/derive` : "/api/sessions"; try { const session = await (await api(path, { method: "POST", body: JSON.stringify(payload) })).json(); $("#group-dialog").close(); state.activeSession = session.id; state.activeBot = session.bot_name; await refresh({ quiet: true }); showView("conversations"); toast(state.deriveFrom ? "Derived conversation ready" : "Group conversation ready"); } catch (error) { $("#group-error").textContent = error.message; } });
+  $("#group-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (state.groupDraft.length < 2) { $("#group-error").textContent = "Select at least two bots."; return; }
+    const payload = { bot_names: state.groupDraft, mode: $("#group-mode").value, title: $("#group-title").value.trim() || null };
+    const path = state.deriveFrom ? `/api/sessions/${encodeURIComponent(state.deriveFrom)}/derive` : "/api/sessions";
+    try {
+      const session = await (await api(path, { method: "POST", body: JSON.stringify(payload) })).json();
+      $("#group-dialog").close();
+      state.data.sessions = [session, ...state.data.sessions.filter((item) => item.id !== session.id)];
+      state.activeSession = session.id;
+      state.activeBot = session.bot_name;
+      showView("conversations");
+      render();
+      toast(state.deriveFrom ? "Derived conversation ready" : "Group conversation ready");
+    } catch (error) { $("#group-error").textContent = error.message; }
+  });
   $("#management-action").addEventListener("click", () => state.view === "profiles" ? openProfileEditor() : openBotEditor());
   $("#management-list").addEventListener("click", (event) => { const edit = event.target.closest(".edit-profile"); const use = event.target.closest(".use-bot"); if (edit) openProfileEditor(state.data.profiles.find((item) => item.name === edit.dataset.profile)); if (use) selectBot(use.dataset.bot); });
   $("#harness-list").addEventListener("click", (event) => { const button = event.target.closest("[data-harness]"); if (button && !currentSession()?.turns.length) { state.harnessOverride = button.dataset.harness; render(); } });
