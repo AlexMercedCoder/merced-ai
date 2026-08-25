@@ -160,6 +160,8 @@ class SessionParticipant(BaseModel):
 
 class SessionRecord(BaseModel):
     id: str
+    title: str | None = None
+    derived_from: str | None = None
     bot_name: str
     harness_id: str
     workspace: Path

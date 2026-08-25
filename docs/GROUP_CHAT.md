@@ -36,10 +36,14 @@ and the stored JSON expose the participants and attributed turns.
 
 ## Web UI
 
-Launch `merced-ai ui`, then select **Group**. Enter two or more existing bot names and choose the
-room's default dispatch mode. The composer can target mentioned bots, everyone, the next
+Launch `merced-ai ui`, then select **Group**. Search, select, and reorder two or more bots, name the
+room, and choose its default dispatch mode. The composer offers `@mention` completion and can target mentioned bots, everyone, the next
 round-robin participant, or one named participant. Participant chips show each bot's pinned
 harness. Exported Markdown includes the bot and harness on every assistant response.
+
+Rooms can be renamed. **Participants** starts a derived conversation where bots can be added,
+removed, or reordered without mutating the historical room. Stable bot colors and initials
+preserve attribution across transcripts and inspector cards.
 
 ## Dispatch and ordering
 
@@ -50,8 +54,8 @@ harness. Exported Markdown includes the bot and harness on every assistant respo
 - a bot name: only that participant responds (web API/UI).
 
 Multi-recipient runs execute concurrently. Prompts are isolated per bot and identify the intended
-speaker. Results, tool events, and persisted assistant turns are emitted in the original
-participant order, making transcripts deterministic even when a later bot finishes first.
+speaker. Queued/running/completed/failed state and responses update progressively. Durable turns
+are committed in original participant order, keeping resumed/exported transcripts deterministic.
 
 ## Safety and failure behavior
 
@@ -63,6 +67,9 @@ run ID controls the fan-out, and cancellation signals every active participant p
 Harness policy remains authoritative for each process. Merced AI never forwards one bot's answer
 as a new request unless the user explicitly sends another turn. This prevents recursive agent
 loops, surprise spend, and uncontrolled workspace mutation.
+
+A failed participant exposes **Retry only this bot**. The named-recipient retry does not rerun
+successful participants, avoiding duplicate spend or workspace actions.
 
 ## Session compatibility
 

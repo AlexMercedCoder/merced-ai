@@ -42,9 +42,12 @@ def test_session_store_is_durable_and_builds_bounded_transcript(workspace: Path)
     prompt = transcript_prompt(loaded, "Next question")
 
     assert len(store.list()) == 1
+    assert loaded.title == "First question"
     assert [turn.role for turn in loaded.turns] == ["user", "assistant"]
     assert "User: First question" in prompt
     assert prompt.endswith("User: Next question")
+    store.rename(loaded, "  Project   notes  ")
+    assert store.load(session.id).title == "Project notes"
 
 
 def test_legacy_session_migrates_in_memory_without_rewriting() -> None:

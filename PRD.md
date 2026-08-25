@@ -101,7 +101,8 @@ profile by default.
 
 A durable Merced AI record linked to one or more ordered bot participants. Each participant pins
 its routed harness, OAP profile revision, profile digest, and spec digest when the session starts.
-Assistant turns retain bot and harness attribution. Legacy one-bot fields remain readable.
+Assistant turns retain bot and harness attribution. Sessions may have a title and derived-from
+link. Legacy one-bot fields remain readable.
 
 ### Group conversation
 
@@ -109,6 +110,9 @@ A session with two to twelve bots. Explicit mentions, ask-everyone, named-recipi
 dispatch choose participants. Multi-recipient work runs concurrently but results are committed in
 participant order. Participant failure is isolated, cancellation is shared, and no assistant
 response automatically triggers another bot.
+
+The UI makes participants directly selectable/reorderable and exposes stable attribution,
+progressive participant state, exact-recipient retry, mention completion, and derived rooms.
 
 ## 7. Core architecture
 

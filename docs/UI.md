@@ -12,12 +12,15 @@ merced-ai ui -C /path/to/workspace
 - Start, search, select, resume, and export normalized conversations.
 - Create group conversations from existing bots; target exact `@mentions`, everyone, the next
   round-robin bot, or one named participant.
+- Search, select, and reorder participants; name/rename rooms; derive a new room when changing
+  participants; and use keyboard-accessible mention completion.
 - Select a bot and, before the first turn, override its installed harness route.
 - Send requests through the same routing and OAP projection layer used by the CLI.
 - Receive normalized Server-Sent Events for run start, structured harness activity, completion,
-cancellation, and failures.
+  cancellation, and failures.
 - See participant-attributed messages, routes, activity, partial failures, and Markdown exports.
-- Cancel a running subprocess and retry failed requests.
+- Follow queued/running/completed/failed state progressively, cancel the shared run, and retry only
+  a failed participant.
 - Review projection adjustments, effective authority, route health, versions, and capabilities.
 - Create and edit project-local OAP profiles, including provider/model and edit/shell permission
   requests. Fields outside the editor are preserved and the revision increments atomically.
@@ -48,9 +51,9 @@ workspace permissions, and the harness's effective policy remain authoritative.
 ## Streaming boundary
 
 The browser receives a normalized live lifecycle stream. Group starts include every selected bot
-and harness; message, tool, error, and cancellation events include participant identity. Selected
-participants run concurrently, while events and persisted answers are normalized in participant
-order. Subprocess adapters currently emit the
+and harness; participant-start, message, tool, error, and cancellation events include participant
+identity. Selected participants run concurrently and responses appear as they complete, while
+persisted answers are normalized in participant order. Subprocess adapters currently emit the
 final assistant response once the harness process completes. Harnesses that return structured
 native events expose those events through the stream after normalization; token-level and
 interactive approval bridging depend on future transport-specific streaming adapters.
@@ -68,4 +71,6 @@ message endpoint.
 
 Group coverage includes legacy session loading, mention/all/direct/round-robin selection,
 deterministic result order, attribution, approval aggregation, partial failures, export, and shared
-run cancellation contracts. See [Group conversations](GROUP_CHAT.md) for the complete behavior.
+run cancellation contracts. Dedicated Chromium CI validates ordered group creation, progressive
+responses, mention completion, derived-room controls, and desktop/mobile layouts, then publishes
+screenshots as a workflow artifact. See [Group conversations](GROUP_CHAT.md).

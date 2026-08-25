@@ -188,6 +188,7 @@ async def test_webui_streams_run_lifecycle_and_persists_turns(
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "event: run_started" in response.text
+    assert "event: participant_started" in response.text
     assert "event: tool_event" in response.text
     assert "event: assistant_message" in response.text
     assert "event: run_finished" in response.text
@@ -266,7 +267,7 @@ async def test_webui_rejects_cross_origin_mutations(workspace: Path) -> None:
 
 
 @pytest.mark.anyio
-async def test_webui_group_chat_parallel_results_are_ordered_and_attributed(
+async def test_webui_group_chat_results_stream_progressively_and_persist_in_order(
     workspace: Path, ready_harnesses: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def inline(function: Callable[..., object], *args: object) -> object:
@@ -316,6 +317,13 @@ async def test_webui_group_chat_parallel_results_are_ordered_and_attributed(
         )
         exported = await client.get(f"/api/sessions/{session_id}/export")
         bootstrap = await client.get("/api/bootstrap")
+        renamed = await client.put(
+            f"/api/sessions/{session_id}", json={"title": "Architecture council"}
+        )
+        targeted_retry = await client.post(
+            f"/api/sessions/{session_id}/messages",
+            json={"content": "Review together", "dispatch": "tester"},
+        )
 
     assert created.status_code == 201
     assert created.json()["kind"] == "group"
@@ -324,7 +332,9 @@ async def test_webui_group_chat_parallel_results_are_ordered_and_attributed(
         "builder",
         "tester",
     ]
-    assert response.text.index("reviewer response") < response.text.index("builder response")
+    assert "reviewer response" in response.text
+    assert "builder response" in response.text
+    assert response.text.count("event: participant_started") == 3
     assert "event: participant_error" in response.text
     assert "tester provider unavailable" in response.text
     assert '"completed": 2' in response.text
@@ -333,6 +343,11 @@ async def test_webui_group_chat_parallel_results_are_ordered_and_attributed(
     assert [turn.get("bot_name") for turn in session["turns"]] == [None, "reviewer", "builder"]
     assert "## reviewer (codex)" in exported.text
     assert "## builder (codex)" in exported.text
+
+    assert renamed.json()["title"] == "Architecture council"
+    assert '"bot_name": "tester"' in targeted_retry.text
+    assert '"bot_name": "reviewer"' not in targeted_retry.text
+    assert '"bot_name": "builder"' not in targeted_retry.text
 
 
 @pytest.mark.anyio
@@ -359,12 +374,27 @@ async def test_webui_group_validation_and_approval_aggregation(
             f"/api/sessions/{created.json()['id']}/messages",
             json={"content": "Make changes", "dispatch": "all"},
         )
+        derived = await client.post(
+            f"/api/sessions/{created.json()['id']}/derive",
+            json={
+                "bot_names": ["operator", "writer"],
+                "mode": "round_robin",
+                "title": "Follow-up room",
+            },
+        )
 
     assert too_small.status_code == 201  # one-name lists retain single-session compatibility
     assert duplicate.status_code == 422
     assert "event: approval_required" in approval.text
     assert '"bot_name": "writer"' in approval.text
     assert '"bot_name": "operator"' in approval.text
+    assert derived.status_code == 201
+    assert derived.json()["derived_from"] == created.json()["id"]
+    assert derived.json()["title"] == "Follow-up room"
+    assert [item["bot_name"] for item in derived.json()["participants"]] == [
+        "operator",
+        "writer",
+    ]
 
 
 def test_webui_rejects_non_loopback_binding(workspace: Path) -> None:

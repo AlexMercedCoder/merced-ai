@@ -37,6 +37,8 @@ class SessionStore:
         participants: tuple[SessionParticipant, ...],
         *,
         mode: Literal["mentions", "all", "round_robin"] = "mentions",
+        title: str | None = None,
+        derived_from: str | None = None,
     ) -> SessionRecord:
         if not participants:
             raise ValueError("a session requires at least one participant")
@@ -49,6 +51,8 @@ class SessionStore:
         primary = participants[0]
         session = SessionRecord(
             id=f"session-{uuid4().hex}",
+            title=title,
+            derived_from=derived_from,
             bot_name=primary.bot_name,
             harness_id=primary.harness_id,
             workspace=self.root.parent.parent,
@@ -94,6 +98,8 @@ class SessionStore:
         bot_name: str | None = None,
         harness_id: str | None = None,
     ) -> None:
+        if role == "user" and not session.title:
+            session.title = " ".join(content.split())[:80]
         session.turns.append(  # type: ignore[arg-type]
             ConversationTurn(
                 role=role,
@@ -102,6 +108,13 @@ class SessionStore:
                 harness_id=harness_id,
             )
         )
+        self.save(session)
+
+    def rename(self, session: SessionRecord, title: str) -> None:
+        normalized = " ".join(title.split())
+        if not normalized:
+            raise ValueError("conversation title cannot be empty")
+        session.title = normalized[:120]
         self.save(session)
 
 

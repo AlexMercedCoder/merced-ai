@@ -66,8 +66,9 @@ interrupt, process-start, nonzero-exit, and structured in-stream failures become
 paid or mutating work.
 
 Group fan-out prepares an isolated prompt and route for each selected participant, executes the
-bounded harness processes concurrently, then normalizes and saves results in participant order.
-Participant failures are isolated. A shared cancellation signal reaches all processes in that
+bounded harness processes concurrently, streams lifecycle/results as each completes, then saves
+successful results in participant order. Failures are isolated and named retry addresses only the
+failed bot. A shared cancellation signal reaches all processes in that
 user-triggered fan-out. There is deliberately no automatic assistant-to-assistant turn scheduler.
 
 ## Security boundaries

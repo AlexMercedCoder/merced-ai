@@ -6,6 +6,10 @@ const state = {
   activeRun: "",
   pendingPrompt: "",
   lastPrompt: "",
+  pendingDispatch: "",
+  liveParticipants: {},
+  groupDraft: [],
+  deriveFrom: "",
   view: "conversations",
 };
 
@@ -20,6 +24,9 @@ const escapeHtml = (value = "") => String(value)
 const titleCase = (value = "") => value.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const selected = (left, right) => left === right ? " selected" : "";
 const ready = (probe) => Boolean(probe?.path) && probe.status !== "probe_failed" && probe.status !== "incompatible";
+const botHue = (name = "assistant") => [...name].reduce((value, char) => (value * 31 + char.charCodeAt(0)) % 360, 47);
+const initials = (name = "AI") => name.split(/[-_\s]+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+const identityStyle = (name) => `style="--bot-hue:${botHue(name)}"`;
 
 function markdown(value = "") {
   const blocks = String(value).split("```");
@@ -100,7 +107,9 @@ function render() {
 
 function renderSelectors() {
   const botSelect = $("#bot-select");
-  botSelect.innerHTML = `<option value="">Select a bot</option>${state.data.bots.map((bot) => `<option value="${escapeHtml(bot.name)}"${selected(bot.name, state.activeBot)}>${escapeHtml(titleCase(bot.name))}</option>`).join("")}`;
+  const groupSession = currentSession()?.kind === "group" ? currentSession() : null;
+  const groupOption = groupSession ? `<option value="__group__" selected>Group · ${escapeHtml(groupSession.title || `${groupSession.participants.length} bots`)}</option>` : "";
+  botSelect.innerHTML = `<option value="">Select a bot</option>${groupOption}${state.data.bots.map((bot) => `<option value="${escapeHtml(bot.name)}"${groupSession ? "" : selected(bot.name, state.activeBot)}>${escapeHtml(titleCase(bot.name))}</option>`).join("")}`;
   const harnessSelect = $("#harness-select");
   harnessSelect.innerHTML = `<option value="">Bot default</option>${state.data.harnesses.map((probe) => `<option value="${escapeHtml(probe.harness_id)}"${selected(probe.harness_id, state.harnessOverride)} ${ready(probe) ? "" : "disabled"}>${escapeHtml(titleCase(probe.harness_id))} · ${escapeHtml(probe.status)}</option>`).join("")}`;
   harnessSelect.disabled = !currentBot() || currentParticipants().length > 1 || Boolean(state.activeRun);
@@ -122,7 +131,7 @@ function renderRecents() {
   });
   $("#recent-list").innerHTML = sessions.length ? sessions.slice(0, 30).map((item) => `
     <button class="recent-item${selected(item.id, state.activeSession)}" data-session="${escapeHtml(item.id)}">
-      <strong>${escapeHtml(item.turns[0]?.content || `${titleCase(item.bot_name)} conversation`)}</strong>
+      <strong>${escapeHtml(item.title || item.turns[0]?.content || `${titleCase(item.bot_name)} conversation`)}</strong>
       <small>${escapeHtml((item.participants || [{ bot_name: item.bot_name }]).map((participant) => titleCase(participant.bot_name)).join(", "))} · ${new Date(item.updated_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })}</small>
     </button>`).join("") : `<div class="empty-mini">${query ? "No matching conversations" : "No conversations yet"}</div>`;
 }
@@ -130,7 +139,8 @@ function renderRecents() {
 function messageTemplate(turn) {
   if (turn.role === "user") return `<article class="message user"><div class="message-body">${markdown(turn.content)}</div></article>`;
   const speaker = turn.bot_name ? titleCase(turn.bot_name) : "Assistant";
-  return `<article class="message assistant"><div class="message-avatar" aria-label="${escapeHtml(speaker)}">✦</div><div class="message-body"><strong class="message-speaker">${escapeHtml(speaker)}</strong>${markdown(turn.content)}<div class="message-meta"><span>${escapeHtml(turn.harness_id || "Harness response")}</span><span>Profile-pinned</span></div></div></article>`;
+  const body = turn.pending ? '<p class="pending-response">Waiting for this collaborator…</p>' : markdown(turn.content);
+  return `<article class="message assistant" ${identityStyle(turn.bot_name)}><div class="message-avatar bot-identity" aria-label="${escapeHtml(speaker)}">${escapeHtml(initials(turn.bot_name))}</div><div class="message-body"><strong class="message-speaker">${escapeHtml(speaker)}</strong>${body}<div class="message-meta"><span>${escapeHtml(turn.harness_id || "Harness response")}</span><span>${turn.pending ? "In progress" : "Profile-pinned"}</span></div></div></article>`;
 }
 
 function renderConversation() {
@@ -139,11 +149,13 @@ function renderConversation() {
   const session = currentSession();
   const participants = currentParticipants();
   const group = participants.length > 1;
-  $("#conversation-title").textContent = group ? `Collaborating with ${participants.length} bots` : bot ? (session?.turns.length ? `Working with ${titleCase(bot.name)}` : `Meet ${titleCase(bot.name)}`) : "Your harness-native collaborator";
+  $("#conversation-title").textContent = session?.title || (group ? `Collaborating with ${participants.length} bots` : bot ? (session?.turns.length ? `Working with ${titleCase(bot.name)}` : `Meet ${titleCase(bot.name)}`) : "Your harness-native collaborator");
   $("#welcome-copy").textContent = group ? "Use @bot to target collaborators, or choose Ask everyone or Round robin below." : profile?.description || "Choose a bot to start a secure local conversation.";
   $("#participant-list").innerHTML = participants.map((item) => `<span class="participant-chip">${escapeHtml(titleCase(item.bot_name))} · ${escapeHtml(titleCase(item.harness_id))}</span>`).join("");
   $("#message-list").innerHTML = session?.turns.map(messageTemplate).join("") || "";
   $("#export-session").disabled = !session;
+  $("#rename-session").disabled = !session;
+  $("#derive-group").disabled = !session || state.data.bots.length < 2;
   $("#message-input").disabled = !bot || Boolean(state.activeRun);
   $("#send-message").disabled = !bot || Boolean(state.activeRun);
   bindCopyButtons();
@@ -154,8 +166,11 @@ async function renderInspector() {
   const profile = currentProfile();
   const harnessId = activeHarnessId();
   const probe = activeProbe();
-  $("#inspector-name").textContent = bot ? titleCase(bot.name) : "No bot selected";
-  $("#inspector-description").textContent = profile?.description || "Create an OAP profile and bind it to a harness.";
+  const participants = currentParticipants();
+  $("#inspector-name").textContent = participants.length > 1 ? (currentSession()?.title || `${participants.length} collaborators`) : bot ? titleCase(bot.name) : "No bot selected";
+  $("#inspector-description").textContent = participants.length > 1 ? "Each collaborator keeps an independent profile, route, and approval boundary." : profile?.description || "Create an OAP profile and bind it to a harness.";
+  $("#participant-count").textContent = participants.length;
+  $("#inspector-participants").innerHTML = participants.map((item) => `<div class="inspector-participant" ${identityStyle(item.bot_name)}><div class="message-avatar bot-identity">${escapeHtml(initials(item.bot_name))}</div><div><strong>${escapeHtml(titleCase(item.bot_name))}</strong><small>${escapeHtml(titleCase(item.harness_id))} · ${escapeHtml(item.profile_name || "profile")}</small></div></div>`).join("");
   $("#route-profile").textContent = profile?.name || bot?.profile || "—";
   $("#route-harness").textContent = harnessId ? titleCase(harnessId) : "—";
   $("#active-harness").textContent = harnessId ? `${titleCase(harnessId)} · ${probe?.status || "unknown"}` : "No route";
@@ -223,29 +238,25 @@ async function selectBot(name) {
   render();
 }
 
-function openGroupEditor() {
+function renderGroupPicker() {
+  const query = $("#group-search").value.trim().toLowerCase();
+  $("#group-options").innerHTML = state.data.bots.filter((bot) => !query || bot.name.toLowerCase().includes(query)).map((bot) => `<label class="group-option" ${identityStyle(bot.name)}><input type="checkbox" value="${escapeHtml(bot.name)}" ${state.groupDraft.includes(bot.name) ? "checked" : ""}/><span class="message-avatar bot-identity">${escapeHtml(initials(bot.name))}</span><span>${escapeHtml(titleCase(bot.name))}<small>${escapeHtml(titleCase(bot.harness.preferred))}</small></span></label>`).join("");
+  $("#group-selected").innerHTML = state.groupDraft.map((name, index) => `<div class="group-selection" data-name="${escapeHtml(name)}"><span>${index + 1}. ${escapeHtml(titleCase(name))}</span><button type="button" data-move="up" ${index ? "" : "disabled"} aria-label="Move ${escapeHtml(name)} up">↑</button><button type="button" data-move="down" ${index < state.groupDraft.length - 1 ? "" : "disabled"} aria-label="Move ${escapeHtml(name)} down">↓</button><button type="button" data-remove aria-label="Remove ${escapeHtml(name)}">×</button></div>`).join("") || '<div class="empty-mini">Select at least two bots</div>';
+}
+
+function openGroupEditor(derive = false) {
   if (state.data.bots.length < 2) { showView("bots"); toast("Create at least two bots first"); return; }
-  openEditor({
-    title: "Create group conversation",
-    eyebrow: "MULTI-BOT COLLABORATION",
-    fields: field("Bots", "bots", state.data.bots.slice(0, 2).map((item) => item.name).join(", "), { required: true })
-      + field("Default dispatch", "mode", "mentions", { required: true, select: [
-        { value: "mentions", label: "Explicit @mentions / first bot" },
-        { value: "all", label: "Ask everyone" },
-        { value: "round_robin", label: "Round robin" },
-      ] }),
-    submit: async (values) => {
-      const botNames = values.bots.split(",").map((item) => item.trim()).filter(Boolean);
-      const known = new Set(state.data.bots.map((item) => item.name));
-      if (botNames.length < 2) throw new Error("Choose at least two comma-separated bots.");
-      if (botNames.some((name) => !known.has(name))) throw new Error("Every group participant must be an existing bot.");
-      const session = await (await api("/api/sessions", { method: "POST", body: JSON.stringify({ bot_names: botNames, mode: values.mode }) })).json();
-      state.data.sessions.unshift(session);
-      state.activeSession = session.id;
-      state.activeBot = session.bot_name;
-      showView("conversations");
-    },
-  });
+  const session = currentSession();
+  state.deriveFrom = derive ? session?.id || "" : "";
+  state.groupDraft = derive ? currentParticipants().map((item) => item.bot_name) : state.data.bots.slice(0, 2).map((item) => item.name);
+  $("#group-dialog-title").textContent = derive ? "Start with different participants" : "Create group conversation";
+  $("#group-submit").textContent = derive ? "Start derived conversation" : "Create conversation";
+  $("#group-title").value = derive && session?.title ? `${session.title} — follow-up` : "";
+  $("#group-mode").value = derive ? session?.mode || "mentions" : "mentions";
+  $("#group-search").value = "";
+  $("#group-error").textContent = "";
+  renderGroupPicker();
+  $("#group-dialog").showModal();
 }
 
 async function createConversation() {
@@ -298,7 +309,7 @@ async function sendPrompt(approved = false) {
   $("#message-input").disabled = true;
   $("#send-message").disabled = true;
   try {
-    const dispatch = currentParticipants().length > 1 ? $("#dispatch-select").value : null;
+    const dispatch = state.pendingDispatch || (currentParticipants().length > 1 ? $("#dispatch-select").value : null);
     const response = await api(`/api/sessions/${encodeURIComponent(session.id)}/messages`, { method: "POST", body: JSON.stringify({ content, approved, dispatch }) });
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -316,6 +327,7 @@ async function sendPrompt(approved = false) {
           $("#approval-copy").textContent = approvalNames.length
             ? `Approval is required for: ${approvalNames.join(", ")}.`
             : item.payload.message;
+          $("#approval-participants").innerHTML = (item.payload.participants || []).map((participant) => `<div ${identityStyle(participant.bot_name)}><strong>${escapeHtml(titleCase(participant.bot_name))}</strong> via ${escapeHtml(titleCase(participant.harness_id))}</div>`).join("");
           if (await approval()) return sendPrompt(true);
           state.pendingPrompt = "";
           return;
@@ -326,20 +338,30 @@ async function sendPrompt(approved = false) {
           $("#message-input").value = "";
           $("#cancel-run").hidden = false;
           const routes = item.payload.participants || [{ harness_id: item.payload.harness_id }];
+          routes.forEach((route) => session.turns.push({ role: "assistant", content: "", bot_name: route.bot_name || state.activeBot, harness_id: route.harness_id, pending: true }));
+          state.liveParticipants = Object.fromEntries(routes.map((route) => [route.bot_name || state.activeBot, "queued"]));
+          $("#activity-list").innerHTML = routes.map((route) => `<div class="activity running" id="run-participant-${escapeHtml(route.bot_name || state.activeBot)}" ${identityStyle(route.bot_name || state.activeBot)}><span>●</span><div><strong>${escapeHtml(titleCase(route.bot_name || state.activeBot))}</strong><small>Queued · ${escapeHtml(titleCase(route.harness_id))}</small></div></div>`).join("");
           $("#composer-status").textContent = `Running ${routes.length} collaborator${routes.length === 1 ? "" : "s"}…`;
           renderConversation();
           scrollThread();
+        } else if (item.event === "participant_started") {
+          updateParticipantStatus(item.payload.bot_name, "Running", item.payload.harness_id);
         } else if (item.event === "tool_event") {
           addActivity("Harness activity", summarizeEvent(item.payload.event));
         } else if (item.event === "assistant_message") {
-          session.turns.push({ role: "assistant", content: item.payload.content, bot_name: item.payload.bot_name, harness_id: item.payload.harness_id });
+          const pendingTurn = session.turns.find((turn) => turn.pending && turn.bot_name === item.payload.bot_name);
+          if (pendingTurn) { pendingTurn.content = item.payload.content; pendingTurn.pending = false; }
+          else session.turns.push({ role: "assistant", content: item.payload.content, bot_name: item.payload.bot_name, harness_id: item.payload.harness_id });
+          updateParticipantStatus(item.payload.bot_name, `Completed in ${(item.payload.duration_ms / 1000).toFixed(1)}s`, item.payload.harness_id);
           renderConversation();
           $("#composer-status").textContent = `${titleCase(item.payload.harness_id)} completed in ${(item.payload.duration_ms / 1000).toFixed(1)}s`;
           scrollThread();
         } else if (["run_error", "run_cancelled", "participant_error", "participant_cancelled"].includes(item.event)) {
           const cancelled = item.event.includes("cancelled");
           const speaker = item.payload.bot_name ? `${titleCase(item.payload.bot_name)} · ` : "";
-          addActivity(cancelled ? `${speaker}Run cancelled` : `${speaker}Harness error`, item.payload.message, true, !cancelled);
+          updateParticipantStatus(item.payload.bot_name, cancelled ? "Cancelled" : item.payload.message, item.payload.harness_id, true, !cancelled);
+          session.turns = session.turns.filter((turn) => !(turn.pending && turn.bot_name === item.payload.bot_name));
+          renderConversation();
           $("#composer-status").textContent = item.payload.message;
         }
       }
@@ -351,6 +373,8 @@ async function sendPrompt(approved = false) {
   } finally {
     state.activeRun = "";
     state.pendingPrompt = "";
+    state.pendingDispatch = "";
+    state.liveParticipants = {};
     $("#cancel-run").hidden = true;
     $("#message-input").disabled = !currentBot();
     $("#send-message").disabled = !currentBot();
@@ -364,7 +388,15 @@ function summarizeEvent(event) {
   if (typeof event?.name === "string") return event.name;
   return "Structured event received";
 }
-function addActivity(title, copy, error = false, retry = false) { $("#activity-list").insertAdjacentHTML("beforeend", `<div class="activity ${error ? "error" : ""}"><span>${error ? "!" : "↗"}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(copy)}</small></div>${retry ? '<button type="button" class="retry-run">Retry</button>' : ""}</div>`); scrollThread(); }
+function updateParticipantStatus(botName, copy, harnessId, error = false, retry = false) {
+  const node = document.getElementById(`run-participant-${botName}`);
+  if (!node) { addActivity(botName || "Harness", copy, error, retry, botName); return; }
+  node.classList.toggle("running", copy === "Running");
+  node.classList.toggle("error", error);
+  node.querySelector("small").textContent = `${copy}${harnessId ? ` · ${titleCase(harnessId)}` : ""}`;
+  if (retry && !node.querySelector(".retry-run")) node.insertAdjacentHTML("beforeend", `<button type="button" class="retry-run" data-bot="${escapeHtml(botName)}">Retry only this bot</button>`);
+}
+function addActivity(title, copy, error = false, retry = false, botName = "") { $("#activity-list").insertAdjacentHTML("beforeend", `<div class="activity ${error ? "error" : ""}"><span>${error ? "!" : "↗"}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(copy)}</small></div>${retry ? `<button type="button" class="retry-run" data-bot="${escapeHtml(botName)}">Retry${botName ? " only this bot" : ""}</button>` : ""}</div>`); scrollThread(); }
 function scrollThread() { requestAnimationFrame(() => $("#thread").scrollTo({ top: $("#thread").scrollHeight, behavior: "smooth" })); }
 
 async function cancelRun() {
@@ -436,23 +468,54 @@ function openBotEditor() {
 }
 
 function bindCopyButtons() { $$(".copy-code").forEach((button) => button.addEventListener("click", async () => { await navigator.clipboard.writeText(button.nextElementSibling.textContent); button.textContent = "Copied"; setTimeout(() => { button.textContent = "Copy"; }, 1200); })); }
+function renderMentionMenu() {
+  const input = $("#message-input");
+  const match = input.value.slice(0, input.selectionStart).match(/(?:^|\s)@([\w-]*)$/);
+  const participants = currentParticipants().filter((item) => !match || item.bot_name.toLowerCase().startsWith(match[1].toLowerCase()));
+  const menu = $("#mention-menu");
+  if (!match || currentParticipants().length < 2 || !participants.length) { menu.hidden = true; return; }
+  menu.innerHTML = participants.map((item) => `<button type="button" role="option" data-mention="${escapeHtml(item.bot_name)}">@${escapeHtml(item.bot_name)} · ${escapeHtml(titleCase(item.harness_id))}</button>`).join("");
+  menu.hidden = false;
+}
+function insertMention(name) {
+  const input = $("#message-input");
+  const before = input.value.slice(0, input.selectionStart).replace(/@([\w-]*)$/, `@${name} `);
+  input.value = before + input.value.slice(input.selectionStart);
+  input.selectionStart = input.selectionEnd = before.length;
+  $("#mention-menu").hidden = true;
+  input.focus();
+}
+async function renameConversation() {
+  const session = currentSession();
+  if (!session) return;
+  const title = window.prompt("Conversation name", session.title || "");
+  if (!title?.trim()) return;
+  try { await api(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "PUT", body: JSON.stringify({ title }) }); await refresh({ quiet: true }); toast("Conversation renamed"); } catch (error) { toast(error.message); }
+}
 function openNavigation() { $("#sidebar").classList.add("open"); $("#sidebar-backdrop").hidden = false; $("#close-navigation").focus(); }
 function closeNavigation() { $("#sidebar").classList.remove("open"); $("#sidebar-backdrop").hidden = true; }
 
 function bindEvents() {
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => showView(button.dataset.view)));
-  $("#bot-select").addEventListener("change", (event) => selectBot(event.target.value));
+  $("#bot-select").addEventListener("change", (event) => { if (event.target.value !== "__group__") selectBot(event.target.value); });
   $("#harness-select").addEventListener("change", async (event) => { state.harnessOverride = event.target.value; if (currentSession()) { state.activeSession = ""; await createConversation(); } else { render(); } });
   $("#recent-list").addEventListener("click", (event) => { const button = event.target.closest("[data-session]"); if (!button) return; const session = state.data.sessions.find((item) => item.id === button.dataset.session); state.activeSession = session.id; state.activeBot = session.bot_name; state.harnessOverride = ""; showView("conversations"); render(); closeNavigation(); });
   $("#session-search").addEventListener("input", renderRecents);
   $("#refresh-data").addEventListener("click", () => refresh().catch(showFatal));
   $("#new-thread").addEventListener("click", createConversation);
-  $("#new-group").addEventListener("click", openGroupEditor);
+  $("#new-group").addEventListener("click", () => openGroupEditor(false));
+  $("#derive-group").addEventListener("click", () => openGroupEditor(true));
+  $("#rename-session").addEventListener("click", renameConversation);
   $("#composer").addEventListener("submit", (event) => { event.preventDefault(); sendPrompt(); });
-  $("#message-input").addEventListener("keydown", (event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("#composer").requestSubmit(); } });
-  $("#message-input").addEventListener("input", (event) => { event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; });
+  $("#message-input").addEventListener("keydown", (event) => { if (event.key === "ArrowDown" && !$("#mention-menu").hidden) { event.preventDefault(); $("#mention-menu button")?.focus(); } else if (event.key === "Escape") { $("#mention-menu").hidden = true; } else if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("#composer").requestSubmit(); } });
+  $("#message-input").addEventListener("input", (event) => { event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; renderMentionMenu(); });
+  $("#mention-menu").addEventListener("click", (event) => { const button = event.target.closest("[data-mention]"); if (button) insertMention(button.dataset.mention); });
   $("#cancel-run").addEventListener("click", cancelRun);
-  $("#activity-list").addEventListener("click", (event) => { if (event.target.closest(".retry-run") && state.lastPrompt) { state.pendingPrompt = state.lastPrompt; sendPrompt(); } });
+  $("#activity-list").addEventListener("click", (event) => { const retry = event.target.closest(".retry-run"); if (retry && state.lastPrompt) { state.pendingPrompt = state.lastPrompt; state.pendingDispatch = retry.dataset.bot || ""; sendPrompt(); } });
+  $("#group-search").addEventListener("input", renderGroupPicker);
+  $("#group-options").addEventListener("change", (event) => { const checkbox = event.target.closest('input[type="checkbox"]'); if (!checkbox) return; state.groupDraft = checkbox.checked ? [...state.groupDraft, checkbox.value] : state.groupDraft.filter((name) => name !== checkbox.value); renderGroupPicker(); });
+  $("#group-selected").addEventListener("click", (event) => { const row = event.target.closest("[data-name]"); if (!row) return; const index = state.groupDraft.indexOf(row.dataset.name); if (event.target.closest("[data-remove]")) state.groupDraft.splice(index, 1); else if (event.target.closest('[data-move="up"]') && index > 0) [state.groupDraft[index - 1], state.groupDraft[index]] = [state.groupDraft[index], state.groupDraft[index - 1]]; else if (event.target.closest('[data-move="down"]') && index < state.groupDraft.length - 1) [state.groupDraft[index + 1], state.groupDraft[index]] = [state.groupDraft[index], state.groupDraft[index + 1]]; renderGroupPicker(); });
+  $("#group-form").addEventListener("submit", async (event) => { event.preventDefault(); if (state.groupDraft.length < 2) { $("#group-error").textContent = "Select at least two bots."; return; } const payload = { bot_names: state.groupDraft, mode: $("#group-mode").value, title: $("#group-title").value.trim() || null }; const path = state.deriveFrom ? `/api/sessions/${encodeURIComponent(state.deriveFrom)}/derive` : "/api/sessions"; try { const session = await (await api(path, { method: "POST", body: JSON.stringify(payload) })).json(); $("#group-dialog").close(); state.activeSession = session.id; state.activeBot = session.bot_name; await refresh({ quiet: true }); showView("conversations"); toast(state.deriveFrom ? "Derived conversation ready" : "Group conversation ready"); } catch (error) { $("#group-error").textContent = error.message; } });
   $("#management-action").addEventListener("click", () => state.view === "profiles" ? openProfileEditor() : openBotEditor());
   $("#management-list").addEventListener("click", (event) => { const edit = event.target.closest(".edit-profile"); const use = event.target.closest(".use-bot"); if (edit) openProfileEditor(state.data.profiles.find((item) => item.name === edit.dataset.profile)); if (use) selectBot(use.dataset.bot); });
   $("#harness-list").addEventListener("click", (event) => { const button = event.target.closest("[data-harness]"); if (button && !currentSession()?.turns.length) { state.harnessOverride = button.dataset.harness; render(); } });

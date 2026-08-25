@@ -42,7 +42,7 @@ def test_webui_assets_have_accessible_secure_structure() -> None:
 
     assert parser.html_language == "en"
     assert parser.landmarks == {"main", "nav", "aside"}
-    assert parser.dialogs == 2
+    assert parser.dialogs == 3
     assert parser.live_regions >= 3
     assert parser.inline_scripts == 0
     assert parser.inline_styles == 0
@@ -57,11 +57,15 @@ def test_webui_javascript_wires_primary_product_controls() -> None:
     for control in (
         "#new-thread",
         "#new-group",
+        "#derive-group",
+        "#rename-session",
         "#composer",
         "#cancel-run",
         "#bot-select",
         "#harness-select",
         "#dispatch-select",
+        "#group-form",
+        "#mention-menu",
         "#management-action",
         "#session-search",
         "#open-navigation",

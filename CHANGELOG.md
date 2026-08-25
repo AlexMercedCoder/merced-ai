@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Replaced comma-separated group setup with searchable, ordered bot selection; added stable bot
+  identities, mention autocomplete, group-aware inspection, conversation naming, derived
+  participant sets, and mobile group controls.
+- Group runs now expose progressive per-participant status and responses while committing durable
+  results in deterministic participant order. Failed-bot retries target only that bot.
+- Added dedicated Chromium UI validation and desktop/mobile group-chat screenshot artifacts to CI.
 - Added durable multi-bot conversations across CLI, API, and web UI with exact mentions,
   ask-everyone, named-recipient, and round-robin dispatch.
 - Added concurrent isolated fan-out with deterministic participant-order persistence, per-bot

@@ -95,7 +95,9 @@ The UI binds to loopback and exchanges an ephemeral fragment token for an HTTP-o
 It uses the same profile, bot, routing, projection, session, and harness services as the CLI. You
 can create profiles and bots, create single or group conversations, target `@mentioned` bots or ask
 everyone concurrently, choose routes, approve or cancel runs, inspect authority and harness health,
-and search/resume/export attributed transcripts. See the [UI guide](docs/UI.md) and
+and search/resume/export attributed transcripts. Group setup has searchable ordered selection,
+progressive per-bot status, exact failed-bot retry, `@mention` completion, stable identities,
+conversation naming, and derived participant sets. See the [UI guide](docs/UI.md) and
 [group-chat guide](docs/GROUP_CHAT.md) for the security, dispatch, and streaming boundaries.
 
 ![Merced AI desktop UI](docs/screenshots/merced-ai-ui-desktop.jpg)

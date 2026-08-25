@@ -63,6 +63,8 @@
           </div>
           <div class="top-actions">
             <button id="new-group" class="subtle-button"><span>＋</span> Group</button>
+            <button id="derive-group" class="subtle-button" disabled>Participants</button>
+            <button id="rename-session" class="subtle-button" disabled>Rename</button>
             <button id="export-session" class="subtle-button" disabled>Export</button>
             <button id="toggle-inspector" class="subtle-button" aria-expanded="true"><span>⌘</span> Inspect</button>
           </div>
@@ -84,6 +86,7 @@
           <footer class="composer-wrap">
             <form id="composer" class="composer">
               <textarea id="message-input" aria-label="Message" placeholder="Message your bot…" rows="1" maxlength="100000"></textarea>
+              <div id="mention-menu" class="mention-menu" role="listbox" aria-label="Mention a bot" hidden></div>
               <div class="composer-tools">
                 <div class="dispatch-picker"><span class="spark">✦</span><label for="dispatch-select">Send to</label><select id="dispatch-select" aria-label="Choose group recipients"><option value="mentions">Mentioned bot</option></select></div>
                 <div class="run-controls">
@@ -108,6 +111,7 @@
           <div class="bot-orb medium"><span>✦</span></div>
           <div><h3 id="inspector-name">No bot selected</h3><p id="inspector-description">Create an OAP profile and bind it to a harness.</p></div>
         </section>
+        <section class="panel-section"><div class="section-heading"><span>Participants</span><span id="participant-count">0</span></div><div id="inspector-participants" class="inspector-participants"></div></section>
         <section class="panel-section">
           <div class="section-heading"><span>Runtime route</span><button id="focus-route">Change</button></div>
           <div class="route-card">
@@ -146,8 +150,23 @@
       <form method="dialog">
         <header><div><span class="eyebrow">ACTION REQUIRED</span><h2>Approve this harness run?</h2></div></header>
         <p id="approval-copy">This profile may allow workspace changes or shell commands.</p>
+        <div id="approval-participants" class="approval-participants"></div>
         <div class="warning-card"><strong>Harness-owned enforcement</strong><span>Merced AI forwards the request, but the selected harness makes the final permission decision.</span></div>
         <footer><button value="cancel" class="secondary-button">Not now</button><button id="approve-run" value="approve" class="primary-button">Approve once</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="group-dialog" class="dialog group-dialog">
+      <form id="group-form" method="dialog">
+        <header><div><span class="eyebrow">MULTI-BOT COLLABORATION</span><h2 id="group-dialog-title">Create group conversation</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></header>
+        <div class="group-fields">
+          <label>Conversation name<input id="group-title" maxlength="120" placeholder="Design review room" /></label>
+          <label>Default dispatch<select id="group-mode"><option value="mentions">Explicit mentions / first bot</option><option value="all">Ask everyone</option><option value="round_robin">Round robin</option></select></label>
+          <label class="full-field">Find bots<input id="group-search" type="search" placeholder="Search bots…" /></label>
+          <div class="group-columns full-field"><div><strong>Available bots</strong><div id="group-options" class="group-options"></div></div><div><strong>Participant order</strong><div id="group-selected" class="group-selected"></div></div></div>
+        </div>
+        <p id="group-error" class="form-error" role="alert"></p>
+        <footer><button class="secondary-button" value="cancel">Cancel</button><button id="group-submit" class="primary-button" value="default">Create conversation</button></footer>
       </form>
     </dialog>
 

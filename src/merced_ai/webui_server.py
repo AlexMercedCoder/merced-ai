@@ -83,6 +83,7 @@ class SessionInput(BaseModel):
     bot_names: list[str] = Field(default_factory=list, max_length=12)
     harness: str | None = None
     mode: str = "mentions"
+    title: str | None = Field(default=None, max_length=120)
 
     @model_validator(mode="after")
     def validate_participants(self) -> SessionInput:
@@ -100,6 +101,10 @@ class MessageInput(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     approved: bool = False
     dispatch: str | None = Field(default=None, max_length=100)
+
+
+class SessionUpdateInput(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
 
 
 def _sse(event: str, payload: dict[str, Any]) -> str:
@@ -301,9 +306,48 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         session = SessionStore(workspace).create_group(
-            tuple(participant_from_run(item) for item in prepared_runs), mode=payload.mode
+            tuple(participant_from_run(item) for item in prepared_runs),
+            mode=payload.mode,
+            title=payload.title,
         )
         return session.model_dump(mode="json")
+
+    @app.put("/api/sessions/{session_id}")
+    async def session_update(
+        session_id: str, payload: SessionUpdateInput, request: Request
+    ) -> dict[str, Any]:
+        authorize(request, mutation=True)
+        store = SessionStore(workspace)
+        try:
+            session = store.load(session_id)
+            store.rename(session, payload.title)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return session.model_dump(mode="json")
+
+    @app.post("/api/sessions/{session_id}/derive", status_code=201)
+    async def session_derive(
+        session_id: str, payload: SessionInput, request: Request
+    ) -> dict[str, Any]:
+        authorize(request, mutation=True)
+        store = SessionStore(workspace)
+        try:
+            store.load(session_id)
+            names = tuple(payload.bot_names or ([payload.bot_name] if payload.bot_name else []))
+            prepared_runs = (
+                prepare_group(names, workspace)
+                if len(names) > 1
+                else (prepare_run(names[0], "Start the derived conversation.", workspace),)
+            )
+            derived = store.create_group(
+                tuple(participant_from_run(item) for item in prepared_runs),
+                mode=payload.mode,
+                title=payload.title,
+                derived_from=session_id,
+            )
+        except (ValueError, BotError, ProfileError, RoutingError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return derived.model_dump(mode="json")
 
     @app.get("/api/sessions/{session_id}/export", response_class=PlainTextResponse)
     async def session_export(session_id: str, request: Request) -> PlainTextResponse:
@@ -395,50 +439,63 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                     )
                 return await asyncio.to_thread(adapter.run, prepared.request)  # pragma: no cover
 
-            try:
-                results = await asyncio.gather(
-                    *(run_one(item) for item in prepared_runs), return_exceptions=True
-                )
-            finally:
-                with cancellation_lock:
-                    cancellations.pop(run_id, None)
+            for route in routes:
+                yield _sse("participant_started", {"run_id": run_id, **route})
+            tasks = {
+                asyncio.create_task(run_one(prepared)): (index, prepared)
+                for index, prepared in enumerate(prepared_runs)
+            }
+            ordered_results: dict[int, tuple[PreparedRun, RunResult]] = {}
             completed = 0
             failed = 0
-            for prepared, result in zip(prepared_runs, results, strict=True):
-                identity = {
-                    "run_id": run_id,
-                    "bot_name": prepared.bot.name,
-                    "harness_id": prepared.request.harness_id,
-                }
-                if isinstance(result, BaseException):
-                    failed += 1
-                    cancelled = isinstance(result, HarnessRunError) and result.exit_code == 130
-                    if len(prepared_runs) == 1:
-                        error_event = "run_cancelled" if cancelled else "run_error"
-                    else:
-                        error_event = "participant_cancelled" if cancelled else "participant_error"
-                    yield _sse(
-                        error_event,
-                        {**identity, "message": str(result)},
-                    )
-                    continue
-                completed += 1
-                for native_event in _raw_events(result):
-                    yield _sse("tool_event", {**identity, "event": native_event})
+            try:
+                while tasks:
+                    done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                    for task in done:
+                        index, prepared = tasks.pop(task)
+                        identity = {
+                            "run_id": run_id,
+                            "bot_name": prepared.bot.name,
+                            "harness_id": prepared.request.harness_id,
+                        }
+                        try:
+                            result = task.result()
+                        except BaseException as exc:
+                            failed += 1
+                            cancelled = isinstance(exc, HarnessRunError) and exc.exit_code == 130
+                            if len(prepared_runs) == 1:
+                                error_event = "run_cancelled" if cancelled else "run_error"
+                            else:
+                                error_event = (
+                                    "participant_cancelled" if cancelled else "participant_error"
+                                )
+                            yield _sse(error_event, {**identity, "message": str(exc)})
+                            continue
+                        completed += 1
+                        ordered_results[index] = (prepared, result)
+                        for native_event in _raw_events(result):
+                            yield _sse("tool_event", {**identity, "event": native_event})
+                        yield _sse(
+                            "assistant_message",
+                            {
+                                **identity,
+                                "content": result.output,
+                                "duration_ms": result.duration_ms,
+                            },
+                        )
+            finally:
+                for task in tasks:
+                    task.cancel()
+                with cancellation_lock:
+                    cancellations.pop(run_id, None)
+            for index in sorted(ordered_results):
+                prepared, result = ordered_results[index]
                 store.append(
                     session,
                     "assistant",
                     result.output,
                     bot_name=prepared.bot.name,
                     harness_id=result.harness_id,
-                )
-                yield _sse(
-                    "assistant_message",
-                    {
-                        **identity,
-                        "content": result.output,
-                        "duration_ms": result.duration_ms,
-                    },
                 )
             yield _sse(
                 "run_finished",

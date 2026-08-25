@@ -34,4 +34,16 @@ jobs:
       - run: python -m ruff check .
       - run: node --check src/merced_ai/webui/app.js
       - run: python -m pytest -q
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        run: python -m playwright install chromium --with-deps
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        run: python -m pytest --no-cov tests/test_browser_e2e.py -q
+        env:
+          MERCED_AI_BROWSER_E2E: "1"
+          MERCED_AI_SCREENSHOT_DIR: docs/screenshots/qa
+      - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        uses: actions/upload-artifact@v4
+        with:
+          name: merced-ai-ui-screenshots
+          path: docs/screenshots/qa
       - run: python -m build

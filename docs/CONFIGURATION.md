@@ -13,6 +13,9 @@ routed harness separately for every participant; assistant turns record their `b
 `harness_id`. Existing single-bot session files are upgraded in memory when read and remain
 compatible. See [Group conversations](GROUP_CHAT.md).
 
+Optional `title` labels a conversation. Optional `derived_from` links a new participant selection
+to its source session without copying or mutating the source transcript.
+
 User-global Merced AI data follows the platform configuration directory. Set `MERCED_AI_HOME` to
 an explicit directory for automation, tests, or portable installations.
 
