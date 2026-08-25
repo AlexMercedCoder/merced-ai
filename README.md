@@ -89,8 +89,12 @@ python -m pip install 'merced-ai[webui]'
 merced-ai ui
 ```
 
-The UI binds to loopback, opens with an ephemeral access token, and reads the same profile, bot,
-session, projection, and harness inventory records as the CLI.
+The UI binds to loopback and exchanges an ephemeral fragment token for an HTTP-only local session.
+It uses the same profile, bot, routing, projection, session, and harness services as the CLI. You
+can create profiles and bots, choose a route, chat through a normalized lifecycle stream, approve
+or cancel runs, inspect effective authority and harness health, search/resume/export conversations,
+and use responsive light or dark layouts. See the [UI guide](docs/UI.md) for the security and
+streaming boundaries.
 
 ![Merced AI desktop UI](docs/screenshots/merced-ai-ui-desktop.jpg)
 

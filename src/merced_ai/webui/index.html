@@ -4,114 +4,152 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#151513" />
+    <meta name="description" content="A secure local workspace for OAP-powered collaborators." />
     <title>Merced AI — Harness-native collaborators</title>
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to conversation</a>
+    <div id="sidebar-backdrop" class="backdrop" hidden></div>
     <div class="app-shell">
-      <aside class="sidebar">
+      <aside id="sidebar" class="sidebar" aria-label="Workspace navigation">
         <div class="brand-row">
           <div class="brand-mark" aria-hidden="true">M</div>
           <div><strong>Merced</strong><span>AI</span></div>
-          <button class="icon-button mobile-only" aria-label="Close navigation">×</button>
+          <button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation">×</button>
         </div>
 
-        <button class="new-thread"><span>＋</span> New thread <kbd>⌘ K</kbd></button>
+        <button id="new-thread" class="new-thread"><span>＋</span> New conversation <kbd id="shortcut-label">Ctrl K</kbd></button>
 
         <nav class="primary-nav" aria-label="Primary navigation">
-          <button class="nav-item active"><span class="nav-icon">◉</span> Conversations <span class="count" id="session-count">0</span></button>
-          <button class="nav-item"><span class="nav-icon">◇</span> Bots <span class="count" id="bot-count">0</span></button>
-          <button class="nav-item"><span class="nav-icon">≡</span> Profiles <span class="count" id="profile-count">0</span></button>
-          <button class="nav-item"><span class="nav-icon">⌁</span> Harnesses <span class="status-dot online"></span></button>
+          <button class="nav-item active" data-view="conversations"><span class="nav-icon">◉</span> Conversations <span class="count" id="session-count">0</span></button>
+          <button class="nav-item" data-view="bots"><span class="nav-icon">◇</span> Bots <span class="count" id="bot-count">0</span></button>
+          <button class="nav-item" data-view="profiles"><span class="nav-icon">≡</span> Profiles <span class="count" id="profile-count">0</span></button>
+          <button class="nav-item" data-view="harnesses"><span class="nav-icon">⌁</span> Harnesses <span class="count" id="harness-count">0</span></button>
         </nav>
 
-        <div class="section-label"><span>Recent</span><button aria-label="Recent session menu">•••</button></div>
+        <label class="session-search"><span class="sr-only">Search conversations</span><input id="session-search" type="search" placeholder="Search conversations…" /></label>
+        <div class="section-label"><span>Recent</span><button id="refresh-data" aria-label="Refresh workspace">↻</button></div>
         <div id="recent-list" class="recent-list"><div class="skeleton-line"></div></div>
 
         <div class="sidebar-footer">
           <div class="workspace-card">
             <span class="folder-icon">⌂</span>
             <div><strong>Workspace</strong><small id="workspace-name">Loading…</small></div>
-            <span>›</span>
           </div>
           <div class="profile-row">
-            <div class="avatar">AM</div>
-            <div><strong>Alex Merced</strong><small>Local workspace</small></div>
-            <button aria-label="Account menu">•••</button>
+            <div class="avatar">L</div>
+            <div><strong>Local operator</strong><small>Loopback session</small></div>
+            <button id="theme-toggle" aria-label="Switch color theme">◐</button>
+            <button id="logout" aria-label="End local UI session">↪</button>
           </div>
         </div>
       </aside>
 
-      <main class="conversation">
+      <main id="main-content" class="conversation" tabindex="-1">
         <header class="topbar">
-          <button class="icon-button menu-button" aria-label="Open navigation">☰</button>
+          <button id="open-navigation" class="icon-button menu-button" aria-label="Open navigation">☰</button>
           <div class="active-bot">
             <div class="bot-orb"><span>✦</span></div>
-            <div><strong id="active-bot-name">Select a bot</strong><small><span class="status-dot online"></span><span id="active-harness">Resolving harness</span></small></div>
+            <div>
+              <label class="sr-only" for="bot-select">Active bot</label>
+              <select id="bot-select" aria-label="Active bot"><option value="">Select a bot</option></select>
+              <small><span id="route-status-dot" class="status-dot"></span><span id="active-harness">No route</span></small>
+            </div>
+          </div>
+          <div class="route-picker">
+            <label for="harness-select">Route</label>
+            <select id="harness-select"><option value="">Bot default</option></select>
           </div>
           <div class="top-actions">
-            <button class="subtle-button"><span>⌘</span> Inspect</button>
-            <button class="icon-button" aria-label="More conversation actions">•••</button>
+            <button id="export-session" class="subtle-button" disabled>Export</button>
+            <button id="toggle-inspector" class="subtle-button" aria-expanded="true"><span>⌘</span> Inspect</button>
           </div>
         </header>
 
-        <section class="thread" id="thread" aria-live="polite">
-          <div class="thread-date"><span>Today</span></div>
-          <div class="welcome-block">
-            <div class="bot-orb large"><span>✦</span></div>
-            <h1 id="welcome-title">Your harness-native collaborator</h1>
-            <p id="welcome-copy">One portable identity, routed through the best available agent harness.</p>
+        <section id="conversation-view" class="view active-view" aria-labelledby="conversation-title">
+          <div class="thread" id="thread" aria-live="polite" aria-busy="false">
+            <div class="thread-date"><span>Local session</span></div>
+            <div class="welcome-block">
+              <div class="bot-orb large"><span>✦</span></div>
+              <h1 id="conversation-title">Your harness-native collaborator</h1>
+              <p id="welcome-copy">Choose a bot to start a secure local conversation.</p>
+            </div>
+            <div id="message-list"></div>
+            <div id="activity-list" class="activity-list" aria-live="polite"></div>
           </div>
+
+          <footer class="composer-wrap">
+            <form id="composer" class="composer">
+              <textarea id="message-input" aria-label="Message" placeholder="Message your bot…" rows="1" maxlength="100000"></textarea>
+              <div class="composer-tools">
+                <div><span id="composer-mode" class="mode-label"><span class="spark">✦</span> Collaborate</span></div>
+                <div class="run-controls">
+                  <button id="cancel-run" class="cancel-button" type="button" hidden>Cancel</button>
+                  <button id="send-message" class="send-button" type="submit" aria-label="Send message">↑</button>
+                </div>
+              </div>
+            </form>
+            <p id="composer-status">Harness policy remains authoritative. Review approval details before running.</p>
+          </footer>
         </section>
 
-        <footer class="composer-wrap">
-          <div class="composer">
-            <textarea aria-label="Message" placeholder="Message your bot…" rows="1"></textarea>
-            <div class="composer-tools">
-              <div>
-                <button class="icon-button" aria-label="Attach context">＋</button>
-                <button class="mode-button"><span class="spark">✦</span> Collaborate <span>⌄</span></button>
-              </div>
-              <button class="send-button" aria-label="Send message">↑</button>
-            </div>
-          </div>
-          <p>Merced AI delegates execution to your selected harness. Review changes before applying.</p>
-        </footer>
+        <section id="management-view" class="view management-view" hidden>
+          <header class="management-header"><div><span class="eyebrow" id="management-eyebrow">WORKSPACE</span><h1 id="management-title">Workspace</h1><p id="management-copy"></p></div><button id="management-action" class="primary-button">Create</button></header>
+          <div id="management-list" class="management-list"></div>
+        </section>
       </main>
 
-      <aside class="inspector">
-        <header><div><span class="eyebrow">ACTIVE COLLABORATOR</span><h2>Bot profile</h2></div><button class="icon-button" aria-label="Close inspector">×</button></header>
+      <aside id="inspector" class="inspector" aria-label="Bot inspector">
+        <header><div><span class="eyebrow">ACTIVE COLLABORATOR</span><h2>Bot profile</h2></div><button id="close-inspector" class="icon-button" aria-label="Close inspector">×</button></header>
         <section class="identity-card">
           <div class="bot-orb medium"><span>✦</span></div>
           <div><h3 id="inspector-name">No bot selected</h3><p id="inspector-description">Create an OAP profile and bind it to a harness.</p></div>
         </section>
-
         <section class="panel-section">
-          <div class="section-heading"><span>Runtime route</span><button>Change</button></div>
+          <div class="section-heading"><span>Runtime route</span><button id="focus-route">Change</button></div>
           <div class="route-card">
             <div class="route-node"><div class="route-icon">O</div><div><small>OAP PROFILE</small><strong id="route-profile">—</strong></div><span class="verified">✓</span></div>
             <div class="route-line"><span>portable identity</span></div>
-            <div class="route-node"><div class="route-icon harness">H</div><div><small>ACTIVE HARNESS</small><strong id="route-harness">—</strong></div><span class="status-dot online"></span></div>
+            <div class="route-node"><div class="route-icon harness">H</div><div><small>ACTIVE HARNESS</small><strong id="route-harness">—</strong></div><span id="inspector-route-dot" class="status-dot"></span></div>
           </div>
         </section>
-
         <section class="panel-section">
           <div class="section-heading"><span>Effective authority</span><span class="provisional">PROVISIONAL</span></div>
           <div class="authority-grid">
             <div><span>Projection</span><strong id="projection-level">—</strong></div>
             <div><span>Workspace</span><strong>Project</strong></div>
-            <div><span>Approvals</span><strong>Harness-owned</strong></div>
+            <div><span>Approvals</span><strong id="approval-level">—</strong></div>
             <div><span>Writeback</span><strong>Review first</strong></div>
           </div>
           <div id="adjustment-list" class="adjustment-list"></div>
         </section>
-
         <section class="panel-section health-section">
           <div class="section-heading"><span>Harness health</span><button id="healthy-count">0 ready</button></div>
           <div id="harness-list" class="harness-list"></div>
         </section>
       </aside>
     </div>
+
+    <dialog id="editor-dialog" class="dialog">
+      <form id="editor-form" method="dialog">
+        <header><div><span class="eyebrow" id="editor-eyebrow">CREATE</span><h2 id="editor-title">Create</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></header>
+        <div id="editor-fields" class="dialog-fields"></div>
+        <p id="editor-error" class="form-error" role="alert"></p>
+        <footer><button class="secondary-button" value="cancel">Cancel</button><button id="editor-submit" class="primary-button" value="default">Save</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="approval-dialog" class="dialog approval-dialog">
+      <form method="dialog">
+        <header><div><span class="eyebrow">ACTION REQUIRED</span><h2>Approve this harness run?</h2></div></header>
+        <p id="approval-copy">This profile may allow workspace changes or shell commands.</p>
+        <div class="warning-card"><strong>Harness-owned enforcement</strong><span>Merced AI forwards the request, but the selected harness makes the final permission decision.</span></div>
+        <footer><button value="cancel" class="secondary-button">Not now</button><button id="approve-run" value="approve" class="primary-button">Approve once</button></footer>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script src="/assets/app.js" type="module"></script>
   </body>
 </html>

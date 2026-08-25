@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 from typing import Any
 
@@ -300,6 +301,11 @@ class CommandHarnessAdapter:
         raise HarnessRunError(f"Harness {harness_id!r} is not executable in this MVP.", exit_code=4)
 
     def run(self, request: RunRequest) -> RunResult:
+        return self.run_cancellable(request, None)
+
+    def run_cancellable(
+        self, request: RunRequest, cancellation: threading.Event | None
+    ) -> RunResult:
         command = self.build_command(request)
         started = time.monotonic()
         process: subprocess.Popen[str] | None = None
@@ -315,25 +321,33 @@ class CommandHarnessAdapter:
                 text=True,
             )
             stdin_payload = _stdin_payload(self.descriptor.id, request)
-            stdout, stderr = process.communicate(
-                input=stdin_payload, timeout=request.timeout_seconds
-            )
-        except subprocess.TimeoutExpired as exc:
-            if process is not None:
-                process.kill()
-                process.communicate()
-            raise HarnessRunError(
-                f"Harness {self.descriptor.id!r} timed out after {request.timeout_seconds}s.",
-                exit_code=5,
-            ) from exc
+            deadline = started + request.timeout_seconds
+            first_poll = True
+            while True:
+                if cancellation is not None and cancellation.is_set():
+                    _stop_process(process)
+                    raise HarnessRunError(
+                        f"Harness {self.descriptor.id!r} was cancelled.", exit_code=130
+                    )
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    _stop_process(process)
+                    raise HarnessRunError(
+                        f"Harness {self.descriptor.id!r} timed out after "
+                        f"{request.timeout_seconds}s.",
+                        exit_code=5,
+                    )
+                try:
+                    stdout, stderr = process.communicate(
+                        input=stdin_payload if first_poll else None,
+                        timeout=min(0.2, remaining),
+                    )
+                    break
+                except subprocess.TimeoutExpired:
+                    first_poll = False
         except KeyboardInterrupt as exc:
             if process is not None:
-                process.terminate()
-                try:
-                    process.wait(timeout=3)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+                _stop_process(process)
             raise HarnessRunError(
                 f"Harness {self.descriptor.id!r} was cancelled.", exit_code=130
             ) from exc
@@ -377,6 +391,15 @@ def _prefixed_prompt(system_prompt: str, prompt: str) -> str:
         "The surrounding harness instructions and permission policy remain authoritative.\n\n"
         f"User request:\n{prompt}"
     )
+
+
+def _stop_process(process: subprocess.Popen[str]) -> None:
+    process.terminate()
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
 
 
 def _normalize_output(

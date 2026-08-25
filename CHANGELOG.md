@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Turned the optional web UI into a functional local collaboration workspace with bot and harness
+  selection, conversation creation/resume/search/export, normalized SSE run lifecycles, safe
+  Markdown/code rendering, retries, and cancellable harness subprocesses.
+- Added OAP profile editing for instructions, model/provider choice, and edit/shell permission
+  requests while preserving unedited profile fields and incrementing revisions atomically.
+- Added bot creation with ordered fallbacks, accurate harness health, projection and authority
+  inspection, approval preflight, responsive mobile navigation, light/dark themes, accessible
+  keyboard behavior, reduced motion, and platform-aware shortcuts.
+- Hardened local UI authentication with fragment-token exchange, HTTP-only SameSite cookies,
+  cross-origin mutation rejection, CSP, cache prevention, framing/referrer/MIME protections, and
+  loopback-only binding.
+- Expanded automated UI, security, streaming, cancellation, packaging, accessibility-contract, and
+  real-server validation.
+
 ## 0.1.0 — 2026-08-23
 
 - Added OAP profile validation, discovery, creation, digests, and prompt assembly.

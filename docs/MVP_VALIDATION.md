@@ -1,11 +1,11 @@
 # MVP validation
 
-Last validated on 2026-08-23. The local automated run used CPython 3.13.3; the supported package
+Last validated on 2026-08-25. The local automated run used CPython 3.14.5; the supported package
 range is Python 3.11–3.14.
 
 ## Automated suite
 
-The suite contains 46 tests and reports 75.27% branch-aware coverage. CI enforces a 70% minimum and
+The suite contains 57 tests and reports 79.32% branch-aware coverage. CI enforces a 70% minimum and
 is configured for Python 3.11 and 3.14 on Ubuntu plus Python 3.13 on macOS and Windows.
 
 Covered behavior includes:
@@ -19,7 +19,10 @@ Covered behavior includes:
 - Argv construction and provider-aware model projection for all fourteen harness adapters.
 - Structured JSON/JSONL parsing, embedded failure detection, cancellation, timeout, output bounds,
   Kimi config override, OpenClaw workspace routing, AGY print syntax, and atomic Anton REPL input.
-- CLI profile/bot workflows, dry runs, JSON automation, UI API behavior, and invalid-harness errors.
+- CLI profile/bot workflows, dry runs, JSON automation, and invalid-harness errors.
+- UI cookie authentication, security headers, cross-origin rejection, profile/model/permission
+  editing, bot creation, session/export workflows, approval preflight, SSE lifecycle/tool/error
+  events, subprocess cancellation, responsive contracts, and accessibility structure.
 
 Validation commands:
 
@@ -67,6 +70,8 @@ wheel was installed with resolved dependencies into a fresh Python 3.14 virtual 
 console entry point reported `merced-ai 0.1.0` and independently discovered all fourteen installed
 harnesses, including Anton's repaired environment and rootless OpenClaw. Optional UI dependencies
 remain covered by the automated UI suite and require a separate extra installation at release time.
+The real Uvicorn server also completed an authenticated profile, bot, session, and streamed-message
+workflow against a deterministic fake Codex executable.
 
 ## Known boundaries
 

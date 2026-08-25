@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -258,6 +260,45 @@ def test_command_adapter_terminates_cancelled_child(
 
     with pytest.raises(HarnessRunError, match="cancelled") as error:
         _adapter("codex").run(_request("codex", workspace))
+    assert error.value.exit_code == 130
+    assert process.terminated is True
+
+
+def test_command_adapter_honors_external_cancellation(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable = workspace / "codex"
+    executable.touch()
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+
+    class Process:
+        returncode = None
+        terminated = False
+
+        def communicate(
+            self, input: str | None = None, timeout: float | None = None
+        ) -> tuple[str, str]:
+            raise subprocess.TimeoutExpired("codex", timeout or 0)
+
+        def terminate(self) -> None:
+            self.terminated = True
+
+        def wait(self, timeout: int | None = None) -> int:
+            self.returncode = 130
+            return 130
+
+    process = Process()
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.subprocess.Popen", lambda *_args, **_kwargs: process
+    )
+    cancellation = threading.Event()
+    cancellation.set()
+
+    with pytest.raises(HarnessRunError, match="cancelled") as error:
+        _adapter("codex").run_cancellable(_request("codex", workspace), cancellation)
+
     assert error.value.exit_code == 130
     assert process.terminated is True
 

@@ -3,12 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import yaml
 
 from merced_ai.profiles import (
     ProfileError,
     assemble_system_prompt,
     create_profile,
     discover_profiles,
+    update_profile,
     validate_profile,
 )
 
@@ -81,3 +83,58 @@ spec:
     assert len(discovered) == 1
     assert discovered[0].source == "project"
     assert discovered[0].document["spec"]["role"]["instructions"] == "Project instructions.\n"
+
+
+def test_profile_editor_preserves_oap_fields_and_increments_revision(workspace: Path) -> None:
+    created = create_profile(
+        "builder",
+        "Builds approved changes.",
+        "Implement requested changes.",
+        workspace,
+        model_provider="openai",
+        model_id="gpt-5.4",
+        edit_permission="ask",
+        shell_permission="deny",
+    )
+    created.document["spec"]["role"]["constraints"] = ["Keep changes scoped."]
+    created.path.write_text(yaml.safe_dump(created.document, sort_keys=False), encoding="utf-8")
+
+    updated = update_profile(
+        "builder",
+        "Builds and validates approved changes.",
+        "Implement and test requested changes.",
+        workspace,
+        model_provider="anthropic",
+        model_id="claude-sonnet-4-5",
+        edit_permission="deny",
+        shell_permission="deny",
+    )
+
+    assert updated.revision == 2
+    assert updated.document["spec"]["role"]["constraints"] == ["Keep changes scoped."]
+    assert updated.document["spec"]["model"]["provider"] == "anthropic"
+    assert updated.document["spec"]["permissions"] == {"edit": "deny", "shell": "deny"}
+
+
+def test_profile_editor_does_not_replace_valid_profile_with_invalid_candidate(
+    workspace: Path,
+) -> None:
+    created = create_profile(
+        "reviewer",
+        "Reviews changes safely.",
+        "Report concrete defects.",
+        workspace,
+    )
+
+    with pytest.raises(ProfileError):
+        update_profile(
+            "reviewer",
+            "Reviews changes safely.",
+            "Report concrete defects.",
+            workspace,
+            edit_permission="invalid",
+        )
+
+    preserved = validate_profile(created.path, "project")
+    assert preserved.revision == 1
+    assert preserved.document["spec"]["role"]["instructions"] == "Report concrete defects.\n"

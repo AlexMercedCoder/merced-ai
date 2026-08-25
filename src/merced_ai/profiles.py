@@ -81,7 +81,15 @@ def resolve_profile(reference: str, workspace: Path) -> ProfileRecord:
 
 
 def create_profile(
-    name: str, description: str, instructions: str, workspace: Path
+    name: str,
+    description: str,
+    instructions: str,
+    workspace: Path,
+    *,
+    model_provider: str | None = None,
+    model_id: str | None = None,
+    edit_permission: str | None = None,
+    shell_permission: str | None = None,
 ) -> ProfileRecord:
     if not NAME_RE.fullmatch(name):
         raise ProfileError("profile name must match ^[a-z][a-z0-9-]{0,62}$")
@@ -98,8 +106,68 @@ def create_profile(
         "metadata": {"name": name, "description": description.strip(), "revision": 1},
         "spec": {"role": {"instructions": instructions.rstrip() + "\n"}},
     }
-    _atomic_write(path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True))
-    return validate_profile(path, "project")
+    if model_provider or model_id:
+        document["spec"]["model"] = {
+            key: value for key, value in (("provider", model_provider), ("id", model_id)) if value
+        }
+    permissions = {
+        key: value
+        for key, value in (("edit", edit_permission), ("shell", shell_permission))
+        if value
+    }
+    if permissions:
+        document["spec"]["permissions"] = permissions
+    return _validated_atomic_write(
+        path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True), "project"
+    )
+
+
+def update_profile(
+    name: str,
+    description: str,
+    instructions: str,
+    workspace: Path,
+    *,
+    model_provider: str | None = None,
+    model_id: str | None = None,
+    edit_permission: str | None = None,
+    shell_permission: str | None = None,
+) -> ProfileRecord:
+    """Update a project-local profile without discarding fields outside the editor."""
+    if not description.strip() or not instructions.strip():
+        raise ProfileError("description and instructions must not be empty")
+    record = resolve_profile(name, workspace)
+    project_root = (workspace.resolve() / ".agents").resolve()
+    if record.source != "project" or record.path.parent.resolve() != project_root:
+        raise ProfileError("only project-local .agents profiles can be edited")
+    document = record.document.copy()
+    metadata = dict(document["metadata"])
+    metadata["description"] = description.strip()
+    metadata["revision"] = record.revision + 1
+    document["metadata"] = metadata
+    spec = dict(document["spec"])
+    role = dict(spec["role"])
+    role["instructions"] = instructions.rstrip() + "\n"
+    spec["role"] = role
+    if model_provider or model_id:
+        spec["model"] = {
+            key: value for key, value in (("provider", model_provider), ("id", model_id)) if value
+        }
+    else:
+        spec.pop("model", None)
+    permissions = {
+        key: value
+        for key, value in (("edit", edit_permission), ("shell", shell_permission))
+        if value
+    }
+    if permissions:
+        spec["permissions"] = permissions
+    else:
+        spec.pop("permissions", None)
+    document["spec"] = spec
+    return _validated_atomic_write(
+        record.path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True), "project"
+    )
 
 
 def assemble_system_prompt(profile: ProfileRecord) -> str:
@@ -140,8 +208,16 @@ def _render(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
-def _atomic_write(path: Path, text: str) -> None:
+def _validated_atomic_write(path: Path, text: str, source: str) -> ProfileRecord:
+    """Validate a candidate file before atomically replacing durable profile state."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
+    temporary = path.parent / ".validation" / path.name
+    temporary.parent.mkdir(parents=True, exist_ok=True)
     temporary.write_text(text, encoding="utf-8")
+    try:
+        validate_profile(temporary, source)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
     temporary.replace(path)
+    return validate_profile(path, source)
