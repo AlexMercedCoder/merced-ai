@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-08-25
 
 - Replaced comma-separated group setup with searchable, ordered bot selection; added stable bot
   identities, mention autocomplete, group-aware inspection, conversation naming, derived

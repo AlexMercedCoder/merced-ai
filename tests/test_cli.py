@@ -1,17 +1,27 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from merced_ai import __version__
 from merced_ai.cli import app
 from merced_ai.models import HarnessProbe, HarnessStatus, RunResult
 from merced_ai.profiles import resolve_profile
 from merced_ai.sessions import SessionStore
 
 runner = CliRunner()
+
+
+def test_cli_and_package_versions_match() -> None:
+    project = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    assert project["project"]["version"] == __version__
+    result = runner.invoke(app, ["--version"])
+    assert result.exit_code == 0
+    assert result.output.strip() == f"merced-ai {__version__}"
 
 
 def test_cli_profile_bot_and_dry_run(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:

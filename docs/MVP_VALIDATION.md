@@ -5,7 +5,7 @@ range is Python 3.11–3.14.
 
 ## Automated suite
 
-The suite contains 64 tests: 63 local tests pass with 78.97% branch-aware coverage and one
+The suite contains 65 tests: 64 local tests pass with 79.11% branch-aware coverage and one
 dedicated Chromium test runs in CI. CI enforces a 70% minimum and
 is configured for Python 3.11 and 3.14 on Ubuntu plus Python 3.13 on macOS and Windows.
 
@@ -84,6 +84,14 @@ workflow against a deterministic fake Codex executable.
 Group behavior is validated with deterministic fake adapters rather than paid providers: each
 participant traverses the same already-qualified adapter contract. The suite verifies isolated
 per-bot prompts/routes and concurrent fan-out code paths without sending model traffic.
+
+The 0.2.0 release candidate was also built into a clean temporary output directory and installed,
+with the `webui` extra, into a fresh Python 3.14 virtual environment outside the checkout. Twine
+accepted both artifacts; the installed entry point reported `merced-ai 0.2.0`; init, profile
+creation, bot binding, dry-run projection, status, and all fourteen bounded version probes
+completed. The packaged loopback server started successfully and served its embedded UI assets.
+Anton required restoring its declared `httpx` runtime dependency in the external uv tool
+environment; no Merced AI package change was required.
 
 ## Known boundaries
 

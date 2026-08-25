@@ -18,8 +18,10 @@ Use this index as the release documentation entry point.
 - [MVP validation](MVP_VALIDATION.md): automated, packaging, and live-test evidence.
 - [Release process](RELEASING.md): maintainer checklist from versioning through post-release
   verification.
-- [0.1.0 release notes](RELEASE_NOTES_0.1.0.md): highlights, qualification evidence, and published
-  boundaries for the initial release.
+- [0.2.0 release notes](RELEASE_NOTES_0.2.0.md): group collaboration, the interactive UI, security,
+  compatibility, and upgrade notes for the current release candidate.
+- [0.1.0 release notes](RELEASE_NOTES_0.1.0.md): initial-release highlights and qualification
+  evidence.
 
 Project-level documents: [PRD](../PRD.md), [security policy](../SECURITY.md),
 [contributing guide](../CONTRIBUTING.md), and [changelog](../CHANGELOG.md).

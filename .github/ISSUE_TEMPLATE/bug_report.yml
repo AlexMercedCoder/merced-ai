@@ -10,7 +10,7 @@ body:
     id: version
     attributes:
       label: Merced AI version
-      placeholder: merced-ai 0.1.0
+      placeholder: merced-ai 0.2.0
     validations:
       required: true
   - type: input
