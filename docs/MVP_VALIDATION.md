@@ -1,18 +1,20 @@
 # MVP validation
 
-Last validated on 2026-08-25. The local automated run used CPython 3.14.5; the supported package
+Last validated on 2026-08-27. The local automated run used CPython 3.14.5; the supported package
 range is Python 3.11–3.14.
 
 ## Automated suite
 
-The suite contains 66 tests: 65 local tests pass with 79.65% branch-aware coverage and one
-dedicated Chromium test runs in CI. CI enforces a 70% minimum and
+The 0.3.0 suite completed with 95 passing tests, one environment-gated skip, and 80.69%
+branch-aware coverage. A dedicated Chromium test also runs in CI. CI enforces a 70% minimum and
 is configured for Python 3.11 and 3.14 on Ubuntu plus Python 3.13 on macOS and Windows.
 
 Covered behavior includes:
 
 - OAP parsing, validation, profile/spec digests, secret rejection, discovery precedence, minimal
   authoring, and prompt assembly.
+- AGS 1.0 validation, RFC 8785 digests, deterministic ordering, reachability, work/cost summaries,
+  and expected-code rejection of every immutable upstream invalid fixture.
 - Bot serialization, fallback metadata, atomic sessions, transcript construction, resume, and
   transparent loading of legacy one-bot session JSON.
 - Registry isolation, per-harness executable overrides, OS-separated search paths, Windows
@@ -93,6 +95,11 @@ creation, bot binding, dry-run projection, status, and all fourteen bounded vers
 completed. The packaged loopback server started successfully and served its embedded UI assets.
 Anton required restoring its declared `httpx` runtime dependency in the external uv tool
 environment; no Merced AI package change was required.
+
+The 0.3.0 wheel and source distribution pass Twine metadata checks. A clean wheel installation
+reports `merced-ai 0.3.0` and the CLI smoke path succeeds with the OAP and AGS 1.0.1 dependencies
+resolved from the built artifact. Final hosted release evidence must still come from the tagged
+commit and supported-platform CI matrix.
 
 ## Known boundaries
 

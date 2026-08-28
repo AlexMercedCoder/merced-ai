@@ -12,6 +12,8 @@ tools, authentication, sandboxing, approvals, and final policy enforcement.
 - Safe executable and version discovery for 14 harnesses, including Codex, Claude Code, Gemini CLI,
   OpenCode, Goose, Loro, MagAgent, DSH, Pi, Prime Agent, OpenClaw, and Kimi Code CLI.
 - Reference OAP validation, digest calculation, profile discovery, and minimal profile authoring.
+- Read-only AGS 1.0 validation and deterministic planning with digests, dependency order,
+  reachability, worst-case execution bounds, cost/tier summaries, and explicit unsupported features.
 - Project-local and user-global bot bindings with preferred and fallback harnesses.
 - Honest native, projected, degraded, and unsupported profile projection reports.
 - One-shot bot runs, multi-turn local chat, and attributed multi-bot group conversations.
@@ -110,6 +112,15 @@ The layout is responsive down to a compact mobile collaboration view. See the
 Use `-C PATH` on project-aware commands to select another workspace. Use `--json` on read and
 one-shot commands for automation.
 
+## Standards support
+
+Merced AI `0.3.0` uses `open-agent-profile>=1.0.1,<2` and
+`agentic-graph-spec>=1.0.1,<2`. It claims OAP 1.0 Level 1 as a broker and AGS 1.0 Level 0 as a
+read-only parser/planner. Merced AI does not execute AGS graphs, apply OAP state deltas, or replace
+the selected harness's final policy enforcement. See the [OAP conformance result](docs/oap-conformance.json),
+[AGS conformance result](docs/ags-conformance.json), and [Agentic Graph guide](docs/AGENTIC_GRAPHS.md)
+for the pinned revisions and exact boundary.
+
 ## Harness matrix
 
 | Harness | Discovery | Execution | OAP projection |
@@ -130,8 +141,9 @@ one-shot commands for automation.
 | Kimi Code CLI | yes | read-only print mode | delimited prompt compatibility mode |
 
 "Native" means the harness receives the OAP profile name through its own CLI. It does not mean
-Merced AI can supersede harness policy. All current projection reports remain provisional until the
-runtime handshake and effective-policy reporting milestone is complete.
+Merced AI can supersede harness policy. Projection labels describe Merced AI's broker behavior, not
+certification of a selected harness's effective runtime. Native handoff remains bounded by that
+harness's own policy and diagnostics.
 
 GLM is treated as a model-family route, not a separate harness. Use it through a supported host
 such as Claude Code, OpenCode, Goose, Pi, or Prime Agent. Kimi models can likewise be selected in

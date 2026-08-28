@@ -25,9 +25,15 @@ OAP profile(s) + bot binding(s) + user prompt
        normalized result + session log
 ```
 
+AGS ingestion is a separate read-only path: a graph is validated with the published support
+library, normalized to a deterministic dependency plan, and returned without entering the harness
+routing or subprocess pipeline.
+
 ## Components
 
 - `profiles.py`: OAP discovery, validation, digests, authoring, and prompt assembly.
+- `graphs.py`: AGS validation, RFC 8785 graph identity, dependency ordering, reachability, bounded
+  work/cost summaries, and unsupported-feature reporting; it never executes graph nodes.
 - `bots.py`: project/user bot bindings and harness preference resolution.
 - `harnesses/registry.py`: fixed supported-harness metadata and adapter registration.
 - `harnesses/detection.py`: bounded executable resolution and version probing.

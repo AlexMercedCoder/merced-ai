@@ -11,6 +11,7 @@ Use this index as the release documentation entry point.
   known limits.
 - [Architecture](ARCHITECTURE.md): component boundaries, execution flow, data ownership, and
   security model.
+- [Agentic Graphs](AGENTIC_GRAPHS.md): read-only AGS validation and deterministic Level 0 planning.
 - [Local web UI](UI.md): workflows, approval model, browser security, streaming, and validation.
 - [Group conversations](GROUP_CHAT.md): participants, dispatch modes, deterministic fan-out,
   cancellation, partial failures, and session compatibility.
@@ -18,8 +19,10 @@ Use this index as the release documentation entry point.
 - [MVP validation](MVP_VALIDATION.md): automated, packaging, and live-test evidence.
 - [Release process](RELEASING.md): maintainer checklist from versioning through post-release
   verification.
+- [0.3.0 release notes](RELEASE_NOTES_0.3.0.md): OAP/AGS 1.0.1 alignment, conformance evidence, and
+  read-only graph planning.
 - [0.2.0 release notes](RELEASE_NOTES_0.2.0.md): group collaboration, the interactive UI, security,
-  compatibility, and upgrade notes for the current release candidate.
+  compatibility, and upgrade notes.
 - [0.1.0 release notes](RELEASE_NOTES_0.1.0.md): initial-release highlights and qualification
   evidence.
 

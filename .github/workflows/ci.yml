@@ -25,6 +25,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: alexmerced-oss/open-agent-profile
+          ref: 7fb633a1a59dd7636ffb0030d254f2f58934f74a
+          path: upstream-oap
+      - uses: actions/checkout@v7
+        with:
+          repository: AlexMercedCoder/agentic-graph-spec
+          ref: f180a4dbd07911f90dd0821f531d7ccd51bb0764
+          path: upstream-ags
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
@@ -34,6 +44,11 @@ jobs:
       - run: python -m ruff check .
       - run: node --check src/merced_ai/webui/app.js
       - run: python -m pytest -q
+        env:
+          AGS_FIXTURE_REPO: ${{ github.workspace }}/upstream-ags
+          OAP_FIXTURE_REPO: ${{ github.workspace }}/upstream-oap
+      - run: oap-validate upstream-oap/examples --digest
+      - run: ags-validate upstream-ags/examples --strict
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
         run: python -m playwright install chromium --with-deps
       - if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'

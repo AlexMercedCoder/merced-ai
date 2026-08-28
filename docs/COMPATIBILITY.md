@@ -1,7 +1,7 @@
 # Harness compatibility
 
 This matrix separates executable discovery, adapter contract tests, and authenticated live runs.
-It was last updated on 2026-08-23.
+It was last updated on 2026-08-27.
 
 | Harness | Adapter | Contract-tested | Installed here | Live-qualified |
 | --- | --- | --- | --- | --- |
@@ -60,10 +60,10 @@ configurations in addition to Kimi services. Merced AI accepts an alternate conf
 provider's standard environment variable at runtime. Qualification used OpenAI Responses with
 `OPENAI_API_KEY` and forced plan mode.
 
-The installed MagAgent release currently validates some permission values against its own older
-dialect (for example, network `none/read/full`) rather than the OAP reference schema values. Basic
-profiles work, but portable profiles containing those permission fields require an upstream schema
-alignment or a future translation layer before they can be called native-compatible.
+Loro 0.17.0 and MagAgent 0.99.0 consume canonical OAP 1.0 documents through the 1.0.1 support
+library. Merced AI still treats their profile-name handoff as native only when the selected profile
+is discoverable in the target project; it does not infer that either harness granted every
+requested capability.
 
 ## Model-family routing
 

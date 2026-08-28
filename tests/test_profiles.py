@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,13 @@ from merced_ai.profiles import (
     discover_profiles,
     update_profile,
     validate_profile,
+)
+
+OAP_REPO = Path(
+    os.environ.get(
+        "OAP_FIXTURE_REPO",
+        str(Path(__file__).resolve().parents[4] / "open-agent-profile"),
+    )
 )
 
 
@@ -32,6 +40,7 @@ def test_create_discover_and_assemble_profile(workspace: Path) -> None:
     assert record.profile_digest.startswith("sha256:")
     assert "<open-agent-profile>" in prompt
     assert "Report defects" in prompt
+    assert prompt.count("Instructions:") == 1
 
 
 def test_reference_validator_rejects_literal_secret(workspace: Path) -> None:
@@ -82,6 +91,8 @@ spec:
 
     assert len(discovered) == 1
     assert discovered[0].source == "project"
+    assert discovered[0].document["metadata"]["trust"] == "project"
+    assert any("discovery collision" in item for item in discovered[0].warnings)
     assert discovered[0].document["spec"]["role"]["instructions"] == "Project instructions.\n"
 
 
@@ -138,3 +149,22 @@ def test_profile_editor_does_not_replace_valid_profile_with_invalid_candidate(
     preserved = validate_profile(created.path, "project")
     assert preserved.revision == 1
     assert preserved.document["spec"]["role"]["instructions"] == "Report concrete defects.\n"
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted((OAP_REPO / "examples").glob("*.agent.*")),
+    ids=lambda path: path.name,
+)
+def test_all_immutable_upstream_profiles_load(path: Path) -> None:
+    assert validate_profile(path).profile_digest.startswith("sha256:")
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted((OAP_REPO / "examples" / "invalid").glob("*.agent.*")),
+    ids=lambda path: path.name,
+)
+def test_all_immutable_upstream_invalid_profiles_are_rejected(path: Path) -> None:
+    with pytest.raises(ProfileError):
+        validate_profile(path)

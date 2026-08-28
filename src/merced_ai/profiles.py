@@ -34,7 +34,16 @@ def validate_profile(path: Path, source: str = "portable") -> ProfileRecord:
         errors = report.errors or [f"expected AgentProfile, found {report.kind}"]
         raise ProfileError("; ".join(errors))
     document, load_warnings = load_document(path)
-    metadata = document["metadata"]
+    metadata = dict(document["metadata"])
+    file_trust = metadata.pop("trust", None)
+    assigned_trust = {"user": "user", "project": "project", "portable": "imported"}[source]
+    metadata["trust"] = assigned_trust
+    document["metadata"] = metadata
+    resolver_warnings: list[str] = []
+    if file_trust is not None:
+        resolver_warnings.append(
+            f"discarded file metadata.trust={file_trust!r}; resolver assigned {assigned_trust!r}"
+        )
     return ProfileRecord(
         name=metadata["name"],
         path=path,
@@ -44,7 +53,7 @@ def validate_profile(path: Path, source: str = "portable") -> ProfileRecord:
         profile_digest=report.digests["profile"],
         spec_digest=report.digests["spec"],
         document=document,
-        warnings=tuple([*load_warnings, *report.warnings]),
+        warnings=tuple([*load_warnings, *report.warnings, *resolver_warnings]),
     )
 
 
@@ -55,6 +64,7 @@ def discover_profiles(workspace: Path) -> tuple[ProfileRecord, ...]:
         (workspace.resolve() / ".magent" / "agents", "project"),
     )
     selected: dict[str, ProfileRecord] = {}
+    collisions: dict[str, list[str]] = {}
     for root, source in roots:
         if not root.is_dir():
             continue
@@ -66,7 +76,19 @@ def discover_profiles(workspace: Path) -> tuple[ProfileRecord, ...]:
             if record.name in by_name:
                 raise ProfileError(f"duplicate profile {record.name!r} in {root}")
             by_name[record.name] = record
-        selected.update(by_name)
+        for name, record in by_name.items():
+            if previous := selected.get(name):
+                collisions.setdefault(name, []).append(
+                    f"{previous.source}:{previous.path} overridden by {record.source}:{record.path}"
+                )
+            selected[name] = record
+    for name, messages in collisions.items():
+        record = selected[name]
+        selected[name] = record.model_copy(
+            update={
+                "warnings": (*record.warnings, *(f"discovery collision: {m}" for m in messages))
+            }
+        )
     return tuple(sorted(selected.values(), key=lambda item: item.name))
 
 

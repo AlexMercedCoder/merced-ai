@@ -16,6 +16,15 @@ from merced_ai.paths import user_root
 from merced_ai.webui_server import create_web_app, run_web_ui
 
 
+def test_profile_management_surface_renders_discovery_and_trust_warnings() -> None:
+    script = (Path(__file__).parents[1] / "src" / "merced_ai" / "webui" / "app.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "item.warnings?.length" in script
+    assert 'class="profile-warnings" role="status"' in script
+
+
 @pytest.fixture
 def ready_harnesses(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(

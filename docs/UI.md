@@ -26,6 +26,8 @@ merced-ai ui -C /path/to/workspace
   background; reuse cached health on later launches and refresh detection explicitly when needed.
 - Create and edit project-local OAP profiles, including provider/model and edit/shell permission
   requests. Fields outside the editor are preserved and the revision increments atomically.
+- Review root-derived profile trust adjustments and discovery-collision warnings before binding a
+  profile to a bot.
 - Create bot bindings with ordered fallback harnesses.
 - Use safe Markdown/code rendering, code copying, light/dark themes, keyboard submission, reduced
   motion, mobile navigation, and keyboard-visible focus.

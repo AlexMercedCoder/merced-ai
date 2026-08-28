@@ -230,6 +230,9 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .management-card { display: flex; justify-content: space-between; align-items: center; gap: 22px; padding: 18px 20px; border: 1px solid var(--line); border-radius: 14px; background: #1d1d1a; }
 .management-card h2 { margin: 5px 0 7px; font-size: 15px; }
 .management-card p { margin: 0; color: var(--muted); font-size: 11px; word-break: break-word; }
+.profile-warnings { display: grid; gap: 4px; margin-top: 12px; padding: 10px; border: 1px solid rgba(246,189,96,.25); border-radius: 9px; background: rgba(246,189,96,.06); }
+.profile-warnings strong { color: var(--amber); font-size: 10px; }
+.profile-warnings span { color: var(--muted); font-size: 9px; line-height: 1.45; }
 .card-kicker { color: var(--accent); font-size: 7px; letter-spacing: .12em; }
 .tag-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
 .tag-row span { padding: 4px 7px; border: 1px solid var(--line-soft); border-radius: 99px; color: var(--muted-2); font-size: 8px; }

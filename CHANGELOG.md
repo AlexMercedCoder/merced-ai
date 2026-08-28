@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-08-27
+
+- Raised the OAP support-library floor to 1.0.1 and added AGS 1.0.1 validation and
+  deterministic planning support.
+- Added conformance evidence and regression coverage for OAP prompt projection and AGS graph
+  validation, ordering, reachability, and RFC 8785 graph digests.
+- Displayed root-derived OAP trust adjustments and discovery collisions on Web UI profile cards.
+
 ## 0.2.0 — 2026-08-25
 
 - Replaced comma-separated group setup with searchable, ordered bot selection; added stable bot
