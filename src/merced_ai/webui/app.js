@@ -12,6 +12,9 @@ const state = {
   deriveFrom: "",
   harnessDetection: { refreshing: false, updated_at: null, cached: false, stale: true },
   harnessPoll: 0,
+  selectedContext: [],
+  contextDraft: [],
+  contextFiles: [],
   view: "conversations",
 };
 
@@ -133,6 +136,7 @@ function render() {
   renderRecents();
   renderConversation();
   renderInspector();
+  renderSelectedContext();
   if (state.view !== "conversations") renderManagement();
 }
 
@@ -236,6 +240,11 @@ async function renderInspector() {
   $("#projection-level").textContent = "—";
   $("#approval-level").textContent = "—";
   $("#adjustment-list").innerHTML = "";
+  const runs = (state.data.recent_runs || []).filter((item) => !state.activeSession || item.session_id === state.activeSession);
+  $("#run-count").textContent = runs.length;
+  $("#run-history").innerHTML = runs.slice(0, 8).map((item) => `<article class="run-row"><span class="status-dot ${item.status === "completed" ? "online" : ""}"></span><div><strong>${escapeHtml(titleCase(item.status))}</strong><small>${escapeHtml(item.participants.map((participant) => titleCase(participant.bot_name)).join(", "))} · ${(item.duration_ms / 1000).toFixed(1)}s${item.context.length ? ` · ${item.context.length} context` : ""}</small></div></article>`).join("") || '<div class="empty-mini">No recorded runs</div>';
+  $("#handoff-harness").disabled = !harnessId;
+  $("#notification-toggle").textContent = localStorage.getItem("merced-ai-notifications") === "on" ? "Notifications on" : "Notify on completion";
   if (!bot) return;
   try {
     const suffix = state.harnessOverride ? `?harness=${encodeURIComponent(state.harnessOverride)}` : "";
@@ -285,6 +294,82 @@ function setBusy(busy, message = "") {
   if (message || !busy) $("#composer-status").textContent = message;
 }
 function toast(message) { const node = $("#toast"); node.textContent = message; node.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => { node.hidden = true; }, 3500); }
+
+function renderSelectedContext() {
+  $("#context-chips").innerHTML = state.selectedContext.map((item) => `<span>${escapeHtml(item.name || item.path)}<button type="button" data-remove-context="${escapeHtml(item.path)}" aria-label="Remove ${escapeHtml(item.name || item.path)}">×</button></span>`).join("");
+}
+
+function renderContextPicker() {
+  const query = $("#context-search").value.trim().toLowerCase();
+  const files = state.contextFiles.filter((item) => !query || item.path.toLowerCase().includes(query));
+  $("#context-options").innerHTML = files.slice(0, 250).map((item) => `<label class="context-option"><input type="checkbox" value="${escapeHtml(item.path)}" ${state.contextDraft.some((selectedItem) => selectedItem.path === item.path) ? "checked" : ""} /><span><strong>${escapeHtml(item.path)}</strong><small>${Math.ceil(item.size / 1024)} KB · ${escapeHtml(item.media_type)}${item.readable ? "" : " · path reference"}</small></span></label>`).join("") || '<div class="empty-mini">No matching workspace files</div>';
+}
+
+async function openContextPicker() {
+  const session = await ensureSession();
+  if (!session) return;
+  try {
+    state.contextFiles = (await (await api("/api/context")).json()).files;
+    state.contextDraft = [...state.selectedContext];
+    $("#context-search").value = "";
+    $("#context-error").textContent = "";
+    renderContextPicker();
+    $("#context-dialog").showModal();
+  } catch (error) { toast(error.message); }
+}
+
+function fileBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error(`Could not read ${file.name}`));
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadContextFiles(files) {
+  const session = currentSession();
+  if (!session) return;
+  $("#context-error").textContent = "";
+  try {
+    for (const file of files) {
+      const response = await api(`/api/sessions/${encodeURIComponent(session.id)}/attachments`, { method: "POST", body: JSON.stringify({ name: file.name, media_type: file.type || "application/octet-stream", content_base64: await fileBase64(file) }) });
+      const uploaded = await response.json();
+      state.contextFiles.unshift(uploaded);
+      state.contextDraft.push(uploaded);
+    }
+    renderContextPicker();
+  } catch (error) { $("#context-error").textContent = error.message; }
+}
+
+async function copyHandoff() {
+  const harnessId = activeHarnessId();
+  if (!harnessId) return;
+  try {
+    const payload = await (await api(`/api/handoff/${encodeURIComponent(harnessId)}`)).json();
+    const command = `cd ${JSON.stringify(payload.workspace)} && ${payload.argv.map((part) => JSON.stringify(part)).join(" ")}`;
+    await navigator.clipboard.writeText(command);
+    toast(`${titleCase(harnessId)} handoff copied`);
+  } catch (error) { toast(error.message); }
+}
+
+async function toggleNotifications() {
+  if (!("Notification" in window)) { toast("Desktop notifications are not supported by this browser"); return; }
+  if (localStorage.getItem("merced-ai-notifications") === "on") {
+    localStorage.removeItem("merced-ai-notifications");
+    renderInspector();
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  if (permission === "granted") localStorage.setItem("merced-ai-notifications", "on");
+  else toast("Notification permission was not granted");
+  renderInspector();
+}
+
+function notifyRunFinished(payload) {
+  if (localStorage.getItem("merced-ai-notifications") !== "on" || Notification.permission !== "granted") return;
+  new Notification("Merced AI run finished", { body: `${payload.completed} completed${payload.failed ? `, ${payload.failed} failed` : ""} in ${(payload.duration_ms / 1000).toFixed(1)}s` });
+}
 
 async function selectBot(name) {
   state.activeBot = name;
@@ -366,7 +451,8 @@ async function sendPrompt(approved = false) {
   $("#send-message").disabled = true;
   try {
     const dispatch = state.pendingDispatch || (currentParticipants().length > 1 ? $("#dispatch-select").value : null);
-    const response = await api(`/api/sessions/${encodeURIComponent(session.id)}/messages`, { method: "POST", body: JSON.stringify({ content, approved, dispatch }) });
+    const context = state.selectedContext.map((item) => ({ path: item.path }));
+    const response = await api(`/api/sessions/${encodeURIComponent(session.id)}/messages`, { method: "POST", body: JSON.stringify({ content, approved, dispatch, context }) });
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -392,6 +478,8 @@ async function sendPrompt(approved = false) {
           state.activeRun = item.payload.run_id;
           session.turns.push({ role: "user", content });
           $("#message-input").value = "";
+          state.selectedContext = [];
+          renderSelectedContext();
           $("#cancel-run").hidden = false;
           const routes = item.payload.participants || [{ harness_id: item.payload.harness_id }];
           routes.forEach((route) => session.turns.push({ role: "assistant", content: "", bot_name: route.bot_name || state.activeBot, harness_id: route.harness_id, pending: true }));
@@ -419,6 +507,9 @@ async function sendPrompt(approved = false) {
           session.turns = session.turns.filter((turn) => !(turn.pending && turn.bot_name === item.payload.bot_name));
           renderConversation();
           $("#composer-status").textContent = item.payload.message;
+        } else if (item.event === "run_finished") {
+          $("#composer-status").textContent = `${item.payload.completed} completed${item.payload.failed ? ` · ${item.payload.failed} failed` : ""} · ${(item.payload.duration_ms / 1000).toFixed(1)}s`;
+          notifyRunFinished(item.payload);
         }
       }
       if (done) break;
@@ -564,6 +655,34 @@ function bindEvents() {
   $("#derive-group").addEventListener("click", () => openGroupEditor(true));
   $("#rename-session").addEventListener("click", renameConversation);
   $("#composer").addEventListener("submit", (event) => { event.preventDefault(); sendPrompt(); });
+  $("#add-context").addEventListener("click", openContextPicker);
+  $("#context-chips").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-remove-context]");
+    if (!button) return;
+    state.selectedContext = state.selectedContext.filter((item) => item.path !== button.dataset.removeContext);
+    renderSelectedContext();
+  });
+  $("#context-search").addEventListener("input", renderContextPicker);
+  $("#context-options").addEventListener("change", (event) => {
+    const checkbox = event.target.closest('input[type="checkbox"]');
+    if (!checkbox) return;
+    const file = state.contextFiles.find((item) => item.path === checkbox.value);
+    state.contextDraft = checkbox.checked
+      ? [...state.contextDraft.filter((item) => item.path !== checkbox.value), file]
+      : state.contextDraft.filter((item) => item.path !== checkbox.value);
+  });
+  $("#context-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    state.selectedContext = [...state.contextDraft];
+    renderSelectedContext();
+    $("#context-dialog").close();
+  });
+  $$(".context-cancel").forEach((button) => button.addEventListener("click", () => $("#context-dialog").close()));
+  $("#upload-context").addEventListener("click", () => $("#context-upload-input").click());
+  $("#context-upload-input").addEventListener("change", (event) => {
+    uploadContextFiles([...event.target.files]);
+    event.target.value = "";
+  });
   $("#message-input").addEventListener("keydown", (event) => { if (event.key === "ArrowDown" && !$("#mention-menu").hidden) { event.preventDefault(); $("#mention-menu button")?.focus(); } else if (event.key === "Escape") { $("#mention-menu").hidden = true; } else if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); $("#composer").requestSubmit(); } });
   $("#message-input").addEventListener("input", (event) => { event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; renderMentionMenu(); });
   $("#mention-menu").addEventListener("click", (event) => { const button = event.target.closest("[data-mention]"); if (button) insertMention(button.dataset.mention); });
@@ -598,6 +717,8 @@ function bindEvents() {
   $("#harness-list").addEventListener("click", (event) => { const button = event.target.closest("[data-harness]"); if (button && !currentSession()?.turns.length) { state.harnessOverride = button.dataset.harness; render(); } });
   $("#export-session").addEventListener("click", () => { const session = currentSession(); if (session) location.href = `/api/sessions/${encodeURIComponent(session.id)}/export`; });
   $("#focus-route").addEventListener("click", () => $("#harness-select").focus());
+  $("#handoff-harness").addEventListener("click", copyHandoff);
+  $("#notification-toggle").addEventListener("click", toggleNotifications);
   $("#toggle-inspector").addEventListener("click", () => { const hidden = $("#inspector").classList.toggle("closed"); $("#toggle-inspector").setAttribute("aria-expanded", String(!hidden)); });
   $("#close-inspector").addEventListener("click", () => { $("#inspector").classList.add("closed"); $("#toggle-inspector").setAttribute("aria-expanded", "false"); });
   $("#open-navigation").addEventListener("click", openNavigation);

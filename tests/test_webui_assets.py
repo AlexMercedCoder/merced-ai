@@ -42,7 +42,7 @@ def test_webui_assets_have_accessible_secure_structure() -> None:
 
     assert parser.html_language == "en"
     assert parser.landmarks == {"main", "nav", "aside"}
-    assert parser.dialogs == 3
+    assert parser.dialogs == 4
     assert parser.live_regions >= 3
     assert parser.inline_scripts == 0
     assert parser.inline_styles == 0

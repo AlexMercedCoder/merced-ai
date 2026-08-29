@@ -100,7 +100,10 @@ everyone concurrently, choose routes, approve or cancel runs, inspect authority 
 and search/resume/export attributed transcripts. Group setup has searchable ordered selection,
 progressive per-bot status, exact failed-bot retry, `@mention` completion, stable identities,
 conversation naming, and derived participant sets. Workspace data renders before executable
-probing; cached harness health then refreshes progressively in the background. See the
+probing; cached harness health then refreshes progressively in the background. The composer can
+attach bounded project files and browser uploads, recent durable run records show context/events/
+duration/partial failures, completion notifications are opt-in, and each active route exposes a
+copyable native-harness handoff command. See the
 [UI guide](docs/UI.md) and
 [group-chat guide](docs/GROUP_CHAT.md) for the security, dispatch, and streaming boundaries.
 
@@ -114,7 +117,7 @@ one-shot commands for automation.
 
 ## Standards support
 
-Merced AI `0.3.0` uses `open-agent-profile>=1.0.1,<2` and
+Merced AI `0.4.0` uses `open-agent-profile>=1.0.1,<2` and
 `agentic-graph-spec>=1.0.1,<2`. It claims OAP 1.0 Level 1 as a broker and AGS 1.0 Level 0 as a
 read-only parser/planner. Merced AI does not execute AGS graphs, apply OAP state deltas, or replace
 the selected harness's final policy enforcement. See the [OAP conformance result](docs/oap-conformance.json),

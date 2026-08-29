@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — 2026-08-29
+
+- Added a secure workspace-context picker and bounded browser uploads for text, binary, and image
+  context, with inline/path delivery manifests and internal-state traversal protections.
+- Added durable normalized run telemetry, recent-run inspection, elapsed and partial-failure
+  summaries, opt-in desktop completion notifications, and copyable active-harness handoffs.
+- Expanded API, storage, security, asset, and browser-facing validation for the new workspace UI.
+
 ## 0.3.0 — 2026-08-27
 
 - Raised the OAP support-library floor to 1.0.1 and added AGS 1.0.1 validation and

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import threading
 import time
 from collections.abc import AsyncIterator, Callable
@@ -50,6 +51,49 @@ async def authenticated_client(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post("/api/auth", json={"token": "secret-token"})
         yield client, response
+
+
+@pytest.mark.anyio
+async def test_webui_context_upload_history_and_handoff(workspace: Path) -> None:
+    (workspace / "brief.md").write_text("ship it", encoding="utf-8")
+    async with authenticated_client(workspace) as (client, _):
+        profile = await client.post(
+            "/api/profiles",
+            json={
+                "name": "reviewer",
+                "description": "Reviews work.",
+                "instructions": "Review carefully.",
+                "edit_permission": "deny",
+                "shell_permission": "deny",
+            },
+        )
+        assert profile.status_code == 201
+        bot = await client.post(
+            "/api/bots",
+            json={"name": "reviewer", "profile": "reviewer", "harness": "codex"},
+        )
+        assert bot.status_code == 201
+        session = await client.post("/api/sessions", json={"bot_name": "reviewer"})
+        session_id = session.json()["id"]
+
+        context = await client.get("/api/context")
+        upload = await client.post(
+            f"/api/sessions/{session_id}/attachments",
+            json={
+                "name": "diagram.png",
+                "media_type": "image/png",
+                "content_base64": base64.b64encode(b"image").decode(),
+            },
+        )
+        history = await client.get(f"/api/runs?session_id={session_id}")
+        handoff = await client.get("/api/handoff/codex")
+
+    assert any(item["path"] == "brief.md" for item in context.json()["files"])
+    assert upload.status_code == 201
+    assert upload.json()["path"].endswith("-diagram.png")
+    assert history.json() == {"runs": []}
+    assert handoff.json()["workspace"] == str(workspace)
+    assert handoff.json()["argv"]
 
 
 @pytest.mark.anyio

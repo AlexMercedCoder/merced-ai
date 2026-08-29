@@ -36,6 +36,14 @@ from merced_ai.profiles import (
     update_profile,
 )
 from merced_ai.sessions import SessionStore
+from merced_ai.workspace_context import (
+    ContextReference,
+    RunStore,
+    UploadInput,
+    build_context_prompt,
+    list_workspace_files,
+    save_upload,
+)
 
 try:  # Optional dependency boundary.
     from fastapi import FastAPI, HTTPException, Request
@@ -105,6 +113,7 @@ class MessageInput(BaseModel):
     content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
     approved: bool = False
     dispatch: str | None = Field(default=None, max_length=100)
+    context: list[ContextReference] = Field(default_factory=list, max_length=20)
 
 
 class SessionUpdateInput(BaseModel):
@@ -281,6 +290,7 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             "sessions": [item.model_dump(mode="json") for item in SessionStore(workspace).list()],
             "harnesses": detection.pop("harnesses"),
             "harness_detection": detection,
+            "recent_runs": [item.model_dump(mode="json") for item in RunStore(workspace).list(20)],
         }
 
     @app.get("/", response_class=HTMLResponse)
@@ -325,6 +335,55 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
         authorize(request, mutation=True)
         start_probe_refresh()
         return probe_payload()
+
+    @app.get("/api/context")
+    async def context_files(request: Request, query: str = "") -> dict[str, Any]:
+        authorize(request)
+        return {"workspace": str(workspace), "files": list_workspace_files(workspace, query)}
+
+    @app.post("/api/sessions/{session_id}/attachments", status_code=201)
+    async def attachment_create(
+        session_id: str, payload: UploadInput, request: Request
+    ) -> dict[str, Any]:
+        authorize(request, mutation=True)
+        try:
+            SessionStore(workspace).load(session_id)
+            return save_upload(workspace, session_id, payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/runs")
+    async def run_history(request: Request, session_id: str | None = None) -> dict[str, Any]:
+        authorize(request)
+        records = RunStore(workspace).list()
+        if session_id:
+            records = [item for item in records if item.session_id == session_id]
+        return {"runs": [item.model_dump(mode="json") for item in records]}
+
+    @app.get("/api/handoff/{harness_id}")
+    async def harness_handoff(harness_id: str, request: Request) -> dict[str, Any]:
+        authorize(request)
+        try:
+            descriptor = registry.get(harness_id).descriptor
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Harness not found") from exc
+        executable = (
+            next(
+                (
+                    item.get("path")
+                    for item in probe_payload()["harnesses"]
+                    if item["harness_id"] == harness_id
+                ),
+                None,
+            )
+            or descriptor.executable_names[0]
+        )
+        return {
+            "harness_id": harness_id,
+            "workspace": str(workspace),
+            "argv": [str(executable)],
+            "note": "Open the harness in this workspace; its own CLI remains authoritative.",
+        }
 
     @app.get("/api/projection/{bot_name}")
     async def projection(
@@ -495,9 +554,11 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
         store = SessionStore(workspace)
         try:
             session = store.load(session_id)
+            context_prompt, context_manifest = build_context_prompt(workspace, payload.context)
+            effective_prompt = payload.content.strip() + context_prompt
             prepared_runs = prepare_group_turn(
                 session,
-                payload.content.strip(),
+                effective_prompt,
                 workspace,
                 dispatch=payload.dispatch,
             )
@@ -530,10 +591,15 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             cancellations[run_id] = cancellation
 
         async def event_stream() -> Any:
+            started = time.monotonic()
             routes = [
                 {"bot_name": item.bot.name, "harness_id": item.request.harness_id}
                 for item in prepared_runs
             ]
+            run_store = RunStore(workspace)
+            run_record = run_store.start(
+                run_id, session_id, payload.content, routes, context_manifest
+            )
             yield _sse(
                 "run_started",
                 {
@@ -589,6 +655,13 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                         completed += 1
                         ordered_results[index] = (prepared, result)
                         for native_event in _raw_events(result):
+                            run_record.events.append(
+                                {
+                                    "type": "tool_event",
+                                    "bot_name": prepared.bot.name,
+                                    "event": native_event,
+                                }
+                            )
                             yield _sse("tool_event", {**identity, "event": native_event})
                         yield _sse(
                             "assistant_message",
@@ -612,9 +685,17 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                     bot_name=prepared.bot.name,
                     harness_id=result.harness_id,
                 )
+            duration_ms = int((time.monotonic() - started) * 1000)
+            run_store.finish(run_record, completed, failed, duration_ms)
             yield _sse(
                 "run_finished",
-                {"run_id": run_id, "completed": completed, "failed": failed},
+                {
+                    "run_id": run_id,
+                    "completed": completed,
+                    "failed": failed,
+                    "duration_ms": duration_ms,
+                    "context": context_manifest,
+                },
             )
 
         return StreamingResponse(

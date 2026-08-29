@@ -29,6 +29,16 @@ merced-ai ui -C /path/to/workspace
 - Review root-derived profile trust adjustments and discovery-collision warnings before binding a
   profile to a bot.
 - Create bot bindings with ordered fallback harnesses.
+- Attach up to twenty workspace files or browser uploads to a run. Small UTF-8 files are bounded
+  and supplied inline; large, binary, and image assets are stored under the project-local Merced
+  directory and supplied as explicit workspace paths for capable harnesses.
+- Inspect durable run records with status, participants, context manifest, normalized tool events,
+  elapsed time, and partial-failure counts. Run records survive browser refreshes independently of
+  the conversation transcript.
+- Copy a shell-quoted handoff command for the active harness and workspace without making Merced AI
+  impersonate that harness's terminal or session model.
+- Opt into browser-native completion notifications. The preference stays in browser storage and
+  notification permission is requested only from an explicit operator action.
 - Use safe Markdown/code rendering, code copying, light/dark themes, keyboard submission, reduced
   motion, mobile navigation, and keyboard-visible focus.
 
@@ -49,6 +59,12 @@ Responses use a restrictive Content Security Policy, deny framing and MIME sniff
 unneeded browser permissions, omit referrers, and disable caching. Profile and bot names continue
 through the same path-safe validators used by the CLI.
 
+Workspace context is resolved beneath the workspace root before every run. Traversal, ignored
+dependency/build directories, and internal Merced state other than the dedicated attachment area
+are rejected. Upload names are reduced to their basename, payloads are bounded to 10 MB, and a
+single prompt can inline at most 750 KB. The durable context manifest records paths, media types,
+sizes, and whether each item was delivered inline or by workspace reference.
+
 The UI does not turn Merced AI into a sandbox. Harness configuration, provider credentials,
 workspace permissions, and the harness's effective policy remain authoritative.
 
@@ -67,7 +83,8 @@ interactive approval bridging depend on future transport-specific streaming adap
 Automated coverage includes authentication/cookie exchange, security headers, origin rejection,
 profile and bot management, routing and projection, session creation and export, approval
 preflight, normalized SSE success/error/tool lifecycles, persistence, cancellation, responsive
-contracts, accessibility landmarks, reduced motion, and packaged static assets.
+contracts, accessibility landmarks, reduced motion, packaged static assets, bounded context
+listing, traversal rejection, upload persistence, run-record durability, and harness handoffs.
 
 The release workflow also starts the real Uvicorn server from an installed build and runs a
 deterministic executable through profile creation, bot binding, session creation, and the streamed

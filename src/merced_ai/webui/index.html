@@ -87,8 +87,9 @@
             <form id="composer" class="composer">
               <textarea id="message-input" aria-label="Message" placeholder="Message your bot…" rows="1" maxlength="100000"></textarea>
               <div id="mention-menu" class="mention-menu" role="listbox" aria-label="Mention a bot" hidden></div>
+              <div id="context-chips" class="context-chips" aria-live="polite"></div>
               <div class="composer-tools">
-                <div class="dispatch-picker"><span class="spark">✦</span><label for="dispatch-select">Send to</label><select id="dispatch-select" aria-label="Choose group recipients"><option value="mentions">Mentioned bot</option></select></div>
+                <div class="dispatch-picker"><button id="add-context" class="composer-action" type="button" aria-label="Attach workspace context">＋ Context</button><span class="spark">✦</span><label for="dispatch-select">Send to</label><select id="dispatch-select" aria-label="Choose group recipients"><option value="mentions">Mentioned bot</option></select></div>
                 <div class="run-controls">
                   <button id="cancel-run" class="cancel-button" type="button" hidden>Cancel</button>
                   <button id="send-message" class="send-button" type="submit" aria-label="Send message">↑</button>
@@ -129,7 +130,9 @@
             <div><span>Writeback</span><strong>Review first</strong></div>
           </div>
           <div id="adjustment-list" class="adjustment-list"></div>
+          <div class="inspector-actions"><button id="handoff-harness" class="secondary-button" type="button">Copy harness handoff</button><button id="notification-toggle" class="secondary-button" type="button">Notify on completion</button></div>
         </section>
+        <section class="panel-section"><div class="section-heading"><span>Recent runs</span><span id="run-count">0</span></div><div id="run-history" class="run-history"></div></section>
         <section class="panel-section health-section">
           <div class="section-heading"><span>Harness health</span><div class="health-actions"><span id="healthy-count">0 ready</span><span id="harness-detection-state" role="status" aria-live="polite">Detection queued</span><button id="refresh-harnesses" class="icon-button" aria-label="Refresh harness detection">↻</button></div></div>
           <div id="harness-list" class="harness-list"></div>
@@ -143,6 +146,17 @@
         <div id="editor-fields" class="dialog-fields"></div>
         <p id="editor-error" class="form-error" role="alert"></p>
         <footer><button class="secondary-button" value="cancel">Cancel</button><button id="editor-submit" class="primary-button" value="default">Save</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="context-dialog" class="dialog context-dialog">
+      <form id="context-form">
+        <header><div><span class="eyebrow">WORKSPACE CONTEXT</span><h2>Attach files to this run</h2></div><button class="icon-button context-cancel" type="button" aria-label="Close">×</button></header>
+        <div class="context-toolbar"><label><span class="sr-only">Find workspace files</span><input id="context-search" type="search" placeholder="Find a workspace file…" /></label><button id="upload-context" class="secondary-button" type="button">Upload file</button><input id="context-upload-input" type="file" multiple hidden /></div>
+        <p class="context-help">Text files up to 256 KB are supplied inline. Larger and binary files remain workspace paths for a capable harness to inspect.</p>
+        <div id="context-options" class="context-options" aria-live="polite"></div>
+        <p id="context-error" class="form-error" role="alert"></p>
+        <footer><button class="secondary-button context-cancel" type="button">Cancel</button><button class="primary-button" type="submit">Use selected context</button></footer>
       </form>
     </dialog>
 

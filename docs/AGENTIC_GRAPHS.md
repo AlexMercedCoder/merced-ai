@@ -1,6 +1,6 @@
 # Agentic Graphs
 
-Merced AI 0.3.0 provides read-only Agentic Graph Specification (AGS) 1.0 validation and planning at
+Merced AI 0.4.0 provides read-only Agentic Graph Specification (AGS) 1.0 validation and planning at
 conformance Level 0. It uses `agentic-graph-spec>=1.0.1,<2` and tests against upstream commit
 `f180a4dbd07911f90dd0821f531d7ccd51bb0764`.
 

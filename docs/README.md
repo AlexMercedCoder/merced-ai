@@ -19,6 +19,8 @@ Use this index as the release documentation entry point.
 - [MVP validation](MVP_VALIDATION.md): automated, packaging, and live-test evidence.
 - [Release process](RELEASING.md): maintainer checklist from versioning through post-release
   verification.
+- [0.4.0 release notes](RELEASE_NOTES_0.4.0.md): bounded workspace context, durable run inspection,
+  completion notifications, and harness handoffs.
 - [0.3.0 release notes](RELEASE_NOTES_0.3.0.md): OAP/AGS 1.0.1 alignment, conformance evidence, and
   read-only graph planning.
 - [0.2.0 release notes](RELEASE_NOTES_0.2.0.md): group collaboration, the interactive UI, security,

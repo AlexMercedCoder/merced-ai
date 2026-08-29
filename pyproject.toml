@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "merced-ai"
-version = "0.3.0"
+version = "0.4.0"
 description = "An OAP-native broker for existing AI agent harnesses."
 readme = "README.md"
 requires-python = ">=3.11"

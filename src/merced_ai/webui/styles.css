@@ -164,6 +164,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .composer textarea::placeholder { color: #76756d; }
 .composer-tools, .composer-tools > div { display: flex; align-items: center; }
 .composer-tools { justify-content: space-between; }
+.context-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px; }
+.context-chips:empty { display: none; }
+.context-chips > span { display: inline-flex; align-items: center; gap: 5px; max-width: 260px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 99px; background: #20201c; color: var(--muted); font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.context-chips button { border: 0; background: transparent; color: var(--muted-2); cursor: pointer; }
+.composer-action { border: 1px solid var(--line); border-radius: 7px; padding: 5px 8px; background: transparent; color: var(--muted); cursor: pointer; font-size: 9px; }
 .run-controls { display: flex; gap: 8px; }
 .mode-label { padding: 7px 9px; color: var(--muted); font-size: 10px; }
 .dispatch-picker { gap: 5px; padding: 3px 5px; color: var(--muted); font-size: 9px; }
@@ -209,6 +214,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .authority-grid span { color: var(--muted-2); font-size: 8px; }
 .authority-grid strong { font-size: 9px; margin-top: 4px; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; }
 .adjustment-list { margin-top: 10px; display: grid; gap: 6px; }
+.inspector-actions { display: grid; gap: 6px; margin-top: 12px; }
+.run-history { display: grid; gap: 7px; }
+.run-row { display: grid; grid-template-columns: 10px 1fr; gap: 7px; align-items: start; padding: 7px 0; border-bottom: 1px solid var(--line-soft); }
+.run-row strong, .run-row small { display: block; }
+.run-row small { margin-top: 2px; color: var(--muted-2); font-size: 8px; line-height: 1.4; }
 .adjustment { display: flex; gap: 7px; color: var(--muted); font-size: 8px; line-height: 1.45; }
 .adjustment span { color: var(--amber); }
 .harness-list { display: grid; gap: 7px; }
@@ -272,6 +282,15 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .warning-card { display: grid; gap: 5px; margin: 16px 20px; padding: 13px; border: 1px solid rgba(246,189,96,.25); border-radius: 10px; background: rgba(246,189,96,.06); }
 .warning-card strong { color: var(--amber); font-size: 10px; }
 .warning-card span { color: var(--muted); font-size: 9px; line-height: 1.5; }
+.context-toolbar { display: flex; gap: 10px; padding: 18px 20px 10px; }
+.context-toolbar label { flex: 1; }
+.context-toolbar input { width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; background: #20201c; color: var(--text); }
+.context-help { margin: 0; padding: 0 20px 12px; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.context-options { display: grid; max-height: 430px; overflow: auto; padding: 0 20px 12px; }
+.context-option { display: flex; align-items: start; gap: 9px; padding: 9px 5px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
+.context-option span, .context-option strong, .context-option small { display: block; min-width: 0; }
+.context-option strong { overflow-wrap: anywhere; font-size: 10px; }
+.context-option small { margin-top: 3px; color: var(--muted-2); font-size: 8px; }
 .toast { position: fixed; right: 20px; bottom: 20px; z-index: 200; max-width: 360px; padding: 11px 14px; border: 1px solid #545448; border-radius: 10px; background: #292923; color: var(--text); box-shadow: 0 12px 40px rgba(0,0,0,.45); font-size: 11px; }
 .backdrop { display: none; }
 
