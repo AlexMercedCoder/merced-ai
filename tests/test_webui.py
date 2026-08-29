@@ -54,7 +54,9 @@ async def authenticated_client(
 
 
 @pytest.mark.anyio
-async def test_webui_context_upload_history_and_handoff(workspace: Path) -> None:
+async def test_webui_context_upload_history_and_handoff(
+    workspace: Path, ready_harnesses: None
+) -> None:
     (workspace / "brief.md").write_text("ship it", encoding="utf-8")
     async with authenticated_client(workspace) as (client, _):
         profile = await client.post(
