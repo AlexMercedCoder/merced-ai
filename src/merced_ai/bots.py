@@ -59,6 +59,34 @@ def create_bot(
     return binding
 
 
+def update_bot(
+    name: str,
+    profile: str,
+    harness: str,
+    fallbacks: tuple[str, ...],
+    workspace: Path,
+) -> BotBinding:
+    current = resolve_bot(name, workspace)
+    project_root = (ensure_project_layout(workspace) / "bots").resolve()
+    if current.source != "project" or current.path.parent.resolve() != project_root:
+        raise BotError("only project-local bot bindings can be edited")
+    previous = current.path.read_text(encoding="utf-8")
+    current.path.unlink()
+    try:
+        return create_bot(name, profile, harness, fallbacks, workspace)
+    except Exception:
+        _atomic_write(current.path, previous)
+        raise
+
+
+def delete_bot(name: str, workspace: Path) -> None:
+    current = resolve_bot(name, workspace)
+    project_root = (ensure_project_layout(workspace) / "bots").resolve()
+    if current.source != "project" or current.path.parent.resolve() != project_root:
+        raise BotError("only project-local bot bindings can be deleted")
+    current.path.unlink()
+
+
 def discover_bots(workspace: Path) -> tuple[BotBinding, ...]:
     roots = (
         (ensure_user_layout() / "bots", "user"),

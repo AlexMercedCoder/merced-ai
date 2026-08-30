@@ -117,6 +117,12 @@ class SessionStore:
         session.title = normalized[:120]
         self.save(session)
 
+    def delete(self, session_id: str) -> None:
+        path = self.root / f"{session_id}.json"
+        if not path.is_file():
+            raise ValueError(f"session {session_id!r} was not found")
+        path.unlink()
+
 
 def transcript_prompt(
     session: SessionRecord,

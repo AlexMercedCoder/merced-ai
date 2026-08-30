@@ -273,6 +273,37 @@ async def test_webui_profile_bot_session_projection_and_export_workflow(
 
 
 @pytest.mark.anyio
+async def test_webui_can_edit_and_delete_local_records(
+    workspace: Path, ready_harnesses: None
+) -> None:
+    async with authenticated_client(workspace) as (client, _):
+        await client.post(
+            "/api/profiles",
+            json={"name": "helper", "description": "Helps.", "instructions": "Help."},
+        )
+        await client.post(
+            "/api/bots",
+            json={"name": "helper", "profile": "helper", "harness": "codex"},
+        )
+        edited = await client.put(
+            "/api/bots/helper",
+            json={"name": "helper", "profile": "helper", "harness": "loro"},
+        )
+        session = await client.post("/api/sessions", json={"bot_name": "helper"})
+        blocked = await client.delete("/api/profiles/helper")
+        removed_session = await client.delete(f"/api/sessions/{session.json()['id']}")
+        removed_bot = await client.delete("/api/bots/helper")
+        removed_profile = await client.delete("/api/profiles/helper")
+
+    assert edited.status_code == 200
+    assert edited.json()["harness"]["preferred"] == "loro"
+    assert blocked.status_code == 409
+    assert removed_session.status_code == 204
+    assert removed_bot.status_code == 204
+    assert removed_profile.status_code == 204
+
+
+@pytest.mark.anyio
 async def test_webui_streams_run_lifecycle_and_persists_turns(
     workspace: Path, ready_harnesses: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:

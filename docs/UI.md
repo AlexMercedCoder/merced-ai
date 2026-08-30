@@ -24,11 +24,14 @@ merced-ai ui -C /path/to/workspace
 - Review projection adjustments, effective authority, route health, versions, and capabilities.
 - Load workspace data immediately while bounded harness probes update independently in the
   background; reuse cached health on later launches and refresh detection explicitly when needed.
-- Create and edit project-local OAP profiles, including provider/model and edit/shell permission
-  requests. Fields outside the editor are preserved and the revision increments atomically.
+- Create, edit, and delete project-local OAP profiles, including provider/model and edit/shell
+  permission requests. Provider and known-model choices are bounded dropdowns with an explicit
+  harness-default option. Fields outside the editor are preserved and the revision increments
+  atomically.
 - Review root-derived profile trust adjustments and discovery-collision warnings before binding a
   profile to a bot.
-- Create bot bindings with ordered fallback harnesses.
+- Create, edit, and delete project-local bot bindings with ordered fallback harnesses.
+- Delete durable conversations after confirmation when no run is active.
 - Attach up to twenty workspace files or browser uploads to a run. Small UTF-8 files are bounded
   and supplied inline; large, binary, and image assets are stored under the project-local Merced
   directory and supplied as explicit workspace paths for capable harnesses.
@@ -67,6 +70,11 @@ sizes, and whether each item was delivered inline or by workspace reference.
 
 The UI does not turn Merced AI into a sandbox. Harness configuration, provider credentials,
 workspace permissions, and the harness's effective policy remain authoritative.
+
+Merced AI is a cross-harness router rather than a second implementation of each harness's graph,
+memory, Skill, plugin, or MCP editor. Those resources remain owned by the selected harness; the UI
+projects an OAP profile and routes the session without pretending it can safely mutate another
+harness's private configuration format.
 
 ## Streaming boundary
 

@@ -23,7 +23,7 @@ from merced_ai.application import (
     prepare_group_turn,
     prepare_run,
 )
-from merced_ai.bots import BotError, create_bot, discover_bots
+from merced_ai.bots import BotError, create_bot, delete_bot, discover_bots, update_bot
 from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import HarnessRunError
 from merced_ai.models import HarnessProbe, ProfileRecord, RunResult
@@ -31,6 +31,7 @@ from merced_ai.paths import ensure_user_layout
 from merced_ai.profiles import (
     ProfileError,
     create_profile,
+    delete_profile,
     discover_profiles,
     resolve_profile,
     update_profile,
@@ -442,6 +443,23 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return _profile_payload(record, workspace)
 
+    @app.delete("/api/profiles/{name}", status_code=204, response_model=None)
+    async def profile_delete(name: str, request: Request) -> Response:
+        authorize(request, mutation=True)
+        if any(
+            resolve_profile(item.profile, workspace).name == name
+            for item in discover_bots(workspace)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Delete or rebind bots that use this profile first",
+            )
+        try:
+            delete_profile(name, workspace)
+        except ProfileError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return Response(status_code=204)
+
     @app.post("/api/bots", status_code=201)
     async def bot_create(payload: BotInput, request: Request) -> dict[str, Any]:
         authorize(request, mutation=True)
@@ -456,6 +474,35 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
         except (BotError, ProfileError, KeyError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return binding.model_dump(mode="json")
+
+    @app.put("/api/bots/{name}")
+    async def bot_update(name: str, payload: BotInput, request: Request) -> dict[str, Any]:
+        authorize(request, mutation=True)
+        try:
+            if payload.name != name:
+                raise BotError("bot names cannot be changed; create a new binding instead")
+            registry.get(payload.harness)
+            for fallback in payload.fallbacks:
+                registry.get(fallback)
+            binding = update_bot(
+                name,
+                payload.profile,
+                payload.harness,
+                tuple(payload.fallbacks),
+                workspace,
+            )
+        except (BotError, ProfileError, KeyError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return binding.model_dump(mode="json")
+
+    @app.delete("/api/bots/{name}", status_code=204, response_model=None)
+    async def bot_delete(name: str, request: Request) -> Response:
+        authorize(request, mutation=True)
+        try:
+            delete_bot(name, workspace)
+        except BotError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return Response(status_code=204)
 
     @app.post("/api/sessions", status_code=201)
     async def session_create(payload: SessionInput, request: Request) -> dict[str, Any]:
@@ -498,6 +545,23 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return session.model_dump(mode="json")
+
+    @app.delete("/api/sessions/{session_id}", status_code=204, response_model=None)
+    async def session_delete(session_id: str, request: Request) -> Response:
+        authorize(request, mutation=True)
+        if any(
+            item.session_id == session_id and item.status == "running"
+            for item in RunStore(workspace).list()
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Cancel the active run before deleting this conversation",
+            )
+        try:
+            SessionStore(workspace).delete(session_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return Response(status_code=204)
 
     @app.post("/api/sessions/{session_id}/derive", status_code=201)
     async def session_derive(

@@ -192,6 +192,15 @@ def update_profile(
     )
 
 
+def delete_profile(name: str, workspace: Path) -> None:
+    """Delete one project-local profile document."""
+    record = resolve_profile(name, workspace)
+    project_root = (workspace.resolve() / ".agents").resolve()
+    if record.source != "project" or record.path.parent.resolve() != project_root:
+        raise ProfileError("only project-local .agents profiles can be deleted")
+    record.path.unlink()
+
+
 def assemble_system_prompt(profile: ProfileRecord) -> str:
     document = profile.document
     spec = document["spec"]

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from merced_ai.bots import create_bot, discover_bots, resolve_bot
+from merced_ai.bots import create_bot, delete_bot, discover_bots, resolve_bot, update_bot
 from merced_ai.models import ConversationTurn, SessionParticipant, SessionRecord
 from merced_ai.profiles import create_profile
 from merced_ai.sessions import SessionStore, select_participants, transcript_prompt
@@ -24,6 +24,11 @@ def test_bot_binding_round_trip(workspace: Path) -> None:
     assert [item.name for item in discover_bots(workspace)] == ["reviewer"]
     assert loaded == created
     assert loaded.harness.fallbacks == ("claude",)
+
+    updated = update_bot("reviewer", "reviewer", "loro", ("codex",), workspace)
+    assert updated.harness.preferred == "loro"
+    delete_bot("reviewer", workspace)
+    assert discover_bots(workspace) == ()
 
 
 def test_session_store_is_durable_and_builds_bounded_transcript(workspace: Path) -> None:
@@ -48,6 +53,10 @@ def test_session_store_is_durable_and_builds_bounded_transcript(workspace: Path)
     assert prompt.endswith("User: Next question")
     store.rename(loaded, "  Project   notes  ")
     assert store.load(session.id).title == "Project notes"
+    store.delete(session.id)
+    assert store.list() == ()
+    with pytest.raises(ValueError, match="was not found"):
+        store.delete(session.id)
 
 
 def test_legacy_session_migrates_in_memory_without_rewriting() -> None:

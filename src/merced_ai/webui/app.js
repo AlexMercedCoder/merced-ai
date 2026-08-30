@@ -190,6 +190,7 @@ function renderConversation() {
   $("#message-list").innerHTML = session?.turns.map(messageTemplate).join("") || "";
   $("#export-session").disabled = !session;
   $("#rename-session").disabled = !session;
+  $("#delete-session").disabled = !session || Boolean(state.activeRun);
   $("#derive-group").disabled = !session || state.data.bots.length < 2;
   $("#message-input").disabled = !bot || Boolean(state.activeRun);
   $("#send-message").disabled = !bot || Boolean(state.activeRun);
@@ -280,9 +281,9 @@ function renderManagement() {
   $("#management-action").disabled = view === "harnesses" && state.harnessDetection.refreshing;
   $("#management-action").textContent = view === "profiles" ? "Create profile" : view === "bots" ? "Create bot" : state.harnessDetection.refreshing ? "Detecting…" : "Refresh detection";
   if (view === "profiles") {
-    $("#management-list").innerHTML = state.data.profiles.map((item) => `<article class="management-card"><div><span class="card-kicker">REVISION ${item.revision} · ${escapeHtml(item.source)}</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.description)}</p><div class="tag-row"><span>${escapeHtml(item.model?.provider || "harness model")}</span><span>${escapeHtml(item.model?.id || "default")}</span><span>edit: ${escapeHtml(item.permissions?.edit || "inherit")}</span><span>shell: ${escapeHtml(item.permissions?.shell || "inherit")}</span></div>${item.warnings?.length ? `<div class="profile-warnings" role="status"><strong>Profile adjustments</strong>${item.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}</div><button class="secondary-button edit-profile" data-profile="${escapeHtml(item.name)}" ${item.editable ? "" : "disabled"}>${item.editable ? "Edit" : "Read only"}</button></article>`).join("") || emptyState("No profiles", "Create an OAP profile before making a bot.");
+    $("#management-list").innerHTML = state.data.profiles.map((item) => `<article class="management-card"><div><span class="card-kicker">REVISION ${item.revision} · ${escapeHtml(item.source)}</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.description)}</p><div class="tag-row"><span>${escapeHtml(item.model?.provider || "harness model")}</span><span>${escapeHtml(item.model?.id || "default")}</span><span>edit: ${escapeHtml(item.permissions?.edit || "inherit")}</span><span>shell: ${escapeHtml(item.permissions?.shell || "inherit")}</span></div>${item.warnings?.length ? `<div class="profile-warnings" role="status"><strong>Profile adjustments</strong>${item.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}</div><div class="card-actions"><button class="secondary-button edit-profile" data-profile="${escapeHtml(item.name)}" ${item.editable ? "" : "disabled"}>${item.editable ? "Edit" : "Read only"}</button>${item.editable ? `<button class="secondary-button danger-button delete-profile" data-profile="${escapeHtml(item.name)}">Delete</button>` : ""}</div></article>`).join("") || emptyState("No profiles", "Create an OAP profile before making a bot.");
   } else if (view === "bots") {
-    $("#management-list").innerHTML = state.data.bots.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.source)} BINDING</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.profile)} → ${escapeHtml(titleCase(item.harness.preferred))}</p><div class="tag-row">${item.harness.fallbacks.map((value) => `<span>fallback: ${escapeHtml(value)}</span>`).join("") || "<span>No fallbacks</span>"}</div></div><button class="secondary-button use-bot" data-bot="${escapeHtml(item.name)}">Open</button></article>`).join("") || emptyState("No bots", "Create a profile, then bind it to an installed harness.");
+    $("#management-list").innerHTML = state.data.bots.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.source)} BINDING</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.profile)} → ${escapeHtml(titleCase(item.harness.preferred))}</p><div class="tag-row">${item.harness.fallbacks.map((value) => `<span>fallback: ${escapeHtml(value)}</span>`).join("") || "<span>No fallbacks</span>"}</div></div><div class="card-actions"><button class="secondary-button use-bot" data-bot="${escapeHtml(item.name)}">Open</button>${item.source === "project" ? `<button class="secondary-button edit-bot" data-bot="${escapeHtml(item.name)}">Edit</button><button class="secondary-button danger-button delete-bot" data-bot="${escapeHtml(item.name)}">Delete</button>` : ""}</div></article>`).join("") || emptyState("No bots", "Create a profile, then bind it to an installed harness.");
   } else {
     $("#management-list").innerHTML = state.data.harnesses.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.status === "detecting" ? "DETECTING…" : item.status)}</span><h2><span class="status-dot ${ready(item) ? "online" : ""} ${item.status === "detecting" ? "detecting" : ""}"></span> ${escapeHtml(titleCase(item.harness_id))}</h2><p>${escapeHtml(item.status === "detecting" ? "Checking executable and bounded version metadata…" : item.path || "Executable not found")}</p><div class="tag-row"><span>${escapeHtml(item.transport || "no transport")}</span><span>${item.capabilities.streaming ? "streaming" : "atomic"}</span><span>${item.capabilities.approvals ? "approvals" : "no approval bridge"}</span></div></div><small>${escapeHtml((item.version || (item.status === "detecting" ? "Previous result retained while checking" : "No version reported")).split("\n")[0])}</small></article>`).join("");
   }
@@ -581,11 +582,19 @@ function openEditor({ title, eyebrow, fields, submit }) {
 
 function profileFields(profile = {}) {
   const permissionOptions = [{ value: "", label: "Inherit harness policy" }, "ask", "allow", "deny"];
+  const providerOptions = [
+    { value: "", label: "Inherit harness provider" },
+    "openai", "anthropic", "google", "gemini", "ollama", "openrouter", "moonshot", "kimi",
+  ];
+  const knownModels = Array.from(new Set([
+    ...state.data.profiles.map((item) => item.model?.id).filter(Boolean),
+    "gpt-5.4", "claude-sonnet-4-6", "gemini-3.5-flash",
+  ]));
   return field("Profile name", "name", profile.name, { required: true, readonly: Boolean(profile.name) })
     + field("Description", "description", profile.description, { required: true })
     + field("Instructions", "instructions", profile.instructions, { textarea: true, rows: 8, required: true })
-    + field("Model provider", "model_provider", profile.model?.provider || "")
-    + field("Model ID", "model_id", profile.model?.id || "")
+    + field("Model provider", "model_provider", profile.model?.provider || "", { select: providerOptions })
+    + field("Model ID", "model_id", profile.model?.id || "", { placeholder: "Inherit harness model", select: knownModels })
     + field("Edit permission", "edit_permission", profile.permissions?.edit || "", { select: permissionOptions })
     + field("Shell permission", "shell_permission", profile.permissions?.shell || "", { select: permissionOptions });
 }
@@ -600,17 +609,17 @@ function openProfileEditor(profile = null) {
   });
 }
 
-function openBotEditor() {
+function openBotEditor(bot = null) {
   if (!state.data.profiles.length) { showView("profiles"); openProfileEditor(); return; }
   const harnesses = state.data.harnesses.filter(ready).map((item) => item.harness_id);
   openEditor({
-    title: "Create bot",
+    title: bot ? "Edit bot" : "Create bot",
     eyebrow: "BOT BINDING",
-    fields: field("Bot name", "name", "", { required: true })
-      + field("OAP profile", "profile", "", { required: true, placeholder: "Choose a profile", select: state.data.profiles.map((item) => item.name) })
-      + field("Preferred harness", "harness", "", { required: true, placeholder: "Choose a harness", select: harnesses })
-      + field("Fallback harnesses", "fallbacks", "", { placeholder: "Comma-separated, in priority order" }),
-    submit: async (values) => api("/api/bots", { method: "POST", body: JSON.stringify({ ...values, fallbacks: values.fallbacks.split(",").map((item) => item.trim()).filter(Boolean) }) }),
+    fields: field("Bot name", "name", bot?.name || "", { required: true, readonly: Boolean(bot) })
+      + field("OAP profile", "profile", bot?.profile || "", { required: true, placeholder: "Choose a profile", select: state.data.profiles.map((item) => item.name) })
+      + field("Preferred harness", "harness", bot?.harness?.preferred || "", { required: true, placeholder: "Choose a harness", select: harnesses })
+      + field("Fallback harnesses", "fallbacks", (bot?.harness?.fallbacks || []).join(", "), { placeholder: "Comma-separated, in priority order" }),
+    submit: async (values) => api(bot ? `/api/bots/${encodeURIComponent(bot.name)}` : "/api/bots", { method: bot ? "PUT" : "POST", body: JSON.stringify({ ...values, fallbacks: values.fallbacks.split(",").map((item) => item.trim()).filter(Boolean) }) }),
   });
 }
 
@@ -639,6 +648,12 @@ async function renameConversation() {
   if (!title?.trim()) return;
   try { await api(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "PUT", body: JSON.stringify({ title }) }); await refresh({ quiet: true }); toast("Conversation renamed"); } catch (error) { toast(error.message); }
 }
+async function deleteConversation() {
+  const session = currentSession();
+  if (!session || !window.confirm(`Delete “${session.title || "this conversation"}” and its transcript?`)) return;
+  try { await api(`/api/sessions/${encodeURIComponent(session.id)}`, { method: "DELETE" }); state.activeSession = ""; await refresh({ quiet: true }); toast("Conversation deleted"); }
+  catch (error) { toast(error.message); }
+}
 function openNavigation() { $("#sidebar").classList.add("open"); $("#sidebar-backdrop").hidden = false; $("#close-navigation").focus(); }
 function closeNavigation() { $("#sidebar").classList.remove("open"); $("#sidebar-backdrop").hidden = true; }
 
@@ -654,6 +669,7 @@ function bindEvents() {
   $("#new-group").addEventListener("click", () => openGroupEditor(false));
   $("#derive-group").addEventListener("click", () => openGroupEditor(true));
   $("#rename-session").addEventListener("click", renameConversation);
+  $("#delete-session").addEventListener("click", deleteConversation);
   $("#composer").addEventListener("submit", (event) => { event.preventDefault(); sendPrompt(); });
   $("#add-context").addEventListener("click", openContextPicker);
   $("#context-chips").addEventListener("click", (event) => {
@@ -713,7 +729,15 @@ function bindEvents() {
     else if (state.view === "bots") openBotEditor();
     else refreshHarnesses({ announce: true }).catch((error) => toast(error.message));
   });
-  $("#management-list").addEventListener("click", (event) => { const edit = event.target.closest(".edit-profile"); const use = event.target.closest(".use-bot"); if (edit) openProfileEditor(state.data.profiles.find((item) => item.name === edit.dataset.profile)); if (use) selectBot(use.dataset.bot); });
+  $("#management-list").addEventListener("click", async (event) => {
+    const editProfile = event.target.closest(".edit-profile"); const deleteProfile = event.target.closest(".delete-profile");
+    const use = event.target.closest(".use-bot"); const editBot = event.target.closest(".edit-bot"); const deleteBot = event.target.closest(".delete-bot");
+    if (editProfile) openProfileEditor(state.data.profiles.find((item) => item.name === editProfile.dataset.profile));
+    if (deleteProfile && window.confirm(`Delete profile “${deleteProfile.dataset.profile}”?`)) { try { await api(`/api/profiles/${encodeURIComponent(deleteProfile.dataset.profile)}`, { method: "DELETE" }); await refresh({ quiet: true }); renderManagement(); toast("Profile deleted"); } catch (error) { toast(error.message); } }
+    if (use) selectBot(use.dataset.bot);
+    if (editBot) openBotEditor(state.data.bots.find((item) => item.name === editBot.dataset.bot));
+    if (deleteBot && window.confirm(`Delete bot “${deleteBot.dataset.bot}”? Existing transcripts remain but cannot run with it.`)) { try { await api(`/api/bots/${encodeURIComponent(deleteBot.dataset.bot)}`, { method: "DELETE" }); await refresh({ quiet: true }); renderManagement(); toast("Bot deleted"); } catch (error) { toast(error.message); } }
+  });
   $("#harness-list").addEventListener("click", (event) => { const button = event.target.closest("[data-harness]"); if (button && !currentSession()?.turns.length) { state.harnessOverride = button.dataset.harness; render(); } });
   $("#export-session").addEventListener("click", () => { const session = currentSession(); if (session) location.href = `/api/sessions/${encodeURIComponent(session.id)}/export`; });
   $("#focus-route").addEventListener("click", () => $("#harness-select").focus());

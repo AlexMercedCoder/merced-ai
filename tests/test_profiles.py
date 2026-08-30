@@ -10,6 +10,7 @@ from merced_ai.profiles import (
     ProfileError,
     assemble_system_prompt,
     create_profile,
+    delete_profile,
     discover_profiles,
     update_profile,
     validate_profile,
@@ -41,6 +42,8 @@ def test_create_discover_and_assemble_profile(workspace: Path) -> None:
     assert "<open-agent-profile>" in prompt
     assert "Report defects" in prompt
     assert prompt.count("Instructions:") == 1
+    delete_profile("reviewer", workspace)
+    assert discover_profiles(workspace) == ()
 
 
 def test_reference_validator_rejects_literal_secret(workspace: Path) -> None:

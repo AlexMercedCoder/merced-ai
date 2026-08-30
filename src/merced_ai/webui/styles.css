@@ -339,3 +339,6 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
   from { opacity: .42; transform: scale(.82); }
   to { opacity: 1; transform: scale(1.08); }
 }
+.card-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.danger-button{border-color:var(--danger,#b96868)!important;color:var(--danger,#d88)!important}
+.danger-button:hover{background:color-mix(in srgb,var(--danger,#b96868) 14%,transparent)!important}

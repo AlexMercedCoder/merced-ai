@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Added confirmed conversation deletion and full create/edit/delete lifecycle controls for
+  project-local OAP profiles and bot bindings.
+- Replaced free-form profile provider/model fields with bounded provider and known-model choices,
+  while retaining explicit harness-default options.
+- Added API, storage, JavaScript syntax, and lifecycle regression coverage.
+
 ## 0.4.0 — 2026-08-29
 
 - Added a secure workspace-context picker and bounded browser uploads for text, binary, and image
