@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 import typer
+import yaml
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
@@ -26,9 +27,11 @@ from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import HarnessRunError
 from merced_ai.models import HarnessProbe, ProfileProjection, RunResult, SessionRecord
 from merced_ai.paths import ensure_project_layout, ensure_user_layout
+from merced_ai.profile_generation import generate_profile_proposal
 from merced_ai.profiles import (
     ProfileError,
     create_profile,
+    create_profile_document,
     discover_profiles,
     resolve_profile,
     validate_profile,
@@ -223,6 +226,37 @@ def profile_create(
 ) -> None:
     """Create a minimal valid project-local OAP profile."""
     record = _profile_action(lambda: create_profile(name, description, instructions, workspace))
+    console.print(f"Created [bold]{record.name}[/bold] at {record.path}")
+
+
+@profile_app.command("generate")
+def profile_generate(
+    prompt: Annotated[str, typer.Argument(help="Describe the specialist to create.")],
+    name: Annotated[str | None, typer.Option("--name")] = None,
+    harness: Annotated[str | None, typer.Option("--harness")] = None,
+    scope: Annotated[str, typer.Option("--scope")] = "project",
+    dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    yes: Annotated[bool, typer.Option("--yes")] = False,
+    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+) -> None:
+    """Generate and validate a portable OAP profile through an installed harness."""
+    proposal = _profile_action(
+        lambda: generate_profile_proposal(
+            prompt,
+            workspace,
+            preferred_name=name,
+            harness_id=harness,
+            autonomous=False,
+        )
+    )
+    document = proposal["document"]
+    console.print(Markdown(f"```yaml\n{yaml.safe_dump(document, sort_keys=False)}\n```"))
+    if dry_run:
+        return
+    if not yes and not typer.confirm("Save this validated profile?"):
+        console.print("Profile was not saved.")
+        return
+    record = _profile_action(lambda: create_profile_document(document, workspace, scope=scope))
     console.print(f"Created [bold]{record.name}[/bold] at {record.path}")
 
 

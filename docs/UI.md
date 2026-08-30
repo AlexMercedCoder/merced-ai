@@ -114,3 +114,16 @@ background refresh, polls progressive results, and announces detecting/completed
 completed snapshot is stored atomically in the user Merced directory; results older than five
 minutes are labeled as previous while revalidation runs. The inspector and Harnesses view both
 provide an explicit refresh control.
+
+Profile generation keeps its dialog open, disables duplicate submission, and displays an elapsed “Generating and validating profile” state until the native harness returns a validated OAP proposal. Merced AI deliberately does not duplicate graph editors or extension configuration: it dispatches to installed native harnesses, so AGS authoring and plugin/skill/MCP lifecycle management remain in MagAgent, Loro, or Mag Command Center. The Harnesses screen identifies the selected native runtime and its capabilities so users know where to configure those facilities.
+# Portable profile authoring
+
+Manual and generated profile dialogs can save to the current project's portable `.agents`
+directory, the universal `~/.agentprofiles` directory, or merced-ai's user profile directory.
+Long-running generation displays elapsed operational health and explains that the selected harness
+is authoring a bounded OAP draft before merced-ai validates it. This is lifecycle visibility, not
+private model reasoning.
+
+Merced AI remains a harness broker: provider credentials, provider discovery, image models, and
+Agentic Graph execution belong to the selected harness. Their absence from this Settings surface is
+an authority boundary, not an incomplete duplicate configuration system.

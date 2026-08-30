@@ -59,6 +59,7 @@ def validate_profile(path: Path, source: str = "portable") -> ProfileRecord:
 
 def discover_profiles(workspace: Path) -> tuple[ProfileRecord, ...]:
     roots = (
+        (Path("~/.agentprofiles").expanduser(), "user"),
         (ensure_user_layout() / "agents", "user"),
         (workspace.resolve() / ".agents", "project"),
         (workspace.resolve() / ".magent" / "agents", "project"),
@@ -112,13 +113,13 @@ def create_profile(
     model_id: str | None = None,
     edit_permission: str | None = None,
     shell_permission: str | None = None,
+    scope: str = "project",
 ) -> ProfileRecord:
     if not NAME_RE.fullmatch(name):
         raise ProfileError("profile name must match ^[a-z][a-z0-9-]{0,62}$")
     if not description.strip() or not instructions.strip():
         raise ProfileError("description and instructions must not be empty")
-    ensure_project_layout(workspace)
-    root = workspace.resolve() / ".agents"
+    root, source = _profile_root(workspace, scope)
     path = root / f"{name}.agent.yaml"
     if path.exists():
         raise ProfileError(f"profile file already exists: {path}")
@@ -140,7 +141,46 @@ def create_profile(
     if permissions:
         document["spec"]["permissions"] = permissions
     return _validated_atomic_write(
-        path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True), "project"
+        path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True), source
+    )
+
+
+def _profile_root(workspace: Path, scope: str) -> tuple[Path, str]:
+    if scope == "project":
+        ensure_project_layout(workspace)
+        return workspace.resolve() / ".agents", "project"
+    if scope == "universal":
+        return Path("~/.agentprofiles").expanduser().resolve(), "user"
+    if scope == "user":
+        return ensure_user_layout() / "agents", "user"
+    raise ProfileError("scope must be project, user, or universal")
+
+
+def _editable_profile_roots(workspace: Path) -> set[Path]:
+    return {
+        (workspace.resolve() / ".agents").resolve(),
+        Path("~/.agentprofiles").expanduser().resolve(),
+        (ensure_user_layout() / "agents").resolve(),
+    }
+
+
+def create_profile_document(
+    document: dict[str, Any],
+    workspace: Path,
+    *,
+    scope: str = "project",
+) -> ProfileRecord:
+    """Persist an already-authored canonical OAP document through the validation boundary."""
+    metadata = dict(document.get("metadata") or {})
+    name = str(metadata.get("name") or "")
+    if not NAME_RE.fullmatch(name):
+        raise ProfileError("profile name must match ^[a-z][a-z0-9-]{0,62}$")
+    root, source = _profile_root(workspace, scope)
+    path = root / f"{name}.agent.yaml"
+    if path.exists() or any(item.name == name for item in discover_profiles(workspace)):
+        raise ProfileError(f"profile {name!r} already exists")
+    return _validated_atomic_write(
+        path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True), source
     )
 
 
@@ -159,9 +199,9 @@ def update_profile(
     if not description.strip() or not instructions.strip():
         raise ProfileError("description and instructions must not be empty")
     record = resolve_profile(name, workspace)
-    project_root = (workspace.resolve() / ".agents").resolve()
-    if record.source != "project" or record.path.parent.resolve() != project_root:
-        raise ProfileError("only project-local .agents profiles can be edited")
+    owned_roots = _editable_profile_roots(workspace)
+    if record.path.parent.resolve() not in owned_roots:
+        raise ProfileError("this profile source is read-only")
     document = record.document.copy()
     metadata = dict(document["metadata"])
     metadata["description"] = description.strip()
@@ -188,16 +228,16 @@ def update_profile(
         spec.pop("permissions", None)
     document["spec"] = spec
     return _validated_atomic_write(
-        record.path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True), "project"
+        record.path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True), record.source
     )
 
 
 def delete_profile(name: str, workspace: Path) -> None:
     """Delete one project-local profile document."""
     record = resolve_profile(name, workspace)
-    project_root = (workspace.resolve() / ".agents").resolve()
-    if record.source != "project" or record.path.parent.resolve() != project_root:
-        raise ProfileError("only project-local .agents profiles can be deleted")
+    owned_roots = _editable_profile_roots(workspace)
+    if record.path.parent.resolve() not in owned_roots:
+        raise ProfileError("this profile source is read-only")
     record.path.unlink()
 
 
@@ -229,6 +269,16 @@ def assemble_system_prompt(profile: ProfileRecord) -> str:
                 "</agent-state>",
             )
         )
+    blocks.extend(
+        (
+            "<oap-profile-authoring>",
+            "When the user explicitly asks for a reusable profile, use the harness's governed "
+            "OAP profile-creation capability when available. If you independently decide a "
+            "subagent profile would help, create a reviewable proposal rather than activating "
+            "new authority. Never invent tools, skills, MCP servers, credentials, or state.",
+            "</oap-profile-authoring>",
+        )
+    )
     blocks.append("</open-agent-profile>")
     return "\n\n".join(blocks)
 

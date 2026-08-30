@@ -262,6 +262,11 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .dialog-fields .full-field { grid-column: 1 / -1; }
 .dialog-fields input, .dialog-fields select, .dialog-fields textarea { width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; background: #20201c; color: var(--text); font-size: 11px; text-transform: none; letter-spacing: normal; }
 .dialog-fields textarea { resize: vertical; line-height: 1.5; }
+.editor-progress { margin: 0 20px 16px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; display: flex; gap: 10px; align-items: center; background: var(--surface); }
+.editor-progress[hidden] { display: none; }
+.editor-progress p { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.operation-spinner { width: 16px; height: 16px; flex: 0 0 auto; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: editor-spin .8s linear infinite; }
+@keyframes editor-spin { to { transform: rotate(360deg); } }
 .dialog form > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); }
 .form-error { min-height: 17px; margin: 0; padding: 0 20px; color: #ffac88; font-size: 10px; }
 .approval-dialog { width: min(480px, calc(100vw - 28px)); }

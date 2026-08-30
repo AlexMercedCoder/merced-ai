@@ -278,6 +278,7 @@ function renderManagement() {
   if (!copy) return;
   [$("#management-eyebrow").textContent, $("#management-title").textContent, $("#management-copy").textContent] = copy;
   $("#management-action").hidden = false;
+  $("#generate-profile").hidden = view !== "profiles";
   $("#management-action").disabled = view === "harnesses" && state.harnessDetection.refreshing;
   $("#management-action").textContent = view === "profiles" ? "Create profile" : view === "bots" ? "Create bot" : state.harnessDetection.refreshing ? "Detecting…" : "Refresh detection";
   if (view === "profiles") {
@@ -559,15 +560,24 @@ function field(label, name, value = "", options = {}) {
   return `<label for="${id}">${label}<input id="${id}" name="${name}" value="${escapeHtml(value)}" ${options.required ? "required" : ""} ${options.readonly ? "readonly" : ""} /></label>`;
 }
 
-function openEditor({ title, eyebrow, fields, submit }) {
+function openEditor({ title, eyebrow, fields, submit, busyLabel = "Saving", progressCopy = "Applying the validated change." }) {
   $("#editor-title").textContent = title;
   $("#editor-eyebrow").textContent = eyebrow;
   $("#editor-fields").innerHTML = fields;
   $("#editor-error").textContent = "";
+  $("#editor-progress").hidden = true;
   $("#editor-form").onsubmit = async (event) => {
     event.preventDefault();
     const button = $("#editor-submit");
+    const originalLabel = button.textContent;
+    const started = Date.now();
     button.disabled = true;
+    event.currentTarget.setAttribute("aria-busy", "true");
+    $("#editor-progress").hidden = false;
+    $("#editor-progress-copy").textContent = progressCopy;
+    const updateProgress = () => { button.textContent = `${busyLabel}… ${Math.floor((Date.now() - started) / 1000)}s`; };
+    updateProgress();
+    const progressTimer = window.setInterval(updateProgress, 1000);
     try {
       await submit(Object.fromEntries(new FormData(event.currentTarget)));
       $("#editor-dialog").close();
@@ -575,7 +585,7 @@ function openEditor({ title, eyebrow, fields, submit }) {
       renderManagement();
       toast(`${title} saved`);
     } catch (error) { $("#editor-error").textContent = error.message; }
-    finally { button.disabled = false; }
+    finally { window.clearInterval(progressTimer); button.disabled = false; button.textContent = originalLabel; event.currentTarget.setAttribute("aria-busy", "false"); $("#editor-progress").hidden = true; }
   };
   $("#editor-dialog").showModal();
 }
@@ -596,7 +606,8 @@ function profileFields(profile = {}) {
     + field("Model provider", "model_provider", profile.model?.provider || "", { select: providerOptions })
     + field("Model ID", "model_id", profile.model?.id || "", { placeholder: "Inherit harness model", select: knownModels })
     + field("Edit permission", "edit_permission", profile.permissions?.edit || "", { select: permissionOptions })
-    + field("Shell permission", "shell_permission", profile.permissions?.shell || "", { select: permissionOptions });
+    + field("Shell permission", "shell_permission", profile.permissions?.shell || "", { select: permissionOptions })
+    + (!profile.name ? field("Save location", "scope", "project", { select: [{ value: "project", label: "Portable with this project · .agents" }, { value: "universal", label: "Universal across compatible harnesses · ~/.agentprofiles" }, { value: "user", label: "This merced-ai user" }] }) : "");
 }
 
 function profilePayload(values) { return { ...values, model_provider: values.model_provider || null, model_id: values.model_id || null, edit_permission: values.edit_permission || null, shell_permission: values.shell_permission || null }; }
@@ -606,6 +617,28 @@ function openProfileEditor(profile = null) {
     eyebrow: "OPEN AGENT PROFILE",
     fields: profileFields(profile || {}),
     submit: async (values) => api(profile ? `/api/profiles/${encodeURIComponent(profile.name)}` : "/api/profiles", { method: profile ? "PUT" : "POST", body: JSON.stringify(profilePayload(values)) }),
+  });
+}
+
+function openProfileGenerator() {
+  const harnesses = state.data.harnesses.filter(ready).map((item) => item.harness_id);
+  openEditor({
+    title: "Generate profile",
+    eyebrow: "OAP PROFILE AUTHOR",
+    busyLabel: "Generating and validating profile",
+    progressCopy: "The selected harness is authoring a bounded OAP draft and merced-ai will validate it before review. This reports lifecycle progress, not private model reasoning.",
+    fields: field("What should this specialist do?", "prompt", "", { textarea: true, rows: 8, required: true })
+      + field("Preferred name", "name", "")
+      + field("Generation harness", "harness", "", { placeholder: "Choose automatically", select: harnesses })
+      + field("Save location", "scope", "project", { select: [{ value: "project", label: "Portable with this project · .agents" }, { value: "universal", label: "Universal across compatible harnesses · ~/.agentprofiles" }, { value: "user", label: "This merced-ai user" }] }),
+    submit: async (values) => {
+      const response = await api("/api/profiles/generate", { method: "POST", body: JSON.stringify({ prompt: values.prompt, name: values.name || null, harness: values.harness || null }) });
+      const proposal = await response.json();
+      const document = proposal.document;
+      const approved = window.confirm(`Create @${document.metadata.name}?\n\n${document.metadata.description}\n\nInstructions:\n${document.spec.role.instructions}\nPermissions: ${JSON.stringify(document.spec.permissions || {})}`);
+      if (!approved) throw new Error("The validated draft was not saved. Adjust the prompt or generate it again when ready.");
+      return api("/api/profiles/document", { method: "POST", body: JSON.stringify({ document, scope: values.scope }) });
+    },
   });
 }
 
@@ -729,6 +762,7 @@ function bindEvents() {
     else if (state.view === "bots") openBotEditor();
     else refreshHarnesses({ announce: true }).catch((error) => toast(error.message));
   });
+  $("#generate-profile").addEventListener("click", openProfileGenerator);
   $("#management-list").addEventListener("click", async (event) => {
     const editProfile = event.target.closest(".edit-profile"); const deleteProfile = event.target.closest(".delete-profile");
     const use = event.target.closest(".use-bot"); const editBot = event.target.closest(".edit-bot"); const deleteBot = event.target.closest(".delete-bot");

@@ -99,6 +99,54 @@ spec:
     assert discovered[0].document["spec"]["role"]["instructions"] == "Project instructions.\n"
 
 
+def test_universal_profile_is_discovered_below_native_and_project_precedence(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "portable-home"))
+    universal = Path("~/.agentprofiles").expanduser()
+    universal.mkdir(parents=True)
+    (universal / "portable.agent.yaml").write_text(
+        """oap: '1.0'
+kind: AgentProfile
+metadata:
+  name: portable
+  description: Portable profile shared across harnesses.
+spec:
+  role:
+    instructions: Work portably.
+""",
+        encoding="utf-8",
+    )
+
+    record = next(item for item in discover_profiles(workspace) if item.name == "portable")
+    assert record.source == "user"
+    assert record.path.parent == universal.resolve()
+
+
+def test_ui_authored_universal_profile_can_be_updated_and_deleted(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path / "portable-home"))
+    created = create_profile(
+        "shared-reviewer",
+        "Reviews work across compatible harnesses.",
+        "Review carefully.",
+        workspace,
+        scope="universal",
+    )
+    assert created.path.parent == Path("~/.agentprofiles").expanduser().resolve()
+
+    updated = update_profile(
+        "shared-reviewer",
+        "Reviews work across compatible harnesses.",
+        "Review carefully and cite evidence.",
+        workspace,
+    )
+    assert updated.revision == 2
+    delete_profile("shared-reviewer", workspace)
+    assert not created.path.exists()
+
+
 def test_profile_editor_preserves_oap_fields_and_increments_revision(workspace: Path) -> None:
     created = create_profile(
         "builder",

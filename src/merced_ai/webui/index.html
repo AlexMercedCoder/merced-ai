@@ -102,7 +102,7 @@
         </section>
 
         <section id="management-view" class="view management-view" hidden>
-          <header class="management-header"><div><span class="eyebrow" id="management-eyebrow">WORKSPACE</span><h1 id="management-title">Workspace</h1><p id="management-copy"></p></div><button id="management-action" class="primary-button">Create</button></header>
+          <header class="management-header"><div><span class="eyebrow" id="management-eyebrow">WORKSPACE</span><h1 id="management-title">Workspace</h1><p id="management-copy"></p></div><div class="header-actions"><button id="generate-profile" class="secondary-button" hidden>✦ Generate profile</button><button id="management-action" class="primary-button">Create</button></div></header>
           <div id="management-list" class="management-list"></div>
         </section>
       </main>
@@ -145,6 +145,7 @@
       <form id="editor-form" method="dialog">
         <header><div><span class="eyebrow" id="editor-eyebrow">CREATE</span><h2 id="editor-title">Create</h2></div><button class="icon-button dialog-close" value="cancel" aria-label="Close">×</button></header>
         <div id="editor-fields" class="dialog-fields"></div>
+        <div id="editor-progress" class="editor-progress" role="status" aria-live="polite" hidden><span class="operation-spinner" aria-hidden="true"></span><div><strong>Operation in progress</strong><p id="editor-progress-copy"></p></div></div>
         <p id="editor-error" class="form-error" role="alert"></p>
         <footer><button class="secondary-button" value="cancel">Cancel</button><button id="editor-submit" class="primary-button" value="default">Save</button></footer>
       </form>

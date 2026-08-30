@@ -2,11 +2,17 @@
 
 ## Unreleased
 
+## 0.5.0 — 2026-08-30
+
 - Added confirmed conversation deletion and full create/edit/delete lifecycle controls for
   project-local OAP profiles and bot bindings.
 - Replaced free-form profile provider/model fields with bounded provider and known-model choices,
   while retaining explicit harness-default options.
 - Added API, storage, JavaScript syntax, and lifecycle regression coverage.
+- Added prompt-driven OAP profile proposals across the CLI, UI, and agent tool surface, with
+  universal `~/.agentprofiles` storage and review-first autonomous subagent behavior.
+- Improved portable-profile source labeling, generation progress, provider selection, and complete
+  profile/bot lifecycle documentation.
 
 ## 0.4.0 — 2026-08-29
 

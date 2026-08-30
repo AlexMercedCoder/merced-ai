@@ -59,6 +59,20 @@ merced-ai profile create reviewer \
   --instructions "Review code. Report verified defects and do not edit files."
 ```
 
+Or generate and review a canonical profile through an installed harness:
+
+```bash
+merced-ai profile generate "A cautious release reviewer that cites test evidence"
+merced-ai profile generate "A portable documentation specialist" --scope universal
+```
+
+The Profiles page exposes the same prompt-driven path. Generation runs a temporary author profile
+with tools and consequential permissions denied, compiles the result into OAP 1.0, and validates
+it before creation. `~/.agentprofiles` is the universal user root; Merced AI's native user root and
+project `.agents` directory take precedence. Native MagAgent and Loro sessions can also use the
+bundled `oap-profile-authoring` workflow to propose profiles for subagents without silently
+activating new authority.
+
 Bind it to a harness:
 
 ```bash
@@ -166,6 +180,7 @@ Project-local data:
 .agents/                    OAP profiles
 .merced-ai/bots/            bot bindings
 .merced-ai/sessions/        normalized conversation sessions
+~/.agentprofiles/           portable user profiles shared by compatible harnesses
 ```
 
 User-global data defaults to `~/.config/merced-ai` on Linux and follows the platform configuration

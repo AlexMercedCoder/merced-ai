@@ -28,9 +28,11 @@ from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import HarnessRunError
 from merced_ai.models import HarnessProbe, ProfileRecord, RunResult
 from merced_ai.paths import ensure_user_layout
+from merced_ai.profile_generation import generate_profile_proposal
 from merced_ai.profiles import (
     ProfileError,
     create_profile,
+    create_profile_document,
     delete_profile,
     discover_profiles,
     resolve_profile,
@@ -73,6 +75,7 @@ class ProfileInput(BaseModel):
     model_id: str | None = Field(default=None, max_length=200)
     edit_permission: str | None = None
     shell_permission: str | None = None
+    scope: str = "project"
 
 
 class ProfileUpdateInput(BaseModel):
@@ -82,6 +85,17 @@ class ProfileUpdateInput(BaseModel):
     model_id: str | None = Field(default=None, max_length=200)
     edit_permission: str | None = None
     shell_permission: str | None = None
+
+
+class ProfileGenerateInput(BaseModel):
+    prompt: str = Field(min_length=1, max_length=20_000)
+    name: str | None = Field(default=None, max_length=63)
+    harness: str | None = Field(default=None, max_length=60)
+
+
+class ProfileDocumentInput(BaseModel):
+    document: dict[str, Any]
+    scope: str = "project"
 
 
 class BotInput(BaseModel):
@@ -127,10 +141,19 @@ def _sse(event: str, payload: dict[str, Any]) -> str:
 
 def _profile_payload(record: ProfileRecord, workspace: Path) -> dict[str, Any]:
     payload = record.model_dump(mode="json", exclude={"document"})
-    payload["editable"] = (
-        record.source == "project"
-        and record.path.parent.resolve() == (workspace.resolve() / ".agents").resolve()
-    )
+    resolved_parent = record.path.parent.resolve()
+    user_root = ensure_user_layout() / "agents"
+    universal_root = Path("~/.agentprofiles").expanduser().resolve()
+    project_root = (workspace.resolve() / ".agents").resolve()
+    payload["editable"] = resolved_parent in {project_root, user_root.resolve(), universal_root}
+    if resolved_parent == project_root:
+        payload["source_scope"] = "portable"
+    elif resolved_parent == universal_root:
+        payload["source_scope"] = "universal"
+    else:
+        payload["source_scope"] = "user"
+    # The UI presents provenance, not the resolver's internal trust bucket.
+    payload["source"] = payload["source_scope"]
     payload["instructions"] = record.document["spec"]["role"]["instructions"]
     payload["model"] = record.document["spec"].get("model", {})
     payload["permissions"] = record.document["spec"].get("permissions", {})
@@ -418,7 +441,35 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                 model_id=payload.model_id,
                 edit_permission=payload.edit_permission,
                 shell_permission=payload.shell_permission,
+                scope=payload.scope,
             )
+        except ProfileError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return _profile_payload(record, workspace)
+
+    @app.post("/api/profiles/generate")
+    async def profile_generate(payload: ProfileGenerateInput, request: Request) -> dict[str, Any]:
+        authorize(request, mutation=True)
+        try:
+            return await asyncio.to_thread(
+                generate_profile_proposal,
+                payload.prompt,
+                workspace,
+                preferred_name=payload.name,
+                harness_id=payload.harness,
+                registry=registry,
+                autonomous=False,
+            )
+        except (ProfileError, KeyError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.post("/api/profiles/document", status_code=201)
+    async def profile_create_document(
+        payload: ProfileDocumentInput, request: Request
+    ) -> dict[str, Any]:
+        authorize(request, mutation=True)
+        try:
+            record = create_profile_document(payload.document, workspace, scope=payload.scope)
         except ProfileError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return _profile_payload(record, workspace)
