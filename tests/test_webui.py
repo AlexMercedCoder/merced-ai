@@ -268,7 +268,8 @@ async def test_webui_profile_bot_session_projection_and_export_workflow(
     assert exported.headers["content-type"].startswith("text/markdown")
     assert "# reviewer conversation" in exported.text
     assert missing_export.status_code == 404
-    assert bootstrap.json()["profiles"][0]["instructions"] == "Report verified defects only.\n"
+    profiles = {profile["name"]: profile for profile in bootstrap.json()["profiles"]}
+    assert profiles["reviewer"]["instructions"] == "Report verified defects only.\n"
     assert len(bootstrap.json()["harnesses"]) == 14
 
 
