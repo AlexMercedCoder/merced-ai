@@ -167,9 +167,19 @@
         <header><div><span class="eyebrow">ACTION REQUIRED</span><h2>Approve this harness run?</h2></div></header>
         <p id="approval-copy">This profile may allow workspace changes or shell commands.</p>
         <div id="approval-participants" class="approval-participants"></div>
-        <div class="warning-card"><strong>Harness-owned enforcement</strong><span>Merced AI forwards the request, but the selected harness makes the final permission decision.</span></div>
+        <div class="warning-card"><strong>Launch approval</strong><span>The selected harness still enforces its exact permissions. MagAgent and Loro runtime requests are relayed here through AAIS, so you can approve or deny them without visiting a terminal.</span></div>
         <footer><button value="cancel" class="secondary-button">Not now</button><button id="approve-run" value="approve" class="primary-button">Approve once</button></footer>
       </form>
+    </dialog>
+
+    <dialog id="aais-dialog" class="dialog approval-dialog">
+      <section>
+        <header><div><span class="eyebrow">AAIS PERMISSION REQUIRED</span><h2 id="aais-title">Review exact action</h2></div></header>
+        <p id="aais-risk"></p>
+        <pre id="aais-action"></pre>
+        <p><small id="aais-origin"></small></p>
+        <footer id="aais-choices"></footer>
+      </section>
     </dialog>
 
     <dialog id="group-dialog" class="dialog group-dialog">

@@ -2,6 +2,18 @@
 
 Merced AI ships a responsive, loopback-only collaboration UI as the optional `webui` extra.
 
+## Cross-Harness Runtime Approvals
+
+Merced AI presents [AAIS 1.0](https://github.com/alexmerced-oss/agent-approval-interchange-spec)
+requests emitted by MagAgent and Loro without taking ownership of their policy. The child harness
+creates the exact action; Merced AI displays its arguments, origin, risk, digest, and choices, then
+relays the decision through that child's dedicated standard-input channel. Pending requests are
+durably mirrored in `.merced-ai/aais-presenter.json`.
+
+The preflight dialog remains launch consent. Runtime permission is a separate exact-action decision.
+Adapters without AAIS continue using their native safe-mode behavior and never receive an automatic
+approval from Merced AI.
+
 ```bash
 python -m pip install 'merced-ai[webui]'
 merced-ai ui -C /path/to/workspace
@@ -50,6 +62,11 @@ merced-ai ui -C /path/to/workspace
 When a profile does not explicitly deny both editing and shell access, the UI requires a one-run
 confirmation before launching the harness. This is a Merced AI preflight, not a replacement for
 the harness's own approval and sandbox policy. The inspector labels that boundary explicitly.
+Subprocess adapters run without an attached terminal, so they cannot strand an invisible prompt:
+an action requiring authority that the adapter cannot carry is refused by the child harness. A
+native harness UI such as MagAgent or Loro can provide live browser decisions. Relaying a live
+approval through Merced AI requires a versioned, bidirectional approval transport from that harness;
+the current one-shot CLI adapter contract cannot safely infer or grant one.
 
 ## Local security model
 

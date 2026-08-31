@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import threading
 from pathlib import Path
 
 import pytest
+from aais import create_request, validate
 
 from merced_ai.harnesses.adapters.command import (
     CommandHarnessAdapter,
@@ -141,6 +143,66 @@ def test_command_adapter_normalizes_json_response(
     assert result.native_session_id == "native-1"
     assert observed["shell"] is False
     assert observed["stdin"] is not None
+
+
+def test_aais_child_request_is_decided_over_its_stdin(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    requested = create_request(
+        action={
+            "kind": "tool.call",
+            "name": "shell.exec",
+            "summary": "Check syntax",
+            "arguments": {"command": "node --check app.js"},
+        },
+        origin={"harness": "magagent", "session_id": "session-1"},
+        risk={"level": "medium", "reasons": ["Runs a local process"]},
+        choices=[
+            {"decision": "approve", "scope": "once", "label": "Allow once"},
+            {"decision": "deny", "scope": "once", "label": "Deny"},
+        ],
+        sequence=1,
+        stream="child",
+    )
+    executable = workspace / "magagent"
+    executable.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json, sys\n"
+        f"print({json.dumps(json.dumps(requested))}, flush=True)\n"
+        "decision = json.loads(sys.stdin.readline())\n"
+        "assert decision['type'] == 'approval.decided'\n"
+        "assert decision['decision']['request_id'] == "
+        f"{json.dumps(requested['request']['id'])}\n"
+        "print(json.dumps({'response': 'approved child completed'}), flush=True)\n",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+    observed: list[dict] = []
+
+    def approve(envelope: dict, _cancellation: threading.Event | None) -> dict:
+        observed.append(validate(envelope))
+        from aais import create_decision
+
+        return create_decision(
+            envelope,
+            decision="approve",
+            scope="once",
+            actor={
+                "id": "test-user",
+                "type": "human",
+                "authenticated_by": "test",
+            },
+            sequence=1,
+            stream="test-presenter",
+        )
+
+    result = _adapter("magagent").run_cancellable(_request("magagent", workspace), None, approve)
+
+    assert result.output == "approved child completed"
+    assert observed[0]["request"]["action_digest"] == requested["request"]["action_digest"]
 
 
 def test_command_adapter_contains_failure_output(

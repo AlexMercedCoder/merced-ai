@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field, model_validator
 
+from merced_ai.aais_presenter import AAISPresenter
 from merced_ai.application import (
     PreparedRun,
     RoutingError,
@@ -65,6 +66,13 @@ HARNESS_CACHE_MAX_AGE_SECONDS = 300
 
 class AuthInput(BaseModel):
     token: str
+
+
+class AAISDecisionInput(BaseModel):
+    request_id: str = Field(min_length=1, max_length=200)
+    decision: str = Field(pattern="^(approve|deny|cancel)$")
+    scope: str = Field(pattern="^(once|session|persistent)$")
+    decision_id: str | None = Field(default=None, max_length=200)
 
 
 class ProfileInput(BaseModel):
@@ -197,6 +205,8 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
     workspace = workspace.resolve()
     static_root = Path(__file__).resolve().parent / "webui"
     app = FastAPI(title="Merced AI", docs_url=None, redoc_url=None, openapi_url=None)
+    approval_presenter = AAISPresenter(workspace)
+    app.state.aais_presenter = approval_presenter
     app.mount("/assets", StaticFiles(directory=static_root), name="assets")
     cancellations: dict[str, threading.Event] = {}
     cancellation_lock = threading.Lock()
@@ -728,10 +738,17 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             async def run_one(prepared: PreparedRun) -> RunResult:
                 adapter = default_registry().get(prepared.request.harness_id)
                 if hasattr(adapter, "run_cancellable"):
+                    if prepared.request.harness_id not in {"magagent", "loro"}:
+                        return await asyncio.to_thread(
+                            adapter.run_cancellable,
+                            prepared.request,
+                            cancellation,
+                        )
                     return await asyncio.to_thread(
                         adapter.run_cancellable,
                         prepared.request,
                         cancellation,
+                        approval_presenter.present,
                     )
                 return await asyncio.to_thread(adapter.run, prepared.request)  # pragma: no cover
 
@@ -826,6 +843,26 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             raise HTTPException(status_code=404, detail="Active run not found")
         cancellation.set()
         return {"cancelled": True}
+
+    @app.get("/api/approvals/snapshot")
+    async def approval_snapshot(request: Request) -> dict[str, Any]:
+        authorize(request)
+        return approval_presenter.snapshot()
+
+    @app.post("/api/approvals/decisions")
+    async def approval_decision(payload: AAISDecisionInput, request: Request) -> dict[str, Any]:
+        authorize(request, mutation=True)
+        try:
+            decision = approval_presenter.decide(
+                payload.request_id,
+                payload.decision,
+                payload.scope,
+                actor_id="local-user",
+                decision_id=payload.decision_id,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return {"ok": True, "decision": decision}
 
     return app
 

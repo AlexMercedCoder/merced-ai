@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.1 — 2026-08-31
+
+- Added an AAIS 1.0 presenter for exact runtime approval requests emitted by MagAgent and Loro.
+- Added a durable global Web UI permission modal and bidirectional child-process transport while
+  preserving each child harness as the policy authority.
+- Kept non-AAIS adapters fail-closed under their native safety modes and retained separate launch
+  consent for profile-level preflight review.
+
 ## 0.5.0 — 2026-08-30
 
 - Added confirmed conversation deletion and full create/edit/delete lifecycle controls for

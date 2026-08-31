@@ -441,6 +441,36 @@ async function approval() {
   });
 }
 
+let visibleAAIS = "";
+async function pollAAIS() {
+  try {
+    const snapshot = await (await api("/api/approvals/snapshot")).json();
+    const pending = snapshot.snapshot?.pending || [];
+    const request = pending[0];
+    const dialog = $("#aais-dialog");
+    if (!request) {
+      visibleAAIS = "";
+      if (dialog.open) dialog.close();
+      return;
+    }
+    if (visibleAAIS === request.id && dialog.open) return;
+    visibleAAIS = request.id;
+    $("#aais-title").textContent = request.action.summary;
+    $("#aais-risk").textContent = `${request.risk.level.toUpperCase()} · ${request.risk.reasons.join(" · ")}`;
+    $("#aais-action").textContent = JSON.stringify({ name: request.action.name, resource: request.action.resource, working_directory: request.action.working_directory, arguments: request.action.arguments, digest: request.action_digest }, null, 2);
+    $("#aais-origin").textContent = `${request.origin.harness} · ${request.origin.project || "local project"}`;
+    $("#aais-choices").innerHTML = request.choices.map((choice) => `<button class="${choice.decision === "approve" ? "primary-button" : "secondary-button"}" data-decision="${escapeHtml(choice.decision)}" data-scope="${escapeHtml(choice.scope)}">${escapeHtml(choice.label)}</button>`).join("");
+    if (!dialog.open) dialog.showModal();
+  } catch { /* the active run stream remains usable during transient reconnects */ }
+}
+
+async function decideAAIS(requestId, decision, scope) {
+  await api("/api/approvals/decisions", { method: "POST", body: JSON.stringify({ request_id: requestId, decision, scope, decision_id: `dec_web_${crypto.randomUUID().replaceAll("-", "")}` }) });
+  visibleAAIS = "";
+  if ($("#aais-dialog").open) $("#aais-dialog").close();
+  await pollAAIS();
+}
+
 async function sendPrompt(approved = false) {
   const content = state.pendingPrompt || $("#message-input").value.trim();
   if (!content || state.activeRun) return;
@@ -691,6 +721,10 @@ function openNavigation() { $("#sidebar").classList.add("open"); $("#sidebar-bac
 function closeNavigation() { $("#sidebar").classList.remove("open"); $("#sidebar-backdrop").hidden = true; }
 
 function bindEvents() {
+  $("#aais-choices").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-decision]");
+    if (button && visibleAAIS) decideAAIS(visibleAAIS, button.dataset.decision, button.dataset.scope).catch((error) => toast(error.message));
+  });
   $$(".nav-item").forEach((button) => button.addEventListener("click", () => showView(button.dataset.view)));
   $("#bot-select").addEventListener("change", (event) => { if (event.target.value !== "__group__") selectBot(event.target.value); });
   $("#harness-select").addEventListener("change", async (event) => { state.harnessOverride = event.target.value; if (currentSession()) { state.activeSession = ""; await createConversation(); } else { render(); } });
@@ -801,6 +835,8 @@ async function boot() {
   bindEvents();
   await authenticate();
   await refresh();
+  window.setInterval(pollAAIS, 800);
+  await pollAAIS();
   refreshHarnesses().catch((error) => toast(`Harness detection: ${error.message}`));
 }
 
