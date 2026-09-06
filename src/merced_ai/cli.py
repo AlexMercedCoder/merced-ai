@@ -308,6 +308,13 @@ def bot_create(
     fallback: Annotated[list[str] | None, typer.Option("--fallback")] = None,
     workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
     user: Annotated[bool, typer.Option("--user", help="Create a user-global binding.")] = False,
+    requires_webmcp: Annotated[
+        bool,
+        typer.Option(
+            "--requires-webmcp/--no-requires-webmcp",
+            help="Route this bot only through harnesses with native WebMCP support.",
+        ),
+    ] = False,
 ) -> None:
     """Create a bot binding from an OAP profile and harness preference."""
     try:
@@ -317,7 +324,15 @@ def bot_create(
     except KeyError as exc:
         _fail(str(exc), 2)
     binding = _bot_action(
-        lambda: create_bot(name, profile, harness, tuple(fallback or ()), workspace, user=user)
+        lambda: create_bot(
+            name,
+            profile,
+            harness,
+            tuple(fallback or ()),
+            workspace,
+            user=user,
+            requires_webmcp=requires_webmcp,
+        )
     )
     console.print(f"Created [bold]{binding.name}[/bold] at {binding.path}")
 
@@ -629,7 +644,7 @@ def session_resume(
 
 def _render_probe_table(probes: tuple[HarnessProbe, ...]) -> None:
     table = Table(title="Merced AI harness inventory")
-    for column in ("Harness", "Status", "Version", "Transport", "Executable"):
+    for column in ("Harness", "Status", "Version", "Transport", "WebMCP", "Executable"):
         table.add_column(column)
     for probe in probes:
         table.add_row(
@@ -637,6 +652,7 @@ def _render_probe_table(probes: tuple[HarnessProbe, ...]) -> None:
             probe.status.value,
             probe.version or "-",
             probe.transport.value if probe.transport else "-",
+            "native" if probe.capabilities.webmcp else "-",
             str(probe.path) if probe.path else "-",
         )
     console.print(table)

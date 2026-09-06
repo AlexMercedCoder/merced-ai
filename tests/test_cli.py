@@ -61,6 +61,9 @@ def test_cli_profile_bot_and_dry_run(workspace: Path, monkeypatch: pytest.Monkey
             "reviewer",
             "--harness",
             "codex",
+            "--fallback",
+            "magagent",
+            "--requires-webmcp",
             "-C",
             str(workspace),
         ],
@@ -74,8 +77,9 @@ def test_cli_profile_bot_and_dry_run(workspace: Path, monkeypatch: pytest.Monkey
     assert dry_run.exit_code == 0, dry_run.output
     payload = json.loads(dry_run.output)
     assert payload["bot"]["name"] == "reviewer"
-    assert payload["projection"]["harness_id"] == "codex"
-    assert payload["projection"]["support_level"] == "degraded"
+    assert payload["projection"]["harness_id"] == "magagent"
+    assert payload["projection"]["support_level"] == "native"
+    assert payload["bot"]["harness"]["requires_webmcp"] is True
 
     for command in (
         ["status", "--json", "-C", str(workspace)],

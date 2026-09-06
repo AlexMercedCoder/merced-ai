@@ -23,6 +23,7 @@ def create_bot(
     workspace: Path,
     *,
     user: bool = False,
+    requires_webmcp: bool = False,
 ) -> BotBinding:
     if not NAME_RE.fullmatch(name):
         raise BotError("bot name must match ^[a-z][a-z0-9-]{0,62}$")
@@ -36,7 +37,9 @@ def create_bot(
     binding = BotBinding(
         name=name,
         profile=stored_profile,
-        harness=BotHarnessPreference(preferred=harness, fallbacks=fallbacks),
+        harness=BotHarnessPreference(
+            preferred=harness, fallbacks=fallbacks, requires_webmcp=requires_webmcp
+        ),
         workspace=str(workspace.resolve()),
         source=source,
         path=path,
@@ -50,6 +53,7 @@ def create_bot(
             "harness": {
                 "preferred": binding.harness.preferred,
                 "fallbacks": list(binding.harness.fallbacks),
+                "requiresWebMCP": binding.harness.requires_webmcp,
             },
             "workspace": binding.workspace,
             "session": {"resume": binding.session.resume},
@@ -65,6 +69,8 @@ def update_bot(
     harness: str,
     fallbacks: tuple[str, ...],
     workspace: Path,
+    *,
+    requires_webmcp: bool = False,
 ) -> BotBinding:
     current = resolve_bot(name, workspace)
     project_root = (ensure_project_layout(workspace) / "bots").resolve()
@@ -73,7 +79,14 @@ def update_bot(
     previous = current.path.read_text(encoding="utf-8")
     current.path.unlink()
     try:
-        return create_bot(name, profile, harness, fallbacks, workspace)
+        return create_bot(
+            name,
+            profile,
+            harness,
+            fallbacks,
+            workspace,
+            requires_webmcp=requires_webmcp,
+        )
     except Exception:
         _atomic_write(current.path, previous)
         raise
@@ -126,7 +139,9 @@ def _load_bot(path: Path, source: str) -> BotBinding:
             name=metadata["name"],
             profile=spec["profile"],
             harness=BotHarnessPreference(
-                preferred=harness["preferred"], fallbacks=tuple(harness.get("fallbacks", ()))
+                preferred=harness["preferred"],
+                fallbacks=tuple(harness.get("fallbacks", ())),
+                requires_webmcp=bool(harness.get("requiresWebMCP", False)),
             ),
             workspace=spec.get("workspace", "."),
             session=spec.get("session", {}),

@@ -17,13 +17,22 @@ def test_bot_binding_round_trip(workspace: Path) -> None:
         "Review code and report defects.",
         workspace,
     )
-    created = create_bot("reviewer", "reviewer", "codex", ("claude",), workspace)
+    created = create_bot(
+        "reviewer",
+        "reviewer",
+        "codex",
+        ("claude",),
+        workspace,
+        requires_webmcp=True,
+    )
 
     loaded = resolve_bot("reviewer", workspace)
 
     assert [item.name for item in discover_bots(workspace)] == ["reviewer"]
     assert loaded == created
     assert loaded.harness.fallbacks == ("claude",)
+    assert created.harness.requires_webmcp is True
+    assert loaded.harness.requires_webmcp is True
 
     updated = update_bot("reviewer", "reviewer", "loro", ("codex",), workspace)
     assert updated.harness.preferred == "loro"

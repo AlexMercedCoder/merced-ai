@@ -107,14 +107,14 @@ _BUILTIN_DESCRIPTORS = (
         name="Loro",
         executable_names=("loro",),
         transports=(TransportKind.NATIVE, TransportKind.STRUCTURED_SUBPROCESS),
-        capabilities=_RICH_SESSION.model_copy(update={"native_oap": True}),
+        capabilities=_RICH_SESSION.model_copy(update={"native_oap": True, "webmcp": True}),
     ),
     HarnessDescriptor(
         id="magagent",
         name="MagAgent",
         executable_names=("magent",),
         transports=(TransportKind.NATIVE, TransportKind.STRUCTURED_SUBPROCESS),
-        capabilities=_RICH_SESSION.model_copy(update={"native_oap": True}),
+        capabilities=_RICH_SESSION.model_copy(update={"native_oap": True, "webmcp": True}),
     ),
     HarnessDescriptor(
         id="anton",

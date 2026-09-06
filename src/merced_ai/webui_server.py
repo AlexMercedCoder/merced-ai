@@ -111,6 +111,7 @@ class BotInput(BaseModel):
     profile: str
     harness: str
     fallbacks: list[str] = Field(default_factory=list, max_length=14)
+    requires_webmcp: bool = False
 
 
 class SessionInput(BaseModel):
@@ -325,6 +326,18 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             "harnesses": detection.pop("harnesses"),
             "harness_detection": detection,
             "recent_runs": [item.model_dump(mode="json") for item in RunStore(workspace).list(20)],
+            "webmcp": {
+                "supported_harnesses": [
+                    item.id for item in descriptors if item.capabilities.webmcp
+                ],
+                "setup": {
+                    "magagent": "magent webmcp origins",
+                    "loro": "loro setup webmcp",
+                },
+                "note": (
+                    "WebMCP execution remains inside the selected harness and its approval policy."
+                ),
+            },
         }
 
     @app.get("/", response_class=HTMLResponse)
@@ -530,7 +543,12 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             for fallback in payload.fallbacks:
                 registry.get(fallback)
             binding = create_bot(
-                payload.name, payload.profile, payload.harness, tuple(payload.fallbacks), workspace
+                payload.name,
+                payload.profile,
+                payload.harness,
+                tuple(payload.fallbacks),
+                workspace,
+                requires_webmcp=payload.requires_webmcp,
             )
         except (BotError, ProfileError, KeyError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -551,6 +569,7 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                 payload.harness,
                 tuple(payload.fallbacks),
                 workspace,
+                requires_webmcp=payload.requires_webmcp,
             )
         except (BotError, ProfileError, KeyError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc

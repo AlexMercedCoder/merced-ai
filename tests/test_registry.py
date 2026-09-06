@@ -12,7 +12,8 @@ from merced_ai.models import HarnessDescriptor, HarnessStatus, TransportKind
 
 
 def test_default_registry_has_initial_harnesses() -> None:
-    ids = {descriptor.id for descriptor in default_registry().descriptors()}
+    descriptors = default_registry().descriptors()
+    ids = {descriptor.id for descriptor in descriptors}
     assert {
         "codex",
         "claude",
@@ -29,6 +30,8 @@ def test_default_registry_has_initial_harnesses() -> None:
         "openclaw",
         "kimi",
     } <= ids
+    webmcp = {item.id for item in descriptors if item.capabilities.webmcp}
+    assert webmcp == {"loro", "magagent"}
 
 
 def test_registry_rejects_duplicate_ids() -> None:

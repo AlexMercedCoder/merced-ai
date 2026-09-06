@@ -139,6 +139,9 @@ def _route_harness(
             continue
         probe = adapter.probe()
         if probe.path is not None and probe.status.value != "probe_failed":
+            if bot.harness.requires_webmcp and not probe.capabilities.webmcp:
+                failures.append(f"{harness_id}: WebMCP unsupported")
+                continue
             try:
                 adapter.project_profile(profile)
             except (NotImplementedError, ValueError):

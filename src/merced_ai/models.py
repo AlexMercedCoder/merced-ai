@@ -35,6 +35,7 @@ class HarnessCapabilities(BaseModel):
     attachments: bool = False
     model_listing: bool = False
     native_oap: bool = False
+    webmcp: bool = False
 
 
 class HarnessDescriptor(BaseModel):
@@ -89,6 +90,7 @@ class ProfileRecord(BaseModel):
 class BotHarnessPreference(BaseModel):
     preferred: str
     fallbacks: tuple[str, ...] = ()
+    requires_webmcp: bool = False
 
 
 class BotSessionPreference(BaseModel):

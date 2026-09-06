@@ -1,3 +1,3 @@
 """Merced AI: an OAP-native broker for existing agent harnesses."""
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"

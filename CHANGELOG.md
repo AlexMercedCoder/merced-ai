@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.6.0 — 2026-09-06
+
+- Added an explicit WebMCP capability to harness discovery and marked native MagAgent and Loro
+  adapters as eligible providers.
+- Added portable bot-level `requiresWebMCP` routing requirements across storage, CLI creation, the
+  Web API, and the bot-management UI.
+- Made routing fail over past installed but WebMCP-incapable harnesses instead of silently losing
+  the requested browser-native capability.
+- Exposed WebMCP readiness in CLI and Web UI inventories while keeping execution, credentials,
+  approval, and audit policy inside the selected child harness.
+- Added routing and persistence regression coverage plus an operational integration guide.
+
 ## 0.5.1 — 2026-08-31
 
 - Added an AAIS 1.0 presenter for exact runtime approval requests emitted by MagAgent and Loro.

@@ -1,5 +1,8 @@
 # Merced AI
 
+WebMCP-capable bots can be pinned to native MagAgent or Loro routes; see
+[WebMCP routing](docs/WEBMCP.md).
+
 Merced AI is a local-first broker for AI agent harnesses already installed on your machine. It
 discovers those harnesses, normalizes their noninteractive interfaces, and uses Open Agent Profile
 (OAP) documents to create portable bots you can chat and collaborate with.
