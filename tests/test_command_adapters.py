@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from merced_ai.harnesses.adapters.command import (
     HarnessRunError,
     _normalize_output,
     _stdin_payload,
+    _subprocess_env,
 )
 from merced_ai.models import HarnessDescriptor, RunRequest, TransportKind
 from merced_ai.profiles import create_profile
@@ -164,8 +166,8 @@ def test_aais_child_request_is_decided_over_its_stdin(
         sequence=1,
         stream="child",
     )
-    executable = workspace / "magagent"
-    executable.write_text(
+    child = workspace / "magagent_child.py"
+    child.write_text(
         "#!/usr/bin/env python3\n"
         "import json, sys\n"
         f"print({json.dumps(json.dumps(requested))}, flush=True)\n"
@@ -176,10 +178,8 @@ def test_aais_child_request_is_decided_over_its_stdin(
         "print(json.dumps({'response': 'approved child completed'}), flush=True)\n",
         encoding="utf-8",
     )
-    executable.chmod(0o755)
-    monkeypatch.setattr(
-        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
-    )
+    adapter = _adapter("magagent")
+    monkeypatch.setattr(adapter, "build_command", lambda _request: [sys.executable, str(child)])
     observed: list[dict] = []
 
     def approve(envelope: dict, _cancellation: threading.Event | None) -> dict:
@@ -199,10 +199,23 @@ def test_aais_child_request_is_decided_over_its_stdin(
             stream="test-presenter",
         )
 
-    result = _adapter("magagent").run_cancellable(_request("magagent", workspace), None, approve)
+    result = adapter.run_cancellable(_request("magagent", workspace), None, approve)
 
     assert result.output == "approved child completed"
     assert observed[0]["request"]["action_digest"] == requested["request"]["action_digest"]
+
+
+def test_child_environment_does_not_inherit_parent_coverage_hooks(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("COVERAGE_PROCESS_START", "pyproject.toml")
+    monkeypatch.setenv("COV_CORE_SOURCE", "merced_ai")
+    monkeypatch.setenv("COV_CORE_DATAFILE", ".coverage")
+
+    env = _subprocess_env("magagent", _request("magagent", workspace))
+
+    assert "COVERAGE_PROCESS_START" not in env
+    assert not any(key.startswith("COV_CORE_") for key in env)
 
 
 def test_command_adapter_contains_failure_output(

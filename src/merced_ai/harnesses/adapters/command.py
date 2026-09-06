@@ -587,6 +587,14 @@ def _stdin_payload(harness_id: str, request: RunRequest) -> str | None:
 
 def _subprocess_env(harness_id: str, request: RunRequest) -> dict[str, str]:
     env = os.environ.copy()
+    # pytest-cov enables subprocess coverage through inherited environment
+    # variables. A child harness is a separate product boundary, so allowing
+    # those variables through both contaminates this package's coverage data
+    # and changes the child's startup behavior.
+    env.pop("COVERAGE_PROCESS_START", None)
+    for key in tuple(env):
+        if key.startswith("COV_CORE_"):
+            env.pop(key, None)
     if harness_id == "openclaw":
         env["OPENCLAW_WORKSPACE_DIR"] = str(request.workspace)
     return env
