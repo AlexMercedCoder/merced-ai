@@ -1,6 +1,6 @@
 # merced-ai 0.7.0
 
-Release candidate preparation — September 12, 2026. Not published.
+Release notes — September 12, 2026.
 
 - Conversation appends are transactional, carry stable turn IDs, and preserve concurrent accepted responses. Stale full-record saves fail with an explicit conflict; deleted conversations cannot be silently recreated by stale clients.
 - The broker owns runs independently of HTTP streams, journals bounded replay events, supports reconnect by run ID and sequence, and marks abandoned owner records interrupted on startup.
