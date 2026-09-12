@@ -136,3 +136,15 @@ def test_profile_spec_change_blocks_dispatch_but_state_change_does_not(workspace
     prepared.profile = profile.model_copy(update={"spec_digest": "changed-authority"})
     with pytest.raises(RoutingError, match="changed"):
         prepare_group_turn(session, "Review", workspace)
+
+
+def test_child_does_not_inherit_test_coverage_settings(workspace, monkeypatch):
+    monkeypatch.setenv("COV_CORE_SOURCE", "unrelated-harness")
+    monkeypatch.setenv("COVERAGE_PROCESS_START", "/missing/coverage-config")
+    result = child(
+        workspace,
+        "import os; print([k for k in os.environ "
+        "if k.startswith('COV_CORE_') or k == 'COVERAGE_PROCESS_START'])",
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "[]"

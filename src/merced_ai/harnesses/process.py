@@ -84,6 +84,13 @@ def run_child(
     stdin_payload: str | None = None,
     control: Callable[[dict[str, Any], threading.Event], dict[str, Any] | None] | None = None,
 ) -> ChildResult:
+    # Every child is an external harness boundary, including capability probes.
+    # Do not let test instrumentation alter its startup or coverage database.
+    env = {
+        key: value
+        for key, value in env.items()
+        if key != "COVERAGE_PROCESS_START" and not key.startswith("COV_CORE_")
+    }
     stopped = threading.Event()
     error: list[Exception] = []
     out, err = Capture(limit), Capture(limit)
