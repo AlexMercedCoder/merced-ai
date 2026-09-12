@@ -5,15 +5,16 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from aais import create_decision, validate
 
 from merced_ai.harnesses.detection import locate_executable, probe_executable
+from merced_ai.harnesses.process import ChildProcessError, run_child
 from merced_ai.models import (
     HarnessDescriptor,
     HarnessProbe,
@@ -44,8 +45,8 @@ class CommandHarnessAdapter:
     def descriptor(self) -> HarnessDescriptor:
         return self._descriptor
 
-    def probe(self) -> HarnessProbe:
-        return probe_executable(self.descriptor)
+    def probe(self, workspace: Path | None = None) -> HarnessProbe:
+        return probe_executable(self.descriptor, workspace)
 
     def project_profile(self, profile: ProfileRecord) -> ProfileProjection:
         harness_id = self.descriptor.id
@@ -315,199 +316,78 @@ class CommandHarnessAdapter:
         approval_handler: (
             Callable[[dict[str, Any], threading.Event | None], dict[str, Any]] | None
         ) = None,
+        approval_event_handler: Callable[[dict[str, Any]], None] | None = None,
     ) -> RunResult:
         command = self.build_command(request)
-        if self.descriptor.id in {"magagent", "loro"}:
-            return self._run_aais(command, request, cancellation, approval_handler)
         started = time.monotonic()
-        process: subprocess.Popen[str] | None = None
-        try:
-            process = subprocess.Popen(  # noqa: S603 - argv is built by a trusted adapter
-                command,
-                cwd=request.workspace,
-                env=_subprocess_env(self.descriptor.id, request),
-                stdin=(subprocess.PIPE if self.descriptor.id == "anton" else subprocess.DEVNULL),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                shell=False,
-                text=True,
+
+        def control(value: dict[str, Any], stopped: threading.Event) -> dict[str, Any] | None:
+            envelope = validate(value)
+            if envelope["type"] != "approval.requested":
+                if approval_event_handler is not None:
+                    approval_event_handler(envelope)
+                return None
+            if approval_handler is not None:
+                return approval_handler(envelope, stopped)
+            return create_decision(
+                envelope,
+                decision="deny",
+                scope="once",
+                actor={
+                    "id": "merced-ai.no-presenter",
+                    "type": "policy",
+                    "authenticated_by": "adapter",
+                },
+                sequence=envelope["sequence"],
+                stream="merced-ai.presenter",
             )
-            stdin_payload = _stdin_payload(self.descriptor.id, request)
-            deadline = started + request.timeout_seconds
-            first_poll = True
-            while True:
-                if cancellation is not None and cancellation.is_set():
-                    _stop_process(process)
-                    raise HarnessRunError(
-                        f"Harness {self.descriptor.id!r} was cancelled.", exit_code=130
-                    )
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    _stop_process(process)
-                    raise HarnessRunError(
-                        f"Harness {self.descriptor.id!r} timed out after "
-                        f"{request.timeout_seconds}s.",
-                        exit_code=5,
-                    )
-                try:
-                    stdout, stderr = process.communicate(
-                        input=stdin_payload if first_poll else None,
-                        timeout=min(0.2, remaining),
-                    )
-                    break
-                except subprocess.TimeoutExpired:
-                    first_poll = False
-        except KeyboardInterrupt as exc:
-            if process is not None:
-                _stop_process(process)
+
+        try:
+            result = run_child(
+                command,
+                workspace=request.workspace,
+                env=_subprocess_env(self.descriptor.id, request),
+                timeout=request.timeout_seconds,
+                cancellation=cancellation,
+                limit=MAX_CAPTURE_CHARS,
+                stdin_payload=_stdin_payload(self.descriptor.id, request),
+                control=control if self.descriptor.id in {"magagent", "loro"} else None,
+            )
+        except ChildProcessError as exc:
             raise HarnessRunError(
-                f"Harness {self.descriptor.id!r} was cancelled.", exit_code=130
+                f"Harness {self.descriptor.id!r} {exc}.", exit_code=exc.exit_code
             ) from exc
         except OSError as exc:
             raise HarnessRunError(
                 f"Harness {self.descriptor.id!r} could not start: {type(exc).__name__}.",
                 exit_code=5,
             ) from exc
-
-        assert process is not None
-        stdout = stdout[:MAX_CAPTURE_CHARS]
-        stderr = stderr[:MAX_CAPTURE_CHARS]
-        if process.returncode != 0:
-            summary = _last_nonempty_line(stderr) or _last_nonempty_line(stdout) or "unknown error"
+        if result.returncode != 0:
+            summary = (
+                _last_nonempty_line(result.stderr)
+                or _last_nonempty_line(result.stdout)
+                or "unknown error"
+            )
             raise HarnessRunError(
                 f"Harness {self.descriptor.id!r} failed: {summary}",
-                exit_code=process.returncode,
-                stderr=stderr,
+                exit_code=result.returncode,
+                stderr=result.stderr,
             )
-        output, raw, native_session_id = _normalize_output(self.descriptor.id, stdout)
+        output, raw, native_session_id = _normalize_output(self.descriptor.id, result.stdout)
         embedded_error = _find_error(raw) if raw else None
         if not output and embedded_error:
             raise HarnessRunError(
                 f"Harness {self.descriptor.id!r} failed: {embedded_error}",
                 exit_code=1,
-                stderr=stderr,
+                stderr=result.stderr,
             )
+        if result.truncated:
+            raw = {**(raw or {}), "output_truncated": True}
+            output += "\n\n[Harness output was truncated at the broker capture limit.]"
         return RunResult(
             harness_id=self.descriptor.id,
             output=output,
-            exit_code=process.returncode,
-            raw=raw,
-            native_session_id=native_session_id,
-            duration_ms=round((time.monotonic() - started) * 1000),
-        )
-
-    def _run_aais(
-        self,
-        command: list[str],
-        request: RunRequest,
-        cancellation: threading.Event | None,
-        approval_handler: Callable[[dict[str, Any], threading.Event | None], dict[str, Any]] | None,
-    ) -> RunResult:
-        """Run an AAIS-aware child with independent read and write channels."""
-        started = time.monotonic()
-        try:
-            process = subprocess.Popen(  # noqa: S603 - trusted adapter argv
-                command,
-                cwd=request.workspace,
-                env=_subprocess_env(self.descriptor.id, request),
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                shell=False,
-                text=True,
-                bufsize=1,
-            )
-        except OSError as exc:
-            raise HarnessRunError(
-                f"Harness {self.descriptor.id!r} could not start: {type(exc).__name__}.",
-                exit_code=5,
-            ) from exc
-        stdout_lines: list[str] = []
-        stderr_lines: list[str] = []
-        io_lock = threading.Lock()
-        approval_cancelled = threading.Event()
-
-        def read_stdout() -> None:
-            assert process.stdout is not None
-            for line in process.stdout:
-                text = line.rstrip("\r\n")
-                try:
-                    value = json.loads(text)
-                except json.JSONDecodeError:
-                    value = None
-                if isinstance(value, dict) and value.get("type") == "approval.requested":
-                    requested = validate(value)
-                    try:
-                        if approval_handler is None:
-                            raise RuntimeError("no AAIS presenter is attached")
-                        decided = approval_handler(requested, approval_cancelled)
-                    except Exception as error:
-                        with io_lock:
-                            stderr_lines.append(f"AAIS presenter denied request: {error}")
-                        decided = create_decision(
-                            requested,
-                            decision="deny",
-                            scope="once",
-                            actor={
-                                "id": "merced-ai.no-presenter",
-                                "type": "policy",
-                                "authenticated_by": "adapter",
-                            },
-                            sequence=1,
-                            stream="merced-ai.presenter",
-                        )
-                    if process.stdin is not None:
-                        process.stdin.write(json.dumps(decided, separators=(",", ":")) + "\n")
-                        process.stdin.flush()
-                    continue
-                with io_lock:
-                    stdout_lines.append(text)
-
-        def read_stderr() -> None:
-            assert process.stderr is not None
-            for line in process.stderr:
-                with io_lock:
-                    stderr_lines.append(line.rstrip("\r\n"))
-
-        readers = [
-            threading.Thread(target=read_stdout, daemon=True, name="merced-ai-aais-out"),
-            threading.Thread(target=read_stderr, daemon=True, name="merced-ai-aais-err"),
-        ]
-        for reader in readers:
-            reader.start()
-        deadline = started + request.timeout_seconds
-        while process.poll() is None:
-            if cancellation is not None and cancellation.is_set():
-                approval_cancelled.set()
-                _stop_process(process)
-                raise HarnessRunError(
-                    f"Harness {self.descriptor.id!r} was cancelled.", exit_code=130
-                )
-            if time.monotonic() >= deadline:
-                approval_cancelled.set()
-                _stop_process(process)
-                raise HarnessRunError(
-                    f"Harness {self.descriptor.id!r} timed out after {request.timeout_seconds}s.",
-                    exit_code=5,
-                )
-            time.sleep(0.05)
-        approval_cancelled.set()
-        for reader in readers:
-            reader.join(timeout=2)
-        stdout = "\n".join(stdout_lines)[:MAX_CAPTURE_CHARS]
-        stderr = "\n".join(stderr_lines)[:MAX_CAPTURE_CHARS]
-        if process.returncode != 0:
-            summary = _last_nonempty_line(stderr) or _last_nonempty_line(stdout) or "unknown error"
-            raise HarnessRunError(
-                f"Harness {self.descriptor.id!r} failed: {summary}",
-                exit_code=process.returncode or 1,
-                stderr=stderr,
-            )
-        output, raw, native_session_id = _normalize_output(self.descriptor.id, stdout)
-        return RunResult(
-            harness_id=self.descriptor.id,
-            output=output,
-            exit_code=process.returncode,
+            exit_code=result.returncode,
             raw=raw,
             native_session_id=native_session_id,
             duration_ms=round((time.monotonic() - started) * 1000),
@@ -520,15 +400,6 @@ def _prefixed_prompt(system_prompt: str, prompt: str) -> str:
         "The surrounding harness instructions and permission policy remain authoritative.\n\n"
         f"User request:\n{prompt}"
     )
-
-
-def _stop_process(process: subprocess.Popen[str]) -> None:
-    process.terminate()
-    try:
-        process.wait(timeout=3)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
 
 
 def _normalize_output(

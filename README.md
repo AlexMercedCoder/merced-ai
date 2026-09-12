@@ -1,5 +1,7 @@
 # Merced AI
 
+Next release: [0.7.0 preparation notes](docs/RELEASE_NOTES_0.7.0.md).
+
 WebMCP-capable bots can be pinned to native MagAgent or Loro routes; see
 [WebMCP routing](docs/WEBMCP.md).
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
+from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -143,10 +144,14 @@ class RunResult(BaseModel):
 
 
 class ConversationTurn(BaseModel):
+    id: str = ""
     role: Literal["user", "assistant"]
     content: str
     bot_name: str | None = None
     harness_id: str | None = None
+    profile_revision: int | None = None
+    spec_digest: str | None = None
+    profile_digest: str | None = None
 
 
 class SessionParticipant(BaseModel):
@@ -162,6 +167,7 @@ class SessionParticipant(BaseModel):
 
 class SessionRecord(BaseModel):
     id: str
+    storage_revision: int = Field(default=0, ge=0)
     title: str | None = None
     derived_from: str | None = None
     bot_name: str
@@ -194,4 +200,7 @@ class SessionRecord(BaseModel):
             )
         if len(self.participants) > 1:
             self.kind = "group"
+        for index, turn in enumerate(self.turns):
+            if not turn.id:
+                turn.id = str(uuid5(NAMESPACE_URL, f"{self.id}:{index}:{turn.role}:{turn.content}"))
         return self

@@ -175,7 +175,7 @@ function messageTemplate(turn) {
   if (turn.role === "user") return `<article class="message user"><div class="message-body">${markdown(turn.content)}</div></article>`;
   const speaker = turn.bot_name ? titleCase(turn.bot_name) : "Assistant";
   const body = turn.pending ? '<p class="pending-response">Waiting for this collaborator…</p>' : markdown(turn.content);
-  return `<article class="message assistant" ${identityStyle(turn.bot_name)}><div class="message-avatar bot-identity" aria-label="${escapeHtml(speaker)}">${escapeHtml(initials(turn.bot_name))}</div><div class="message-body"><strong class="message-speaker">${escapeHtml(speaker)}</strong>${body}<div class="message-meta"><span>${escapeHtml(turn.harness_id || "Harness response")}</span><span>${turn.pending ? "In progress" : "Profile-pinned"}</span></div></div></article>`;
+  return `<article class="message assistant" ${identityStyle(turn.bot_name)}><div class="message-avatar bot-identity" aria-label="${escapeHtml(speaker)}">${escapeHtml(initials(turn.bot_name))}</div><div class="message-body"><strong class="message-speaker">${escapeHtml(speaker)}</strong>${body}<div class="message-meta"><span>${escapeHtml(turn.harness_id || "Harness response")}</span><span>${turn.pending ? "Waiting for completion" : turn.spec_digest ? "Profile verified" : "Saved response"}</span></div></div></article>`;
 }
 
 function renderConversation() {
@@ -286,7 +286,7 @@ function renderManagement() {
   } else if (view === "bots") {
     $("#management-list").innerHTML = state.data.bots.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.source)} BINDING</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.profile)} → ${escapeHtml(titleCase(item.harness.preferred))}</p><div class="tag-row">${item.harness.requires_webmcp ? "<span>requires WebMCP</span>" : ""}${item.harness.fallbacks.map((value) => `<span>fallback: ${escapeHtml(value)}</span>`).join("") || "<span>No fallbacks</span>"}</div></div><div class="card-actions"><button class="secondary-button use-bot" data-bot="${escapeHtml(item.name)}">Open</button>${item.source === "project" ? `<button class="secondary-button edit-bot" data-bot="${escapeHtml(item.name)}">Edit</button><button class="secondary-button danger-button delete-bot" data-bot="${escapeHtml(item.name)}">Delete</button>` : ""}</div></article>`).join("") || emptyState("No bots", "Create a profile, then bind it to an installed harness.");
   } else {
-    $("#management-list").innerHTML = state.data.harnesses.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.status === "detecting" ? "DETECTING…" : item.status)}</span><h2><span class="status-dot ${ready(item) ? "online" : ""} ${item.status === "detecting" ? "detecting" : ""}"></span> ${escapeHtml(titleCase(item.harness_id))}</h2><p>${escapeHtml(item.status === "detecting" ? "Checking executable and bounded version metadata…" : item.path || "Executable not found")}</p><div class="tag-row"><span>${escapeHtml(item.transport || "no transport")}</span><span>${item.capabilities.streaming ? "streaming" : "atomic"}</span><span>${item.capabilities.approvals ? "approvals" : "no approval bridge"}</span><span>${item.capabilities.webmcp ? "WebMCP native" : "no WebMCP"}</span></div></div><small>${escapeHtml((item.version || (item.status === "detecting" ? "Previous result retained while checking" : "No version reported")).split("\n")[0])}</small></article>`).join("");
+    $("#management-list").innerHTML = state.data.harnesses.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.status === "detecting" ? "DETECTING…" : item.status)}</span><h2><span class="status-dot ${ready(item) ? "online" : ""} ${item.status === "detecting" ? "detecting" : ""}"></span> ${escapeHtml(titleCase(item.harness_id))}</h2><p>${escapeHtml(item.status === "detecting" ? "Checking executable and bounded version metadata…" : item.path || "Executable not found")}</p><div class="tag-row"><span>${escapeHtml(item.transport || "no transport")}</span><span>${"response on completion"}</span><span>${item.capabilities.approvals ? "approvals" : "no approval bridge"}</span><span>${item.capabilities.webmcp && item.capabilities_verified ? "WebMCP prerequisites ready" : "WebMCP unverified or unavailable"}</span></div></div><small>${escapeHtml((item.version || (item.status === "detecting" ? "Previous result retained while checking" : "No version reported")).split("\n")[0])}</small></article>`).join("");
   }
 }
 
@@ -424,13 +424,14 @@ async function ensureSession() {
 }
 
 function parseSseBlock(block) {
-  let event = "message";
+  let event = "message", id = 0;
   const data = [];
   block.split("\n").forEach((line) => {
+    if (line.startsWith("id:")) id = Number(line.slice(3).trim());
     if (line.startsWith("event:")) event = line.slice(6).trim();
     if (line.startsWith("data:")) data.push(line.slice(5).trim());
   });
-  return { event, payload: data.length ? JSON.parse(data.join("\n")) : {} };
+  return { event, id, payload: data.length ? JSON.parse(data.join("\n")) : {} };
 }
 
 async function approval() {
@@ -466,9 +467,66 @@ async function pollAAIS() {
 
 async function decideAAIS(requestId, decision, scope) {
   await api("/api/approvals/decisions", { method: "POST", body: JSON.stringify({ request_id: requestId, decision, scope, decision_id: `dec_web_${crypto.randomUUID().replaceAll("-", "")}` }) });
+  toast("Decision sent. The harness will resolve the request.");
   visibleAAIS = "";
   if ($("#aais-dialog").open) $("#aais-dialog").close();
   await pollAAIS();
+}
+
+async function* receiveRunEvents(response) {
+  let after = 0, retries = 0, finished = false;
+  while (true) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        buffer += decoder.decode(value || new Uint8Array(), { stream: !done }).replaceAll("\r\n", "\n");
+        const blocks = buffer.split("\n\n");
+        buffer = blocks.pop() || "";
+        for (const block of blocks.filter(Boolean)) {
+          const item = parseSseBlock(block);
+          if (item.id && item.id <= after) continue;
+          after = item.id || after;
+          if (item.event === "run_finished") finished = true;
+          yield item;
+        }
+        if (done) break;
+      }
+      return;
+    } catch (error) {
+      if (!state.activeRun || finished || retries++ >= 3) throw error;
+      $("#composer-status").textContent = "Reconnecting to the running harness…";
+      await new Promise((resolve) => setTimeout(resolve, 500 * retries));
+    } finally { reader.releaseLock(); }
+    response = await api(`/api/runs/${encodeURIComponent(state.activeRun)}/events?after=${after}`);
+  }
+}
+
+async function restoreRun() {
+  const stored = sessionStorage.getItem("merced-ai-active-run");
+  if (!stored) return;
+  const saved = JSON.parse(stored);
+  state.activeRun = saved.runId;
+  state.activeSession = saved.sessionId;
+  $("#cancel-run").hidden = false;
+  setBusy(true, "Reconnected to the saved run. Waiting for completion…");
+  try {
+    const response = await api(`/api/runs/${encodeURIComponent(saved.runId)}/events`);
+    for await (const item of receiveRunEvents(response)) {
+      if (item.event === "run_finished") notifyRunFinished(item.payload);
+      if (["run_error", "participant_error"].includes(item.event)) addActivity("Harness", item.payload.message, true);
+      if (item.event === "assistant_message") await refresh({ quiet: true });
+    }
+    sessionStorage.removeItem("merced-ai-active-run");
+  } catch (error) { addActivity("Run recovery", `${error.message}. Inspect run history before starting again.`, true); }
+  finally {
+    state.activeRun = "";
+    $("#cancel-run").hidden = true;
+    setBusy(false);
+    await refresh({ quiet: true });
+  }
 }
 
 async function sendPrompt(approved = false) {
@@ -485,16 +543,7 @@ async function sendPrompt(approved = false) {
     const dispatch = state.pendingDispatch || (currentParticipants().length > 1 ? $("#dispatch-select").value : null);
     const context = state.selectedContext.map((item) => ({ path: item.path }));
     const response = await api(`/api/sessions/${encodeURIComponent(session.id)}/messages`, { method: "POST", body: JSON.stringify({ content, approved, dispatch, context }) });
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    while (true) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value || new Uint8Array(), { stream: !done }).replaceAll("\r\n", "\n");
-      const blocks = buffer.split("\n\n");
-      buffer = blocks.pop() || "";
-      for (const block of blocks.filter(Boolean)) {
-        const item = parseSseBlock(block);
+    for await (const item of receiveRunEvents(response)) {
         if (item.event === "approval_required") {
           setBusy(false, item.payload.authority);
           const approvalNames = (item.payload.participants || []).map((participant) => `${titleCase(participant.bot_name)} via ${titleCase(participant.harness_id)}`);
@@ -508,6 +557,7 @@ async function sendPrompt(approved = false) {
         }
         if (item.event === "run_started") {
           state.activeRun = item.payload.run_id;
+          sessionStorage.setItem("merced-ai-active-run", JSON.stringify({ runId: state.activeRun, sessionId: session.id }));
           session.turns.push({ role: "user", content });
           $("#message-input").value = "";
           state.selectedContext = [];
@@ -521,7 +571,7 @@ async function sendPrompt(approved = false) {
           renderConversation();
           scrollThread();
         } else if (item.event === "participant_started") {
-          updateParticipantStatus(item.payload.bot_name, "Running", item.payload.harness_id);
+          updateParticipantStatus(item.payload.bot_name, "Waiting for harness completion", item.payload.harness_id);
         } else if (item.event === "tool_event") {
           addActivity("Harness activity", summarizeEvent(item.payload.event));
         } else if (item.event === "assistant_message") {
@@ -541,11 +591,11 @@ async function sendPrompt(approved = false) {
           $("#composer-status").textContent = item.payload.message;
         } else if (item.event === "run_finished") {
           $("#composer-status").textContent = `${item.payload.completed} completed${item.payload.failed ? ` · ${item.payload.failed} failed` : ""} · ${(item.payload.duration_ms / 1000).toFixed(1)}s`;
+          sessionStorage.removeItem("merced-ai-active-run");
           notifyRunFinished(item.payload);
         }
       }
-      if (done) break;
-    }
+
   } catch (error) {
     addActivity("Connection error", error.message, true, true);
     $("#composer-status").textContent = error.message;
@@ -838,6 +888,7 @@ async function boot() {
   await refresh();
   window.setInterval(pollAAIS, 800);
   await pollAAIS();
+  void restoreRun();
   refreshHarnesses().catch((error) => toast(`Harness detection: ${error.message}`));
 }
 

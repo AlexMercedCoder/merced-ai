@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -122,29 +121,23 @@ def test_command_adapter_normalizes_json_response(
         "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
     )
 
-    class Process:
-        returncode = 0
+    from merced_ai.harnesses.process import ChildResult
 
-        def communicate(
-            self, input: str | None = None, timeout: int | None = None
-        ) -> tuple[str, str]:
-            return '{"result":"Reviewed successfully","session_id":"native-1"}', ""
+    observed = {}
 
-    observed: dict[str, object] = {}
-
-    def fake_popen(command: list[str], **kwargs: object) -> Process:
-        observed["command"] = command
+    def capture(command, **kwargs):
         observed.update(kwargs)
-        return Process()
+        observed["command"] = command
+        return ChildResult(
+            '{"result":"Reviewed successfully","session_id":"native-1"}', "", 0, False
+        )
 
-    monkeypatch.setattr("merced_ai.harnesses.adapters.command.subprocess.Popen", fake_popen)
-
+    monkeypatch.setattr("merced_ai.harnesses.adapters.command.run_child", capture)
     result = _adapter("claude").run(_request("claude", workspace))
-
     assert result.output == "Reviewed successfully"
     assert result.native_session_id == "native-1"
-    assert observed["shell"] is False
-    assert observed["stdin"] is not None
+    assert observed["workspace"] == workspace
+    assert observed["command"][0] == str(executable)
 
 
 def test_aais_child_request_is_decided_over_its_stdin(
@@ -227,17 +220,16 @@ def test_command_adapter_contains_failure_output(
         "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
     )
 
-    class Process:
-        returncode = 7
+    from merced_ai.harnesses.process import ChildResult
 
-        def communicate(
-            self, input: str | None = None, timeout: int | None = None
-        ) -> tuple[str, str]:
+    def capture(*args, **kwargs):
+        def output():
             return "", "authentication required\n"
 
-    monkeypatch.setattr(
-        "merced_ai.harnesses.adapters.command.subprocess.Popen", lambda *_args, **_kwargs: Process()
-    )
+        stdout, stderr = output()
+        return ChildResult(stdout, stderr, 7, False)
+
+    monkeypatch.setattr("merced_ai.harnesses.adapters.command.run_child", capture)
 
     with pytest.raises(HarnessRunError, match="authentication required") as error:
         _adapter("gemini").run(_request("gemini", workspace))
@@ -253,12 +245,10 @@ def test_command_adapter_rejects_embedded_jsonl_error(
         "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
     )
 
-    class Process:
-        returncode = 0
+    from merced_ai.harnesses.process import ChildResult
 
-        def communicate(
-            self, input: str | None = None, timeout: int | None = None
-        ) -> tuple[str, str]:
+    def capture(*args, **kwargs):
+        def output():
             return (
                 '{"type":"message_end","message":{"role":"user",'
                 '"content":[{"type":"text","text":"hello"}]}}\n'
@@ -267,9 +257,10 @@ def test_command_adapter_rejects_embedded_jsonl_error(
                 "",
             )
 
-    monkeypatch.setattr(
-        "merced_ai.harnesses.adapters.command.subprocess.Popen", lambda *_args, **_kwargs: Process()
-    )
+        stdout, stderr = output()
+        return ChildResult(stdout, stderr, 0, False)
+
+    monkeypatch.setattr("merced_ai.harnesses.adapters.command.run_child", capture)
 
     with pytest.raises(HarnessRunError, match="fetch failed"):
         _adapter("pi").run(_request("pi", workspace))
@@ -284,98 +275,36 @@ def test_command_adapter_extracts_last_assistant_jsonl_message(
         "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
     )
 
-    class Process:
-        returncode = 0
+    from merced_ai.harnesses.process import ChildResult
 
-        def communicate(
-            self, input: str | None = None, timeout: int | None = None
-        ) -> tuple[str, str]:
+    def capture(*args, **kwargs):
+        def output():
             return (
                 '{"message":{"role":"user","content":[{"text":"hello"}]}}\n'
                 '{"message":{"role":"assistant","content":[{"text":"done"}]}}',
                 "",
             )
 
-    monkeypatch.setattr(
-        "merced_ai.harnesses.adapters.command.subprocess.Popen", lambda *_args, **_kwargs: Process()
-    )
+        stdout, stderr = output()
+        return ChildResult(stdout, stderr, 0, False)
+
+    monkeypatch.setattr("merced_ai.harnesses.adapters.command.run_child", capture)
 
     assert _adapter("pi").run(_request("pi", workspace)).output == "done"
 
 
-def test_command_adapter_terminates_cancelled_child(
-    workspace: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    executable = workspace / "codex"
-    executable.touch()
+def test_command_adapter_honors_external_cancellation(workspace, monkeypatch):
+    adapter = _adapter("codex")
     monkeypatch.setattr(
-        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
-    )
-
-    class Process:
-        returncode = None
-        terminated = False
-
-        def communicate(
-            self, input: str | None = None, timeout: int | None = None
-        ) -> tuple[str, str]:
-            raise KeyboardInterrupt
-
-        def terminate(self) -> None:
-            self.terminated = True
-
-        def wait(self, timeout: int | None = None) -> int:
-            self.returncode = 130
-            return 130
-
-    process = Process()
-    monkeypatch.setattr(
-        "merced_ai.harnesses.adapters.command.subprocess.Popen", lambda *_args, **_kwargs: process
-    )
-
-    with pytest.raises(HarnessRunError, match="cancelled") as error:
-        _adapter("codex").run(_request("codex", workspace))
-    assert error.value.exit_code == 130
-    assert process.terminated is True
-
-
-def test_command_adapter_honors_external_cancellation(
-    workspace: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    executable = workspace / "codex"
-    executable.touch()
-    monkeypatch.setattr(
-        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
-    )
-
-    class Process:
-        returncode = None
-        terminated = False
-
-        def communicate(
-            self, input: str | None = None, timeout: float | None = None
-        ) -> tuple[str, str]:
-            raise subprocess.TimeoutExpired("codex", timeout or 0)
-
-        def terminate(self) -> None:
-            self.terminated = True
-
-        def wait(self, timeout: int | None = None) -> int:
-            self.returncode = 130
-            return 130
-
-    process = Process()
-    monkeypatch.setattr(
-        "merced_ai.harnesses.adapters.command.subprocess.Popen", lambda *_args, **_kwargs: process
+        adapter,
+        "build_command",
+        lambda request: [sys.executable, "-c", "import time; time.sleep(60)"],
     )
     cancellation = threading.Event()
     cancellation.set()
-
     with pytest.raises(HarnessRunError, match="cancelled") as error:
-        _adapter("codex").run_cancellable(_request("codex", workspace), cancellation)
-
+        adapter.run_cancellable(_request("codex", workspace), cancellation)
     assert error.value.exit_code == 130
-    assert process.terminated is True
 
 
 def test_projection_does_not_send_anthropic_model_to_codex(workspace: Path) -> None:
