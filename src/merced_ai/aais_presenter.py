@@ -100,13 +100,9 @@ class AAISPresenter:
 
     @staticmethod
     def _owner_alive(pid: int | None) -> bool:
-        if not pid:
-            return False
-        try:
-            os.kill(pid, 0)
-            return True
-        except (OSError, ValueError):
-            return False
+        from merced_ai.process_liveness import process_alive
+
+        return process_alive(pid)
 
     def record_event(self, envelope: dict[str, Any]) -> None:
         event = validate(envelope)

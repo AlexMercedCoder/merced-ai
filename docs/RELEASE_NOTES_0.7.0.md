@@ -13,3 +13,5 @@ Release notes — September 12, 2026.
 Existing conversation files load without a rewrite. Back up `.merced-ai` before upgrading; keep that backup for rollback to 0.6.0. A server restart marks abandoned work interrupted and never automatically repeats a possibly mutating action.
 
 AGS, OAP and AAIS document/wire formats remain unchanged. Local validation evidence and remaining platform gates are recorded in the ecosystem release report.
+
+Recovery ownership checks use a non-destructive Windows process query, with a regression test that verifies live child processes survive inspection.

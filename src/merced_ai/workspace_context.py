@@ -214,12 +214,10 @@ class RunStore:
         for record in self.list():
             if record.status != "running":
                 continue
-            try:
-                if record.owner_pid:
-                    os.kill(record.owner_pid, 0)
-                    continue
-            except OSError:
-                pass
+            from merced_ai.process_liveness import process_alive
+
+            if process_alive(record.owner_pid):
+                continue
             record.status = "interrupted"
             record.finished_at = datetime.now(UTC).isoformat()
             self.save(record)
