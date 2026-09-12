@@ -27,12 +27,13 @@ def test_cli_and_package_versions_match() -> None:
 def test_cli_profile_bot_and_dry_run(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "merced_ai.harnesses.adapters.command.CommandHarnessAdapter.probe",
-        lambda adapter: HarnessProbe(
+        lambda adapter, workspace=None: HarnessProbe(
             harness_id=adapter.descriptor.id,
             status=HarnessStatus.READY,
             path=Path(adapter.descriptor.executable_names[0]),
             transport=adapter.descriptor.transports[0],
             capabilities=adapter.descriptor.capabilities,
+            capabilities_verified=True,
         ),
     )
     created = runner.invoke(
@@ -148,12 +149,13 @@ def test_cli_group_ask_is_attributed_and_deterministic(
 ) -> None:
     monkeypatch.setattr(
         "merced_ai.harnesses.adapters.command.CommandHarnessAdapter.probe",
-        lambda adapter: HarnessProbe(
+        lambda adapter, workspace=None: HarnessProbe(
             harness_id=adapter.descriptor.id,
             status=HarnessStatus.READY,
             path=Path(adapter.descriptor.executable_names[0]),
             transport=adapter.descriptor.transports[0],
             capabilities=adapter.descriptor.capabilities,
+            capabilities_verified=True,
         ),
     )
     for name in ("reviewer", "tester"):

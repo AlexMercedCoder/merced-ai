@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.0 — Unreleased
+
+See [release notes](docs/RELEASE_NOTES_0.7.0.md).
+
 ## Unreleased
 
 ## 0.6.0 — 2026-09-06

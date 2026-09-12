@@ -140,6 +140,12 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
             expect(mobile.locator("#composer-status")).to_have_text("")
             mobile.locator(".message.assistant").last.scroll_into_view_if_needed()
             mobile.evaluate("document.activeElement?.blur()")
+            last_message = mobile.locator(".message.assistant").last.bounding_box()
+            composer = mobile.locator(".composer").bounding_box()
+            assert last_message and composer
+            assert last_message["y"] + last_message["height"] <= composer["y"], (
+                "Last reply is obscured by the composer"
+            )
             mobile.screenshot(
                 path=screenshot_root / "merced-ai-group-mobile.jpg",
                 type="jpeg",

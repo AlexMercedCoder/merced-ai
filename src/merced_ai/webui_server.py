@@ -8,6 +8,7 @@ import secrets
 import threading
 import time
 import webbrowser
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -39,6 +40,7 @@ from merced_ai.profiles import (
     resolve_profile,
     update_profile,
 )
+from merced_ai.run_supervisor import RunSupervisor
 from merced_ai.sessions import SessionStore
 from merced_ai.workspace_context import (
     ContextReference,
@@ -205,7 +207,18 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
 
     workspace = workspace.resolve()
     static_root = Path(__file__).resolve().parent / "webui"
-    app = FastAPI(title="Merced AI", docs_url=None, redoc_url=None, openapi_url=None)
+    supervisor = RunSupervisor(workspace)
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        RunStore(workspace).recover_interrupted()
+        yield
+        await supervisor.close()
+
+    app = FastAPI(
+        title="Merced AI", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan
+    )
+    app.state.run_supervisor = supervisor
     approval_presenter = AAISPresenter(workspace)
     app.state.aais_presenter = approval_presenter
     app.mount("/assets", StaticFiles(directory=static_root), name="assets")
@@ -768,6 +781,7 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                         prepared.request,
                         cancellation,
                         approval_presenter.present,
+                        approval_presenter.record_event,
                     )
                 return await asyncio.to_thread(adapter.run, prepared.request)  # pragma: no cover
 
@@ -777,9 +791,9 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                 asyncio.create_task(run_one(prepared)): (index, prepared)
                 for index, prepared in enumerate(prepared_runs)
             }
-            ordered_results: dict[int, tuple[PreparedRun, RunResult]] = {}
             completed = 0
             failed = 0
+            completed_loop = False
             try:
                 while tasks:
                     done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -804,7 +818,15 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                             yield _sse(error_event, {**identity, "message": str(exc)})
                             continue
                         completed += 1
-                        ordered_results[index] = (prepared, result)
+                        store.append(
+                            session,
+                            "assistant",
+                            result.output,
+                            bot_name=prepared.bot.name,
+                            harness_id=result.harness_id,
+                            profile=prepared.profile,
+                            turn_id=f"{run_id}:{index}",
+                        )
                         for native_event in _raw_events(result):
                             run_record.events.append(
                                 {
@@ -822,22 +844,20 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                                 "duration_ms": result.duration_ms,
                             },
                         )
+                completed_loop = True
             finally:
-                for task in tasks:
-                    task.cancel()
+                if tasks:
+                    cancellation.set()
+                    await asyncio.gather(*tasks, return_exceptions=True)
+                duration_ms = int((time.monotonic() - started) * 1000)
+                run_store.finish(run_record, completed, failed, duration_ms)
+                if not completed_loop:
+                    run_record.status = "interrupted"
+                elif cancellation.is_set():
+                    run_record.status = "cancelled"
+                run_store.save(run_record)
                 with cancellation_lock:
                     cancellations.pop(run_id, None)
-            for index in sorted(ordered_results):
-                prepared, result = ordered_results[index]
-                store.append(
-                    session,
-                    "assistant",
-                    result.output,
-                    bot_name=prepared.bot.name,
-                    harness_id=result.harness_id,
-                )
-            duration_ms = int((time.monotonic() - started) * 1000)
-            run_store.finish(run_record, completed, failed, duration_ms)
             yield _sse(
                 "run_finished",
                 {
@@ -849,9 +869,33 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                 },
             )
 
+        try:
+            supervisor.start(run_id, event_stream(), cancellation)
+        except ValueError as exc:
+            with cancellation_lock:
+                cancellations.pop(run_id, None)
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
         return StreamingResponse(
-            event_stream(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no"}
+            supervisor.stream(run_id),
+            media_type="text/event-stream",
+            headers={"X-Accel-Buffering": "no"},
         )
+
+    @app.get("/api/runs/{run_id}/events")
+    async def replay_run(run_id: str, request: Request, after: int = 0) -> StreamingResponse:
+        authorize(request)
+        try:
+            supervisor.snapshot(run_id)
+            if after < 0:
+                raise ValueError("Event cursor must be nonnegative")
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return StreamingResponse(supervisor.stream(run_id, after), media_type="text/event-stream")
+
+    @app.get("/api/approvals/recovery")
+    async def approval_recovery(request: Request) -> dict[str, Any]:
+        authorize(request)
+        return approval_presenter.recovery()
 
     @app.post("/api/runs/{run_id}/cancel")
     async def cancel_run(run_id: str, request: Request) -> dict[str, bool]:

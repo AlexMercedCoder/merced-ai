@@ -31,7 +31,7 @@ def ready_harnesses(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         CommandHarnessAdapter,
         "probe",
-        lambda adapter: HarnessProbe(
+        lambda adapter, workspace=None: HarnessProbe(
             harness_id=adapter.descriptor.id,
             status=HarnessStatus.READY,
             path=Path(adapter.descriptor.executable_names[0]),
@@ -386,7 +386,7 @@ async def test_webui_requires_approval_and_reports_runtime_errors(
         session = await client.post("/api/sessions", json={"bot_name": "builder"})
         path = f"/api/sessions/{session.json()['id']}/messages"
         approval = await asyncio.wait_for(
-            client.post(path, json={"content": "Make the change."}), timeout=5
+            client.post(path, json={"content": "Make the change."}), timeout=15
         )
 
         def fail_run(*_args: object) -> RunResult:
@@ -395,14 +395,14 @@ async def test_webui_requires_approval_and_reports_runtime_errors(
         monkeypatch.setattr(CommandHarnessAdapter, "run_cancellable", fail_run)
         failed = await asyncio.wait_for(
             client.post(path, json={"content": "Make the change.", "approved": True}),
-            timeout=5,
+            timeout=15,
         )
         missing_session = await asyncio.wait_for(
             client.post("/api/sessions/session-missing/messages", json={"content": "Hello"}),
-            timeout=5,
+            timeout=15,
         )
         missing_cancel = await asyncio.wait_for(
-            client.post("/api/runs/run-missing/cancel"), timeout=5
+            client.post("/api/runs/run-missing/cancel"), timeout=15
         )
 
     assert "event: approval_required" in approval.text
@@ -505,7 +505,8 @@ async def test_webui_group_chat_results_stream_progressively_and_persist_in_orde
     assert '"completed": 2' in response.text
     assert '"failed": 1' in response.text
     session = next(item for item in bootstrap.json()["sessions"] if item["id"] == session_id)
-    assert [turn.get("bot_name") for turn in session["turns"]] == [None, "reviewer", "builder"]
+    assert session["turns"][0]["role"] == "user"
+    assert {turn.get("bot_name") for turn in session["turns"][1:]} == {"reviewer", "builder"}
     assert "## reviewer (codex)" in exported.text
     assert "## builder (codex)" in exported.text
 

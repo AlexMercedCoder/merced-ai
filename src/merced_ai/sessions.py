@@ -15,6 +15,7 @@ from merced_ai.models import (
     SessionRecord,
 )
 from merced_ai.paths import ensure_project_layout
+from merced_ai.storage import atomic_write, file_lock
 
 
 class SessionStore:
@@ -70,14 +71,33 @@ class SessionStore:
         return session
 
     def save(self, session: SessionRecord) -> None:
+        path = self._path(session.id)
+        with file_lock(path):
+            if path.exists():
+                current = self.load(session.id)
+                if current.storage_revision != session.storage_revision:
+                    raise ValueError("Conversation changed in another client; reload before saving")
+            elif session.storage_revision:
+                raise ValueError("Conversation was deleted; it cannot be saved again")
+            self._write(session)
+
+    def _path(self, session_id: str) -> Path:
+        if not re.fullmatch(r"session-[A-Za-z0-9-]+", session_id):
+            raise ValueError("Invalid conversation identifier")
+        return self.root / f"{session_id}.json"
+
+    def _write(self, session: SessionRecord) -> None:
+        revision = session.storage_revision
         session.updated_at = datetime.now(UTC).isoformat()
-        path = self.root / f"{session.id}.json"
-        temporary = path.with_name(f".{path.name}.tmp")
-        temporary.write_text(session.model_dump_json(indent=2), encoding="utf-8")
-        temporary.replace(path)
+        session.storage_revision += 1
+        try:
+            atomic_write(self._path(session.id), session.model_dump_json(indent=2))
+        except BaseException:
+            session.storage_revision = revision
+            raise
 
     def load(self, session_id: str) -> SessionRecord:
-        path = self.root / f"{session_id}.json"
+        path = self._path(session_id)
         if not path.is_file():
             raise ValueError(f"session {session_id!r} was not found")
         return SessionRecord.model_validate_json(path.read_text(encoding="utf-8"))
@@ -97,18 +117,31 @@ class SessionStore:
         *,
         bot_name: str | None = None,
         harness_id: str | None = None,
+        turn_id: str | None = None,
+        profile: ProfileRecord | None = None,
     ) -> None:
-        if role == "user" and not session.title:
-            session.title = " ".join(content.split())[:80]
-        session.turns.append(  # type: ignore[arg-type]
-            ConversationTurn(
-                role=role,
-                content=content,
-                bot_name=bot_name,
-                harness_id=harness_id,
-            )
+        turn = ConversationTurn(
+            id=turn_id or str(uuid4()),
+            role=role,
+            content=content,
+            bot_name=bot_name,
+            harness_id=harness_id,
+            profile_revision=profile.revision if profile else None,
+            spec_digest=profile.spec_digest if profile else None,
+            profile_digest=profile.profile_digest if profile else None,
         )
-        self.save(session)
+        with file_lock(self._path(session.id)):
+            current = self.load(session.id)
+            prior = next((item for item in current.turns if item.id == turn.id), None)
+            if prior is not None and prior != turn:
+                raise ValueError("Turn identifier was already used for different content")
+            if prior is None:
+                if role == "user" and not current.title:
+                    current.title = " ".join(content.split())[:80]
+                current.turns.append(turn)
+                self._write(current)
+            for field in SessionRecord.model_fields:
+                setattr(session, field, getattr(current, field))
 
     def rename(self, session: SessionRecord, title: str) -> None:
         normalized = " ".join(title.split())
@@ -118,10 +151,11 @@ class SessionStore:
         self.save(session)
 
     def delete(self, session_id: str) -> None:
-        path = self.root / f"{session_id}.json"
-        if not path.is_file():
-            raise ValueError(f"session {session_id!r} was not found")
-        path.unlink()
+        path = self._path(session_id)
+        with file_lock(path):
+            if not path.is_file():
+                raise ValueError(f"session {session_id!r} was not found")
+            path.unlink()
 
 
 def transcript_prompt(

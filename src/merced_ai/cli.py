@@ -36,7 +36,7 @@ from merced_ai.profiles import (
     resolve_profile,
     validate_profile,
 )
-from merced_ai.sessions import SessionStore, transcript_prompt
+from merced_ai.sessions import SessionStore
 
 app = typer.Typer(
     name="merced-ai",
@@ -389,7 +389,7 @@ def ask(
         result = execute(prepared)
     except HarnessRunError as exc:
         _fail(str(exc), exc.exit_code if 0 < exc.exit_code < 126 else 5)
-    store.append(session, "assistant", result.output)
+    store.append(session, "assistant", result.output, profile=prepared.profile)
     if json_output:
         payload = result.model_dump(mode="json")
         payload["session_id"] = session.id
@@ -449,17 +449,19 @@ def _chat_loop(
             continue
         if prompt in {"/exit", "/quit"}:
             break
-        expanded = transcript_prompt(session, prompt)
-        prepared = prepare_run(
-            bot_name, expanded, workspace, harness_override=initial.request.harness_id
-        )
+        try:
+            session = store.load(session.id)
+            prepared = prepare_group_turn(session, prompt, workspace, dispatch=bot_name)[0]
+        except (ValueError, BotError, ProfileError, RoutingError) as exc:
+            console.print(f"[red]{exc}[/red]")
+            continue
         store.append(session, "user", prompt)
         try:
             result = execute(prepared)
         except HarnessRunError as exc:
             console.print(f"[red]{exc}[/red]")
             continue
-        store.append(session, "assistant", result.output)
+        store.append(session, "assistant", result.output, profile=prepared.profile)
         console.print(Markdown(result.output))
 
 
@@ -546,6 +548,7 @@ def _run_group_turn(
                     result.output,
                     bot_name=prepared.bot.name,
                     harness_id=result.harness_id,
+                    profile=prepared.profile,
                 )
                 results.append((prepared.bot.name, result))
             except Exception as exc:  # Keep healthy group participants useful on partial failure.

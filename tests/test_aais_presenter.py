@@ -60,3 +60,36 @@ def test_presenter_decision_is_idempotent_but_conflicts_are_rejected(tmp_path: P
     assert presenter.decide(request_id, "approve", "once") == first
     with pytest.raises(ConflictError):
         presenter.decide(request_id, "deny", "once")
+
+
+def test_second_presenter_restores_and_resolves_live_owner(tmp_path):
+    owner = AAISPresenter(tmp_path)
+    result = []
+    envelope = request()
+    worker = threading.Thread(target=lambda: result.append(owner.present(envelope)))
+    worker.start()
+    try:
+        for _ in range(100):
+            restored = AAISPresenter(tmp_path)
+            if restored.snapshot()["snapshot"]["pending"]:
+                break
+            worker.join(0.01)
+        first = restored.decide(envelope["request"]["id"], "approve", "once")
+        worker.join(2)
+        assert result == [first]
+        assert AAISPresenter(tmp_path).decide(envelope["request"]["id"], "approve", "once") == first
+    finally:
+        if worker.is_alive():
+            owner.decide(envelope["request"]["id"], "cancel", "once")
+            worker.join(2)
+
+
+def test_expired_request_is_cancelled_without_waiting_for_user(tmp_path):
+    envelope = request()
+    envelope["occurred_at"] = "2000-01-01T00:00:00Z"
+    envelope["request"]["created_at"] = "2000-01-01T00:00:00Z"
+    envelope["request"]["expires_at"] = "2000-01-01T00:00:01Z"
+    presenter = AAISPresenter(tmp_path)
+    decision = presenter.present(envelope)
+    assert decision["decision"]["decision"] == "cancel"
+    assert presenter.snapshot()["snapshot"]["pending"] == []

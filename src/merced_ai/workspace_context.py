@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import mimetypes
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from merced_ai.paths import ensure_project_layout
+from merced_ai.storage import atomic_write
 
 MAX_CONTEXT_FILE_BYTES = 256_000
 MAX_CONTEXT_TOTAL_BYTES = 750_000
@@ -43,6 +45,7 @@ class RunRecord(BaseModel):
     completed: int = 0
     failed: int = 0
     duration_ms: int = 0
+    owner_pid: int | None = None
 
 
 def _safe_relative(workspace: Path, value: str) -> tuple[Path, str]:
@@ -165,9 +168,7 @@ class RunStore:
 
     def save(self, record: RunRecord) -> None:
         path = self.root / f"{record.id}.json"
-        temporary = path.with_name(f".{path.name}.tmp")
-        temporary.write_text(record.model_dump_json(indent=2), encoding="utf-8")
-        temporary.replace(path)
+        atomic_write(path, record.model_dump_json(indent=2))
 
     def start(
         self,
@@ -185,6 +186,7 @@ class RunStore:
             participants=participants,
             context=context,
             started_at=datetime.now(UTC).isoformat(),
+            owner_pid=os.getpid(),
         )
         self.save(record)
         return record
@@ -207,3 +209,17 @@ class RunStore:
             except (OSError, ValueError):
                 continue
         return sorted(records, key=lambda item: item.started_at, reverse=True)[:limit]
+
+    def recover_interrupted(self) -> None:
+        for record in self.list():
+            if record.status != "running":
+                continue
+            try:
+                if record.owner_pid:
+                    os.kill(record.owner_pid, 0)
+                    continue
+            except OSError:
+                pass
+            record.status = "interrupted"
+            record.finished_at = datetime.now(UTC).isoformat()
+            self.save(record)

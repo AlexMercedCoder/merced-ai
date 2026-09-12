@@ -49,7 +49,7 @@ def prepare_run(
     registry = registry or default_registry()
     bot = resolve_bot(bot_name, workspace)
     profile = resolve_profile(bot.profile, workspace)
-    harness_id = _route_harness(bot, profile, registry, harness_override)
+    harness_id = _route_harness(bot, profile, registry, harness_override, workspace)
     adapter = registry.get(harness_id)
     projection = adapter.project_profile(profile)
     request = RunRequest(
@@ -109,16 +109,22 @@ def prepare_group_turn(
     """Prepare isolated prompts for the selected group participants."""
     registry = registry or default_registry()
     selected = select_participants(session, prompt, dispatch=dispatch)
-    return tuple(
-        prepare_run(
+    prepared = []
+    for item in selected:
+        run = prepare_run(
             item.bot_name,
             transcript_prompt(session, prompt, recipient=item.bot_name),
             workspace,
             harness_override=item.harness_id,
             registry=registry,
         )
-        for item in selected
-    )
+        if run.profile.spec_digest != item.spec_digest or run.profile.name != item.profile_name:
+            raise RoutingError(
+                f"Profile {item.profile_name!r} changed since this conversation was pinned. "
+                "Review the updated profile and start or derive a new conversation to use it."
+            )
+        prepared.append(run)
+    return tuple(prepared)
 
 
 def _route_harness(
@@ -126,6 +132,7 @@ def _route_harness(
     profile: ProfileRecord,
     registry: HarnessRegistry,
     override: str | None,
+    workspace: Path,
 ) -> str:
     candidates = (override,) if override else (bot.harness.preferred, *bot.harness.fallbacks)
     failures: list[str] = []
@@ -137,10 +144,18 @@ def _route_harness(
         except KeyError:
             failures.append(f"{harness_id}: unknown")
             continue
-        probe = adapter.probe()
+        from merced_ai.harnesses.adapters.command import CommandHarnessAdapter
+
+        probe = (
+            adapter.probe(workspace=workspace)
+            if isinstance(adapter, CommandHarnessAdapter)
+            else adapter.probe()
+        )
         if probe.path is not None and probe.status.value != "probe_failed":
-            if bot.harness.requires_webmcp and not probe.capabilities.webmcp:
-                failures.append(f"{harness_id}: WebMCP unsupported")
+            if bot.harness.requires_webmcp and not (
+                probe.capabilities.webmcp and probe.capabilities_verified
+            ):
+                failures.append(f"{harness_id}: WebMCP unsupported or readiness unverified")
                 continue
             try:
                 adapter.project_profile(profile)

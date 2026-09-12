@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -77,7 +78,7 @@ def _fallback_bin_dirs(executable_name: str) -> tuple[Path, ...]:
     return tuple(dict.fromkeys(candidates))
 
 
-def probe_executable(descriptor: HarnessDescriptor) -> HarnessProbe:
+def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = None) -> HarnessProbe:
     started = time.monotonic()
     executable = locate_executable(descriptor)
     if executable is None:
@@ -122,14 +123,53 @@ def probe_executable(descriptor: HarnessDescriptor) -> HarnessProbe:
             duration_ms=_elapsed_ms(started),
         )
 
+    capabilities = descriptor.capabilities
+    verified = False
+    warnings = ["Authentication and protocol readiness have not been checked yet."]
+    if descriptor.id in {"loro", "magagent"}:
+        capabilities = capabilities.model_copy(update={"webmcp": False})
+        try:
+            from merced_ai.harnesses.process import run_child
+
+            result = run_child(
+                [str(executable), "capabilities", "--json"],
+                workspace=workspace or Path.cwd(),
+                env=dict(os.environ),
+                timeout=5,
+                cancellation=None,
+                limit=32_000,
+            )
+            report = json.loads(result.stdout)
+            if not isinstance(report, dict):
+                raise ValueError("Invalid capability report")
+            verified = (
+                result.returncode == 0
+                and not result.truncated
+                and report.get("schema") == "agent-runtime.capabilities.v1"
+                and report.get("harness") == descriptor.id
+            )
+            if verified:
+                capabilities = capabilities.model_copy(
+                    update={
+                        "webmcp": report.get("supported", {}).get("webmcp") is True
+                        and report.get("ready", {}).get("webmcp") is True
+                    }
+                )
+                warnings.extend(report.get("webmcp", {}).get("reasons", []))
+        except (OSError, ValueError, RuntimeError, TypeError, AttributeError):
+            pass
+        if not verified:
+            warnings.append("Installed harness did not negotiate capability readiness; upgrade it.")
+
     return HarnessProbe(
         harness_id=descriptor.id,
         status=HarnessStatus.INSTALLED,
         path=executable,
         version=output,
         transport=descriptor.transports[0] if descriptor.transports else None,
-        capabilities=descriptor.capabilities,
-        warnings=("Authentication and protocol readiness have not been checked yet.",),
+        capabilities=capabilities,
+        capabilities_verified=verified,
+        warnings=tuple(warnings),
         duration_ms=_elapsed_ms(started),
     )
 
