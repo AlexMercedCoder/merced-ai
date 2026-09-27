@@ -197,8 +197,10 @@ function renderRecents() {
 function messageTemplate(turn) {
   if (turn.role === "user") return `<article class="message user"><div class="message-body">${markdown(turn.content)}</div></article>`;
   const speaker = turn.bot_name ? titleCase(turn.bot_name) : "Assistant";
-  const body = turn.pending ? '<p class="pending-response">Waiting for this collaborator…</p>' : markdown(turn.content);
-  return `<article class="message assistant" ${identityStyle(turn.bot_name)}><div class="message-avatar bot-identity" aria-label="${escapeHtml(speaker)}">${escapeHtml(initials(turn.bot_name))}</div><div class="message-body"><strong class="message-speaker">${escapeHtml(speaker)}</strong>${body}<div class="message-meta"><span>${escapeHtml(turn.harness_id || "Harness response")}</span><span>${turn.pending ? "Waiting for completion" : turn.spec_digest ? "Profile verified" : "Saved response"}</span></div></div></article>`;
+  const body = turn.pending
+    ? (turn.content ? `${markdown(turn.content)}<p class="streaming-indicator" aria-hidden="true">Streaming…</p>` : '<p class="pending-response">Waiting for this collaborator…</p>')
+    : markdown(turn.content);
+  return `<article class="message assistant" ${identityStyle(turn.bot_name)}><div class="message-avatar bot-identity" aria-label="${escapeHtml(speaker)}">${escapeHtml(initials(turn.bot_name))}</div><div class="message-body"><strong class="message-speaker">${escapeHtml(speaker)}</strong>${body}<div class="message-meta"><span>${escapeHtml(turn.harness_id || "Harness response")}</span><span>${turn.pending ? (turn.content ? "Streaming" : "Waiting for completion") : turn.spec_digest ? "Profile verified" : "Saved response"}</span></div></div></article>`;
 }
 
 // Group rooms serialize write-capable bots that share this workspace unless the user opts out.
@@ -366,8 +368,9 @@ function harnessCard(item) {
   const detecting = item.status === "detecting";
   const version = (item.status === "probe_failed" ? "" : item.version) || (detecting ? "Previous result retained while checking" : "No version reported");
   const unused = unusedHarnessFeatures(item);
-  const delivery = { stdin: "Prompt via stdin", file: "Prompt via private file", argv: "Prompt as argument (size-limited)" }[item.prompt_delivery];
-  const tags = [...brokerCapabilityLabels(item), "Reply on completion", ...(delivery ? [delivery] : [])].map((label) => `<span>${escapeHtml(label)}</span>`).join("");
+  const acp = item.transport === "acp_stdio";
+  const delivery = acp ? "Agent Client Protocol session" : { stdin: "Prompt via stdin", file: "Prompt via private file", argv: "Prompt as argument (size-limited)" }[item.prompt_delivery];
+  const tags = [...brokerCapabilityLabels(item), ...(acp ? [] : ["Reply on completion"]), ...(delivery ? [delivery] : [])].map((label) => `<span>${escapeHtml(label)}</span>`).join("");
   return `<article class="management-card"><div><span class="card-kicker">${escapeHtml(detecting ? "DETECTING…" : item.status.replaceAll("_", " "))}</span><h2><span class="status-dot ${ready(item) ? "online" : ""} ${detecting ? "detecting" : ""}"></span> ${escapeHtml(titleCase(item.harness_id))}</h2><p>${escapeHtml(detecting ? "Checking executable and bounded version metadata…" : item.path || "Executable not found")}</p><p class="tag-caption">Merced AI provides</p><div class="tag-row" aria-label="Capabilities Merced AI provides">${tags}</div>${unused.length ? `<p class="unused-features">Harness also offers ${escapeHtml(unused.join(", "))}; Merced AI does not use these yet.</p>` : ""}</div><small>${escapeHtml(version.split("\n")[0])}</small></article>`;
 }
 
@@ -652,6 +655,20 @@ async function sendPrompt(approved = false) {
           $("#composer-status").textContent = `Running ${routes.length} collaborator${routes.length === 1 ? "" : "s"}…`;
           renderConversation();
           scrollThread();
+        } else if (item.event === "assistant_delta") {
+          const streamingTurn = session.turns.find((turn) => turn.pending && turn.bot_name === item.payload.bot_name);
+          if (streamingTurn) {
+            streamingTurn.content = (streamingTurn.content || "") + item.payload.text;
+            scheduleStreamRender();
+          }
+          updateParticipantStatus(item.payload.bot_name, "Streaming reply", item.payload.harness_id);
+        } else if (item.event === "tool_call") {
+          const call = item.payload.tool_call || {};
+          addActivity(`${titleCase(item.payload.bot_name)} · tool`, `${call.title || call.kind || "Tool call"}${call.status ? ` · ${call.status}` : ""}`);
+        } else if (item.event === "approval_pending") {
+          $("#composer-status").textContent = `${titleCase(item.payload.bot_name)} is waiting for your approval: ${item.payload.summary}`;
+        } else if (item.event === "acp_session") {
+          if (item.payload.resumed) updateParticipantStatus(item.payload.bot_name, "Resumed native session", item.payload.harness_id);
         } else if (item.event === "write_serialization") {
           $("#composer-status").textContent = item.payload.message;
         } else if (item.event === "participant_queued") {
@@ -696,6 +713,14 @@ async function sendPrompt(approved = false) {
     setBusy(false);
     await refresh({ quiet: true });
   }
+}
+
+// Streaming chunks can arrive faster than the page needs to repaint; render once per frame.
+let streamRenderPending = false;
+function scheduleStreamRender() {
+  if (streamRenderPending) return;
+  streamRenderPending = true;
+  requestAnimationFrame(() => { streamRenderPending = false; renderConversation(); scrollThread(); });
 }
 
 function summarizeEvent(event) {

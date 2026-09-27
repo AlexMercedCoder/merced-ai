@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 
+from merced_ai.harnesses.acp_launch import AcpLaunch
 from merced_ai.harnesses.api import (
     HarnessInvocation,
     HarnessSpec,
@@ -233,6 +234,8 @@ def build_anton(ctx: InvocationContext) -> HarnessInvocation:
 
 
 GOOGLE = frozenset({"google", "gemini"})
+# Harnesses Merced AI can drive over ACP (when the launcher is installed), else a subprocess.
+ACP_FIRST = (TransportKind.ACP_STDIO, TransportKind.STRUCTURED_SUBPROCESS)
 
 BUILTIN_SPECS: tuple[HarnessSpec, ...] = (
     HarnessSpec(
@@ -241,21 +244,25 @@ BUILTIN_SPECS: tuple[HarnessSpec, ...] = (
         compatible_providers=frozenset({"openai"}),
     ),
     HarnessSpec(
-        descriptor("claude", "Claude Code", "claude"),
+        descriptor("claude", "Claude Code", "claude", transports=ACP_FIRST),
         build_claude,
         projection="system_prompt",
         compatible_providers=frozenset({"anthropic"}),
         output="json",
     ),
     HarnessSpec(
-        descriptor("gemini", "Gemini CLI", "gemini"),
+        descriptor("gemini", "Gemini CLI", "gemini", transports=ACP_FIRST),
         build_gemini,
         compatible_providers=GOOGLE,
         output="json",
     ),
-    HarnessSpec(descriptor("opencode", "OpenCode", "opencode"), build_opencode, output="json"),
     HarnessSpec(
-        descriptor("goose", "Goose", "goose"),
+        descriptor("opencode", "OpenCode", "opencode", transports=ACP_FIRST),
+        build_opencode,
+        output="json",
+    ),
+    HarnessSpec(
+        descriptor("goose", "Goose", "goose", transports=ACP_FIRST),
         build_goose,
         projection="system_prompt",
         output="json",
@@ -345,3 +352,32 @@ BUILTIN_SPECS: tuple[HarnessSpec, ...] = (
 )
 
 BUILTIN_BY_ID = {spec.descriptor.id: spec for spec in BUILTIN_SPECS}
+
+# ACP launchers. "Verified" ones were run end to end (initialize, session/new, a prompt with
+# streamed reply) on 2026-09-27 and are used by default when installed; the others are opt-in
+# with MERCED_AI_ACP_EXPERIMENTAL=<id>[,<id>...] because they were not verified here.
+ACP_LAUNCHES: dict[str, tuple[AcpLaunch, bool]] = {
+    "claude": (AcpLaunch(executable_names=("claude-agent-acp",), resumes=True), True),
+    # Gemini CLI 0.57 advertises loadSession, but loading a session in a new agent process
+    # fails ("Authentication required", then "Internal error" after authenticating), so each
+    # turn starts a new session with the transcript; resume is not claimed.
+    "gemini": (AcpLaunch(args=("--acp",)), True),
+    "goose": (AcpLaunch(args=("acp",), resumes=True), True),
+    "opencode": (AcpLaunch(args=("acp",), resumes=True), True),
+    # codex-acp 2026-09 starts sessions on a model this account cannot use (HTTP 400).
+    "codex": (AcpLaunch(executable_names=("codex-acp",)), False),
+    "kimi": (AcpLaunch(args=("acp",)), False),
+    "prime-agent": (AcpLaunch(args=("--mode", "acp")), False),
+}
+
+
+def acp_enabled(harness_id: str) -> bool:
+    launch = ACP_LAUNCHES.get(harness_id)
+    if launch is None:
+        return False
+    experimental = {
+        item.strip()
+        for item in os.environ.get("MERCED_AI_ACP_EXPERIMENTAL", "").split(",")
+        if item.strip()
+    }
+    return launch[1] or harness_id in experimental

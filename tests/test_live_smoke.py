@@ -37,9 +37,10 @@ import pytest
 
 from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import CommandHarnessAdapter, HarnessRunError
+from merced_ai.harnesses.builtin import ACP_LAUNCHES
 from merced_ai.harnesses.detection import locate_executable
 from merced_ai.models import RunRequest
-from merced_ai.profiles import create_profile
+from merced_ai.profiles import create_profile, validate_profile
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("MERCED_AI_LIVE_SMOKE") != "1",
@@ -76,6 +77,17 @@ def _adapter(harness_id: str) -> CommandHarnessAdapter:
 
 
 def _request(adapter: CommandHarnessAdapter, workspace: Path) -> RunRequest:
+    existing = workspace / ".agents" / "smoke.agent.yaml"
+    if existing.exists():
+        profile = validate_profile(existing, "project")
+        return RunRequest(
+            harness_id=adapter.descriptor.id,
+            prompt=SMOKE_PROMPT,
+            workspace=workspace,
+            profile=profile,
+            projection=adapter.project_profile(profile),
+            timeout_seconds=240,
+        )
     profile = create_profile(
         "smoke",
         "Answers a single connectivity check without using tools.",
@@ -218,3 +230,50 @@ def test_harness_answers_through_the_adapter(
     entry.update(ok=ok, reply=reply[:40], seconds=round(time.monotonic() - started))
     _report(entry)
     assert ok, reply[:200]
+
+
+ACP_IDS = sorted(key for key, (_, verified) in ACP_LAUNCHES.items() if verified)
+
+
+@pytest.mark.parametrize("harness_id", ACP_IDS)
+def test_acp_streams_and_resumes_natively(
+    harness_id: str, workspace: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two turns over ACP: the second loads the first session and sends only the new message."""
+    if harness_id not in _selected():
+        pytest.skip("not selected by MERCED_AI_LIVE_SMOKE_HARNESSES")
+    monkeypatch.setenv("MERCED_AI_ACP", "1")
+    adapter = _adapter(harness_id)
+    if not getattr(adapter, "acp_available", lambda: False)():
+        pytest.skip(f"{harness_id} has no ACP launcher installed")
+    if harness_id == "gemini":
+        monkeypatch.setenv("GEMINI_CLI_TRUST_WORKSPACE", "true")
+        if os.environ.get("MERCED_AI_LIVE_SMOKE_GEMINI_API_KEY") == "1":
+            monkeypatch.setenv("HOME", str(tmp_path / "gemini-home"))
+    deltas: list[str] = []
+    first = adapter.run_cancellable(
+        _request(adapter, workspace),
+        None,
+        on_event=lambda event: (
+            deltas.append(event.get("text", "")) if event.get("type") == "assistant_delta" else None
+        ),
+    )
+    second_request = _request(adapter, workspace).model_copy(
+        update={"native_session_id": first.native_session_id, "turn_prompt": "Reply with OK again"}
+    )
+    second = adapter.run_cancellable(second_request, None)
+    entry = {
+        "harness": harness_id,
+        "transport": "acp",
+        "streamed_chunks": len(deltas),
+        "first": first.output[:40],
+        "second": second.output[:40],
+        "resumed": bool(second.raw and second.raw.get("resumed")),
+        "load_session": bool(second.raw and second.raw.get("load_session")),
+    }
+    _report(entry)
+    assert re.sub(r"[^A-Za-z]", "", first.output).upper() == "OK"
+    assert deltas, "no streamed chunks"
+    assert "OK" in second.output.upper()
+    # Native resume is claimed only for agents whose session/load works across processes.
+    assert entry["resumed"] is ACP_LAUNCHES[harness_id][0].resumes

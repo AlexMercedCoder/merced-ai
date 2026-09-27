@@ -198,10 +198,14 @@ def test_descriptors_separate_harness_claims_from_broker_delivery() -> None:
     assert not descriptors["gemini"].broker_implements.streaming
 
 
-def test_no_descriptor_claims_an_unimplemented_transport() -> None:
+def test_only_harnesses_with_a_verified_acp_launcher_claim_acp() -> None:
+    from merced_ai.harnesses.builtin import ACP_LAUNCHES
+
+    verified = {key for key, (_, ok) in ACP_LAUNCHES.items() if ok}
     for descriptor in default_registry().descriptors():
-        assert TransportKind.ACP_STDIO not in descriptor.transports, descriptor.id
         assert TransportKind.NATIVE not in descriptor.transports, descriptor.id
+        claims_acp = TransportKind.ACP_STDIO in descriptor.transports
+        assert claims_acp == (descriptor.id in verified), descriptor.id
 
 
 def test_probe_json_reports_both_capability_sets_and_legacy_alias(

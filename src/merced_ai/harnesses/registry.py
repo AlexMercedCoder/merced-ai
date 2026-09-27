@@ -11,10 +11,11 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
+from merced_ai.harnesses.acp import AcpHarnessAdapter
 from merced_ai.harnesses.adapters.command import CommandHarnessAdapter
 from merced_ai.harnesses.api import ADAPTER_API_VERSION, ENTRY_POINT_GROUP, HarnessSpec
 from merced_ai.harnesses.base import HarnessAdapter
-from merced_ai.harnesses.builtin import BUILTIN_SPECS
+from merced_ai.harnesses.builtin import ACP_LAUNCHES, BUILTIN_SPECS, acp_enabled
 from merced_ai.models import HarnessDescriptor, HarnessProbe
 
 DEFAULT_PROBE_TTL_SECONDS = 30.0
@@ -123,7 +124,14 @@ def load_plugins(registry: HarnessRegistry) -> None:
             registry.plugin_errors.append((entry.name, f"{type(error).__name__}: {error}"))
 
 
+def builtin_adapter(spec: HarnessSpec) -> HarnessAdapter:
+    harness_id = spec.descriptor.id
+    if acp_enabled(harness_id):
+        return AcpHarnessAdapter(spec, ACP_LAUNCHES[harness_id][0])
+    return CommandHarnessAdapter(spec)
+
+
 def default_registry() -> HarnessRegistry:
-    registry = HarnessRegistry(CommandHarnessAdapter(spec) for spec in BUILTIN_SPECS)
+    registry = HarnessRegistry(builtin_adapter(spec) for spec in BUILTIN_SPECS)
     load_plugins(registry)
     return registry

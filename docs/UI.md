@@ -44,6 +44,8 @@ merced-ai ui -C /path/to/workspace
   The Harnesses screen lists only what Merced AI itself provides through each adapter (for
   example "AAIS approval relay" or "Context files inlined"); features the harness offers on its
   own surfaces are named separately as not used yet.
+- Watch replies stream in for harnesses running over the Agent Client Protocol; their tool calls
+  appear in the run activity list and their permission requests open the approval dialog.
 - Load workspace data immediately while bounded harness probes update independently in the
   background; reuse cached health on later launches and refresh detection explicitly when needed.
 - Create, edit, and delete project-local OAP profiles, including provider/model and edit/shell

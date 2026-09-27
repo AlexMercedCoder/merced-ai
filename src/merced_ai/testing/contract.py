@@ -79,9 +79,9 @@ def run_harness_contract(spec: HarnessSpec, workspace: Path) -> ContractReport:
     report.expect("id", bool(ID_RE.fullmatch(descriptor.id)), f"{descriptor.id!r} is not a slug")
     report.expect("executables", bool(descriptor.executable_names), "no executable names")
     report.expect(
-        "no-acp-claim",
-        all(item.value != "acp_stdio" for item in descriptor.transports),
-        "subprocess specs must not claim the ACP transport",
+        "subprocess-transport",
+        any(item.value.endswith("subprocess") for item in descriptor.transports),
+        "a spec is run as a subprocess and must declare a subprocess transport",
     )
 
     executable = workspace / "bin" / (descriptor.executable_names[0] or "harness")

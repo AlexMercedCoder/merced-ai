@@ -170,6 +170,10 @@ class RunRequest(BaseModel):
     profile: ProfileRecord
     projection: ProfileProjection
     timeout_seconds: int = Field(default=1800, ge=1, le=7200)
+    # For harnesses that can resume their own sessions (ACP): the harness session to load and
+    # the new message alone, so the transcript in ``prompt`` is not replayed.
+    native_session_id: str | None = None
+    turn_prompt: str | None = None
 
 
 class RunResult(BaseModel):

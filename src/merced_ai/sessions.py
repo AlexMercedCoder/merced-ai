@@ -182,6 +182,38 @@ def transcript_prompt(
     return f"Continue this conversation consistently.{audience}\n\n{history}\n\nUser: {prompt}"
 
 
+def native_resume_point(
+    session: SessionRecord, bot_name: str, harness_id: str
+) -> tuple[str | None, str | None]:
+    """The harness session ID from this bot's last reply on this harness, and that turn's ID."""
+    for turn in reversed(session.turns):
+        if turn.role == "assistant" and turn.bot_name in (bot_name, None):
+            if turn.harness_id == harness_id and turn.native_session_id:
+                return turn.native_session_id, turn.id
+            return None, None
+    return None, None
+
+
+def catch_up_prompt(
+    session: SessionRecord, prompt: str, *, since_turn_id: str, recipient: str | None
+) -> str:
+    """The new message plus anything said after the bot's last reply (for native resume)."""
+    index = next((i for i, turn in enumerate(session.turns) if turn.id == since_turn_id), None)
+    later = session.turns[index + 1 :] if index is not None else []
+    lines = [
+        f"{'User' if turn.role == 'user' else turn.bot_name or 'Assistant'}: {turn.content}"
+        for turn in later
+    ]
+    audience = f"You are {recipient}; respond only as {recipient}.\n\n" if recipient else ""
+    if not lines:
+        return f"{audience}{prompt}" if recipient else prompt
+    return (
+        f"{audience}Since your last reply the conversation continued:\n\n"
+        + "\n\n".join(lines)
+        + f"\n\nUser: {prompt}"
+    )
+
+
 def select_participants(
     session: SessionRecord,
     prompt: str,

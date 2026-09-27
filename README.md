@@ -164,11 +164,11 @@ for the pinned revisions and exact boundary.
 | --- | --- | --- | --- | --- |
 | MagAgent | yes | one-shot with AAIS approval relay | native for project-discovered profiles | argument (stdin is the AAIS channel) |
 | Loro | yes | one-shot with AAIS approval relay | native for project-discovered profiles | argument (stdin is the AAIS channel) |
-| Claude Code | yes | structured print mode | system-prompt projection | stdin; system prompt via private file |
+| Claude Code | yes | ACP session via `claude-agent-acp` (streaming, approvals, resume), else structured print mode | system-prompt projection (delimited prompt over ACP) | stdin; system prompt via private file |
 | Codex | yes | noninteractive exec | delimited prompt compatibility mode | stdin (`exec -`) |
-| Gemini CLI | yes | structured headless mode | delimited prompt compatibility mode | stdin |
-| OpenCode | yes | structured run mode | delimited prompt compatibility mode | stdin |
-| Goose | yes | structured run mode | system-prompt projection | stdin (`--instructions -`); system prompt as argument |
+| Gemini CLI | yes | ACP session via `gemini --acp` (streaming, approvals), else structured headless mode | delimited prompt compatibility mode | stdin |
+| OpenCode | yes | ACP session via `opencode acp` (streaming, approvals, resume), else structured run mode | delimited prompt compatibility mode | stdin |
+| Goose | yes | ACP session via `goose acp` (streaming, approvals, resume), else structured run mode | system-prompt projection (delimited prompt over ACP) | stdin (`--instructions -`); system prompt as argument |
 | Anton | yes | stdin REPL bridge | delimited prompt compatibility mode | stdin |
 | DeepSeek Harness (DSH) | yes | headless profile | delimited prompt compatibility mode | argument |
 | Antigravity CLI (AGY) | yes | structured print mode | delimited prompt compatibility mode | argument |
@@ -183,8 +183,10 @@ Harnesses that take the prompt only as an argument are guarded: Merced AI refuse
 over 100 KB (24 KB on Windows) with a clear error instead of failing to start the process. See
 [prompt delivery](docs/COMPATIBILITY.md#prompt-delivery) for the per-harness evidence.
 
-Every adapter runs one noninteractive subprocess per turn: replies appear when the harness
-finishes, and each turn replays a bounded transcript rather than resuming a native session. The
+Claude Code, Gemini CLI, Goose, and OpenCode run over the Agent Client Protocol when their ACP
+launcher is installed: replies stream, permission requests come to you, and (except Gemini) the
+next turn resumes the harness's own session. Other adapters run one noninteractive subprocess per
+turn: replies appear when the harness finishes, and each turn replays a bounded transcript. The
 Harnesses screen and `merced-ai harness show` list what Merced AI delivers separately from what the
 harness offers on its own; see [Harness compatibility](docs/COMPATIBILITY.md).
 

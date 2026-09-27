@@ -63,6 +63,18 @@ Targets 0.8.0.
   the kit. `MERCED_AI_DISABLE_PLUGINS=1` loads only built-ins. See
   [Harness adapter plugins](docs/PLUGINS.md).
 
+- Agent Client Protocol (ACP) client adapter. Claude Code (`claude-agent-acp`), Gemini CLI
+  (`--acp`), Goose (`acp`), and OpenCode (`acp`) now run as ACP agents when the launcher is
+  installed: replies stream into the web UI and terminal, permission requests go through the AAIS
+  approval dialog (or a terminal prompt) and map to the agent's allow/reject options, a read-only
+  profile selects the agent's read-only mode, auto-approve modes are never selected, and
+  cancellation sends `session/cancel`. Claude Code, Goose, and OpenCode resume their own session
+  on the next turn and receive only the new message (plus what other participants said since);
+  Gemini CLI cannot load sessions across processes, so it still replays the transcript. Codex,
+  Kimi, and Prime Agent launchers are opt-in (`MERCED_AI_ACP_EXPERIMENTAL`) because they were not
+  verified; `MERCED_AI_ACP=0` turns ACP off. The ACP transport claim is back for the four verified
+  harnesses only. Reply turns now record the harness session ID.
+
 ### Changed
 
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the

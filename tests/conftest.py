@@ -8,6 +8,8 @@ import pytest
 @pytest.fixture(autouse=True)
 def isolated_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MERCED_AI_HOME", str(tmp_path / "merced-home"))
+    # Never start a real ACP agent installed on the developer machine; ACP tests opt back in.
+    monkeypatch.setenv("MERCED_AI_ACP", "0")
 
 
 @pytest.fixture

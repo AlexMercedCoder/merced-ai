@@ -73,22 +73,35 @@ execute it without a shell, normalize output, bound time/output, and expose hone
 Native OAP support is used only when a harness actually consumes the discovered profile. Other
 harnesses receive a delimited prompt or a dedicated system-prompt flag.
 
+### ACP adapter
+
+`harnesses/acp.py` is a JSON-RPC 2.0 client for the Agent Client Protocol. For each turn it
+starts the agent, calls `initialize` (advertising no file-system or terminal capability),
+`session/load` when the conversation recorded the agent's session ID and the agent can load it,
+otherwise `session/new`, selects a mode that asks before tool calls, and sends `session/prompt`.
+`agent_message_chunk` updates are streamed to the web run service (`assistant_delta` events) and
+the terminal; `session/request_permission` becomes an AAIS request presented by the same
+presenter that serves MagAgent and Loro; cancellation sends `session/cancel` and then stops the
+process tree. The agent's session ID is stored on the reply turn, and the next turn sends only the
+new message plus anything other participants said since. The subprocess adapter remains the
+fallback when the launcher is missing or `MERCED_AI_ACP=0`.
+
 ### Capabilities: what the harness offers versus what Merced AI delivers
 
 Each harness descriptor carries two capability sets:
 
 - `harness_supports`: features the harness documents for its own interactive or protocol surface,
   such as streaming, native session resume, or model listing. Merced AI records these for
-  reference and does not use them yet.
+  reference only.
 - `broker_implements`: what Merced AI actually delivers through its adapter today. This is the
   only set the CLI (`harness list`, `harness show`) and the web UI present as a capability.
 
-Today every adapter runs one noninteractive subprocess per turn. Output arrives when the process
-exits (no streaming), each turn replays a bounded transcript instead of resuming a native session,
-and selected workspace files are inlined into the prompt. MagAgent and Loro additionally relay AAIS
-approvals over stdio, receive project OAP profiles by name, and can satisfy WebMCP routing once
-their readiness report verifies. No built-in descriptor claims the ACP transport, because Merced AI
-has no ACP client yet. Probe JSON still contains a `capabilities` field equal to
+Subprocess adapters run one noninteractive process per turn: output arrives when it exits and
+each turn replays a bounded transcript. MagAgent and Loro additionally relay AAIS approvals over
+stdio, receive project OAP profiles by name, and can satisfy WebMCP routing once their readiness
+report verifies. Claude Code, Gemini CLI, Goose, and OpenCode declare the ACP transport, and their
+probe reports streaming, relayed approvals, and (except Gemini) native resume only when the ACP
+launcher is installed. Probe JSON still contains a `capabilities` field equal to
 `broker_implements` for one release so existing automation keeps working.
 
 Permission projection is advisory and may only narrow intent. The harness remains responsible for

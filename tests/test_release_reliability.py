@@ -127,7 +127,7 @@ def test_profile_spec_change_blocks_dispatch_but_state_change_does_not(workspace
 
     profile = create_profile("reviewer", "Reviews code", "Review the code.", workspace)
     session = SessionStore(workspace).create("reviewer", "codex", profile)
-    prepared = SimpleNamespace(profile=profile)
+    prepared = SimpleNamespace(profile=profile, request=SimpleNamespace(harness_id="codex"))
     monkeypatch.setattr("merced_ai.application.prepare_run", lambda *args, **kwargs: prepared)
     prepared.profile = profile.model_copy(
         update={"revision": profile.revision + 1, "profile_digest": "state-only"}

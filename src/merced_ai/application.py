@@ -16,7 +16,12 @@ from merced_ai.models import (
     SessionRecord,
 )
 from merced_ai.profiles import resolve_profile
-from merced_ai.sessions import select_participants, transcript_prompt
+from merced_ai.sessions import (
+    catch_up_prompt,
+    native_resume_point,
+    select_participants,
+    transcript_prompt,
+)
 
 
 class RoutingError(RuntimeError):
@@ -147,6 +152,17 @@ def prepare_group_turn(
             harness_override=item.harness_id,
             registry=registry,
         )
+        native_id, since = native_resume_point(session, item.bot_name, run.request.harness_id)
+        if native_id and since:
+            recipient = item.bot_name if len(session.participants) > 1 else None
+            run.request = run.request.model_copy(
+                update={
+                    "native_session_id": native_id,
+                    "turn_prompt": catch_up_prompt(
+                        session, prompt, since_turn_id=since, recipient=recipient
+                    ),
+                }
+            )
         if run.profile.spec_digest != item.spec_digest or run.profile.name != item.profile_name:
             raise RoutingError(
                 f"Profile {item.profile_name!r} changed since this conversation was pinned. "

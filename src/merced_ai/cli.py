@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +12,7 @@ from typing import Annotated, Any, Literal, NoReturn, cast
 
 import typer
 import yaml
+from aais import create_decision
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
@@ -460,16 +463,17 @@ def ask(
     session = store.create(bot_name, prepared.request.harness_id, prepared.profile)
     store.append(session, "user", prompt)
     try:
-        result = execute(prepared)
+        result, streamed = _run_turn(prepared, interactive=not json_output)
     except HarnessRunError as exc:
         _fail(str(exc), exc.exit_code if 0 < exc.exit_code < 126 else 5)
-    store.append(session, "assistant", result.output, profile=prepared.profile)
+    _store_reply(store, session, prepared, result)
     if json_output:
         result_payload = result.model_dump(mode="json")
         result_payload["session_id"] = session.id
         typer.echo(json.dumps(result_payload, indent=2))
     else:
-        console.print(Markdown(result.output))
+        if not streamed:
+            console.print(Markdown(result.output))
         console.print(f"[dim]{result.harness_id} · {result.duration_ms} ms · {session.id}[/dim]")
 
 
@@ -541,12 +545,80 @@ def _chat_loop(
             continue
         store.append(session, "user", prompt)
         try:
-            result = execute(prepared)
+            result, streamed = _run_turn(prepared, registry=registry, interactive=True)
         except HarnessRunError as exc:
             console.print(f"[red]{exc}[/red]")
             continue
-        store.append(session, "assistant", result.output, profile=prepared.profile)
-        console.print(Markdown(result.output))
+        _store_reply(store, session, prepared, result)
+        if not streamed:
+            console.print(Markdown(result.output))
+
+
+def _store_reply(
+    store: SessionStore, session: SessionRecord, prepared: PreparedRun, result: RunResult
+) -> None:
+    store.append(
+        session,
+        "assistant",
+        result.output,
+        bot_name=prepared.bot.name,
+        harness_id=result.harness_id,
+        profile=prepared.profile,
+        native_session_id=result.native_session_id,
+    )
+
+
+def _terminal_approval(envelope: dict[str, Any], _cancel: threading.Event | None) -> dict[str, Any]:
+    """Ask on the terminal before an ACP agent runs a tool call; default is to deny."""
+    request = envelope["request"]
+    action = request["action"]
+    console.print(
+        f"\n[bold yellow]Approval requested[/bold yellow] by {request['origin']['harness']}: "
+        f"{action.get('summary', action.get('name'))}"
+    )
+    if action.get("arguments"):
+        console.print(f"[dim]{json.dumps(action['arguments'])[:500]}[/dim]")
+    approved = typer.confirm("Allow this once?", default=False)
+    return create_decision(
+        envelope,
+        decision="approve" if approved else "deny",
+        scope="once",
+        actor={"id": "local-user", "type": "human", "authenticated_by": "merced-ai-terminal"},
+        sequence=int(envelope.get("sequence", 1)),
+        stream="merced-ai.terminal",
+    )
+
+
+def _run_turn(
+    prepared: PreparedRun, *, registry: HarnessRegistry | None = None, interactive: bool
+) -> tuple[RunResult, bool]:
+    """Run one turn; stream replies and ask for approvals on the terminal when possible.
+
+    Returns the result and whether the reply was already printed while streaming.
+    """
+    adapter = (registry or default_registry()).get(prepared.request.harness_id)
+    acp_available = getattr(adapter, "acp_available", None)
+    if not (interactive and callable(acp_available) and acp_available()):
+        return execute(prepared), False
+    printed: list[str] = []
+
+    def on_event(event: dict[str, Any]) -> None:
+        if event.get("type") == "assistant_delta":
+            printed.append(str(event.get("text", "")))
+            console.print(printed[-1], end="", markup=False, highlight=False, soft_wrap=True)
+        elif event.get("type") == "tool_call":
+            call = event.get("tool_call", {})
+            console.print(
+                f"\n[dim]· {call.get('title') or call.get('kind')} ({call.get('status', '')})[/dim]"
+            )
+
+    handler = _terminal_approval if sys.stdin.isatty() else None
+    result = adapter.run_cancellable(  # type: ignore[attr-defined]
+        prepared.request, None, handler, None, on_event=on_event
+    )
+    if printed:
+        console.print()
+    return result, bool(printed)
 
 
 @group_app.command("ask")

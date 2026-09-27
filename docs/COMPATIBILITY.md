@@ -22,6 +22,33 @@ live column below for Claude Code, Codex, Gemini CLI, Goose, OpenCode, MagAgent,
 | OpenClaw | yes | yes | yes | yes, embedded OpenAI agent |
 | Kimi Code CLI | yes | yes | yes | yes, OpenAI Responses provider |
 
+## Agent Client Protocol (ACP)
+
+When a harness's ACP launcher is installed, Merced AI runs it as an ACP agent instead of a
+one-shot subprocess. Verified end to end on 2026-09-27 (initialize, session, a streamed "Reply
+with OK", and a second turn):
+
+| Harness | ACP launcher | Streaming | Approvals through Merced AI | Native resume |
+| --- | --- | --- | --- | --- |
+| Claude Code | `claude-agent-acp` 0.79 | yes | yes | yes (`session/load`) |
+| Gemini CLI | `gemini --acp` 0.57 | yes | yes | no: `session/load` fails in a new process, so the transcript is replayed |
+| Goose | `goose acp` 1.48 | yes | yes | yes |
+| OpenCode | `opencode acp` 1.18 | yes | yes | yes |
+| Codex | `codex-acp` | opt-in only | | not verified: it started sessions on a model this account cannot use (HTTP 400) |
+| Kimi, Prime Agent | `kimi acp`, `prime-agent --mode acp` | opt-in only | | not verified here |
+
+Opt in to an unverified launcher with `MERCED_AI_ACP_EXPERIMENTAL=codex,kimi`, or turn ACP off
+entirely with `MERCED_AI_ACP=0` (every harness then uses its subprocess adapter). Under ACP:
+
+- replies stream into the web UI and the terminal as the agent writes them;
+- permission requests are shown in the web approval dialog (or asked on the terminal in
+  `merced-ai ask`/`chat`) and the decision is mapped to the agent's own allow/reject options;
+  without anyone to ask (`--json`, group CLI turns, no TTY) they are rejected;
+- a profile that denies both editing and shell access selects the agent's read-only mode
+  (`plan`/`chat`), and requests of a denied kind are rejected without asking;
+- Merced AI never selects an auto-approve mode and refuses an agent that offers only one;
+- the model requested by the profile is not passed; the harness's configured model is used.
+
 ## What Merced AI delivers per harness
 
 "Supported" in this document means Merced AI can run the harness. It does not mean Merced AI uses
@@ -30,10 +57,12 @@ every feature the harness offers. The broker-implemented set is:
 | Harness | Merced AI delivers | Harness offers but Merced AI does not use yet |
 | --- | --- | --- |
 | MagAgent, Loro | one-shot runs, native OAP profile by name, AAIS approval relay, inlined context files, WebMCP routing when verified | streaming, native session resume, model listing |
+| Claude Code, Goose, OpenCode over ACP | streaming, approvals relayed, native session resume, inlined context files | model listing |
+| Gemini CLI over ACP | streaming, approvals relayed, inlined context files | native session resume, model listing |
 | All other adapters | one-shot runs, inlined context files | streaming, native session resume, native approvals, native attachments, model listing (as each harness documents) |
 
-Responses appear when the harness process exits. Each turn starts a fresh process and replays up to
-the last twenty turns as a transcript. ACP is not used for any harness yet.
+For the subprocess adapters, responses appear when the harness process exits and each turn starts
+a fresh process that replays up to the last twenty turns as a transcript.
 
 "Contract-tested" means Merced AI tests argv construction, OAP projection, permission narrowing,
 bounded subprocess behavior, and structured output/error parsing using controlled executables. It
