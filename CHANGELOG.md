@@ -12,6 +12,13 @@ Targets 0.8.0.
   name 0.7.0, the 0.7.0 changelog entry carries its release date, and the documentation index links
   the 0.7.0 release notes.
 
+### Release engineering
+
+- Added `scripts/check_release_metadata.py`, which checks that `pyproject.toml`, `__version__`,
+  the README current-release line, the conformance results, the newest dated changelog heading,
+  and the release-notes link agree. CI runs it on every push: advisory on branches, strict on `v*`
+  tag builds (the workflow now also triggers on tags).
+
 ### Testing
 
 - OAP and AGS fixture tests find the sibling `open-agent-profile` and `agentic-graph-spec` clones

@@ -46,8 +46,13 @@ inferred—results.
 
 ## 5. Release metadata
 
-- Update the version in `pyproject.toml`.
-- Finalize `CHANGELOG.md` with the release date.
+- Update the version in `pyproject.toml` and `src/merced_ai/__init__.py`.
+- Finalize `CHANGELOG.md` with the release date, add `docs/RELEASE_NOTES_<version>.md`, and link
+  it from `docs/README.md`.
+- Update the README `Current release:` line and the `implementation_version` in
+  `docs/oap-conformance.json` and `docs/ags-conformance.json` after the conformance tests pass.
+- Run `python scripts/check_release_metadata.py --strict`. CI runs the same check on every push;
+  it is advisory on branches and pull requests and fails a `v*` tag build on any drift.
 - Confirm README links and screenshots render.
 - Verify repository URLs, license metadata, classifiers, and Python support.
 - Commit the release preparation and create an annotated version tag.
