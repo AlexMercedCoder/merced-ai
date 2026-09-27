@@ -32,7 +32,17 @@ const selected = (left, right) => left === right ? " selected" : "";
 const ready = (probe) => Boolean(probe?.path) && !["detecting", "not_installed", "probe_failed", "incompatible"].includes(probe.status);
 const botHue = (name = "assistant") => [...name].reduce((value, char) => (value * 31 + char.charCodeAt(0)) % 360, 47);
 const initials = (name = "AI") => name.split(/[-_\s]+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
-const identityStyle = (name) => `style="--bot-hue:${botHue(name)}"`;
+// The CSP forbids inline style attributes, so identities carry a data attribute and a mutation
+// observer copies it into the --bot-hue custom property through the CSSOM (which CSP allows).
+const identityStyle = (name) => `data-bot-hue="${botHue(name)}"`;
+function applyBotHues(root = document) {
+  root.querySelectorAll?.("[data-bot-hue]").forEach((node) => node.style.setProperty("--bot-hue", node.dataset.botHue));
+}
+new MutationObserver((mutations) => mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
+  if (node.nodeType !== 1) return;
+  if (node.dataset?.botHue) node.style.setProperty("--bot-hue", node.dataset.botHue);
+  applyBotHues(node);
+}))).observe(document.documentElement, { childList: true, subtree: true });
 
 function markdown(value = "") {
   const blocks = String(value).split("```");

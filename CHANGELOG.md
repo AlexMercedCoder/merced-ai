@@ -21,6 +21,12 @@ Targets 0.8.0.
   file. State is applied only after the whole file validates, so a bad file never leaves partial
   state, and an invalid AAIS envelope in the file is treated as corruption instead of escaping as an
   unhandled library error.
+- Web UI: the light theme no longer renders dark buttons, inputs, and cards with dark text (for
+  example "New conversation", the route picker, and secondary buttons); surfaces now use theme
+  tokens. Bot identity colors were silently blocked by the page's own Content Security Policy
+  (inline `style` attributes) and now apply through the CSSOM. Management cards stack on phones
+  instead of squeezing their text into a narrow column, and small secondary text meets a higher
+  contrast ratio in both themes.
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
 

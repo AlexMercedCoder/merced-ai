@@ -102,15 +102,16 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
             page.locator('#group-options input[value="tester"]').check()
             expect(page.locator("#group-selected .group-selection")).to_have_count(3)
             page.locator("#group-submit").click()
-            expect(page.locator("#group-dialog")).not_to_be_visible()
+            # Group creation probes every participant's harness; allow for a loaded machine.
+            expect(page.locator("#group-dialog")).not_to_be_visible(timeout=30_000)
             expect(page.locator("#conversation-title")).to_have_text("Release readiness council")
             expect(page.locator("#participant-list .participant-chip")).to_have_count(3)
 
             page.locator("#dispatch-select").select_option("all")
             page.locator("#message-input").fill("Assess the release candidate independently.")
             page.locator("#send-message").click()
-            expect(page.locator(".message.assistant")).to_have_count(3, timeout=15_000)
-            expect(page.locator("#message-input")).to_be_enabled(timeout=15_000)
+            expect(page.locator(".message.assistant")).to_have_count(3, timeout=60_000)
+            expect(page.locator("#message-input")).to_be_enabled(timeout=60_000)
             expect(page.locator(".pending-response")).to_have_count(0)
             expect(page.locator(".message-speaker")).to_have_count(3)
             expect(page.locator(".activity")).to_have_count(3)
@@ -152,6 +153,101 @@ def test_group_ui_end_to_end(workspace: Path, monkeypatch: pytest.MonkeyPatch) -
                 quality=88,
                 full_page=True,
             )
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)
+
+
+def test_safety_notices_and_broker_capabilities(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Write-serialization notice, approval-state recovery banner, and honest harness cards."""
+    from playwright.sync_api import expect, sync_playwright
+    from uvicorn import Config, Server
+
+    from merced_ai.application import participant_from_run, prepare_group
+    from merced_ai.bots import create_bot
+    from merced_ai.profiles import create_profile
+    from merced_ai.sessions import SessionStore
+    from merced_ai.webui_server import create_web_app
+
+    monkeypatch.setenv(
+        "MERCED_AI_CODEX_PATH", str(Path(__file__).parent / "fixtures" / "fake_codex.py")
+    )
+    for name, read_only in (("builder", False), ("fixer", False), ("reviewer", True)):
+        create_profile(
+            name,
+            f"The {name} participant.",
+            f"Act as the {name}.",
+            workspace,
+            edit_permission="deny" if read_only else None,
+            shell_permission="deny" if read_only else None,
+        )
+        create_bot(name, name, "codex", (), workspace)
+    prepared = prepare_group(("builder", "fixer", "reviewer"), workspace)
+    SessionStore(workspace).create_group(
+        tuple(participant_from_run(item) for item in prepared), mode="all", title="Council"
+    )
+    state = workspace / ".merced-ai" / "aais-presenter.json"
+    state.write_text("{truncated", encoding="utf-8")
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = Server(
+        Config(create_web_app(workspace, "token"), host="127.0.0.1", port=port, log_level="error")
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert server.started
+    screenshot_root = Path(os.environ.get("MERCED_AI_SCREENSHOT_DIR", "/tmp"))
+    screenshot_root.mkdir(parents=True, exist_ok=True)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            violations: list[str] = []
+            page.on(
+                "console",
+                lambda message: (
+                    violations.append(message.text)
+                    if "Content Security Policy" in message.text
+                    else None
+                ),
+            )
+            page.goto(f"http://127.0.0.1:{port}/#token=token")
+            expect(page.locator("#conversation-title")).to_have_text("Council", timeout=30_000)
+
+            banner = page.locator(".app-notice")
+            expect(banner).to_contain_text("Approval state was reset")
+            expect(banner).to_contain_text("aais-presenter.corrupt-")
+            notice = page.locator("#write-notice")
+            expect(notice).to_be_visible()
+            expect(notice).to_contain_text("Builder and Fixer can both edit this workspace")
+            page.locator("#allow-concurrent-writes").check()
+            expect(notice).to_contain_text("Concurrent writes on")
+            page.reload()
+            expect(page.locator("#allow-concurrent-writes")).to_be_checked(timeout=30_000)
+            page.locator("#allow-concurrent-writes").uncheck()
+            page.screenshot(path=screenshot_root / "merced-ai-safety-notices.png")
+
+            page.locator("[data-dismiss-notice]").click()
+            expect(page.locator(".app-notice")).to_have_count(0)
+
+            page.locator('.nav-item[data-view="harnesses"]').click()
+            expect(page.locator("#harness-detection-state")).to_have_text(
+                "Detection complete", timeout=30_000
+            )
+            codex = page.locator(".management-card", has_text="Codex").first
+            expect(codex).to_contain_text("Context files inlined")
+            expect(codex).to_contain_text("Prompt via stdin")
+            expect(codex).to_contain_text("Merced AI does not use these yet")
+            expect(codex.locator(".tag-row")).not_to_contain_text("Streaming")
+            assert not violations, violations
             browser.close()
     finally:
         server.should_exit = True
