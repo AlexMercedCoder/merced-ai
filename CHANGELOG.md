@@ -43,6 +43,10 @@ Targets 0.8.0.
 - MagAgent: when the installed `magent ask` offers `--prompt-file`, the task goes through a 0600
   file in the run's private temp directory instead of the command line (detected and cached like
   Loro's); older MagAgent keeps the argument and its size guard.
+- Output parsing prefers a result document at the end of stdout over earlier JSON lines. MagAgent
+  prints one-line AAIS envelopes before its result (a pretty-printed document after a status line
+  in 1.3, a single line in 1.4), which previously made the reply look like an empty JSON Lines
+  stream. Regression tests cover both shapes.
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
 

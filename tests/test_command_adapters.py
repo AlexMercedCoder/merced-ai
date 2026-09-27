@@ -551,3 +551,48 @@ def test_magagent_events_document_returns_the_response() -> None:
     )
 
     assert _normalize_output("magagent", stdout)[0] == "OK"
+
+
+APPROVAL_LINE = json.dumps(
+    {"aais": "1.0", "type": "approval.resolved", "id": "evt_1", "sequence": 1}
+)
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        # MagAgent 1.3.0: status text, then a pretty-printed result document.
+        "Loaded 3 skills\n"
+        + json.dumps({"ok": True, "response": "OK", "session_id": "s-1"}, indent=2),
+        # 1.3.0 with --approval-stdio: approval NDJSON lines before the pretty result.
+        APPROVAL_LINE
+        + "\nLoaded 3 skills\n"
+        + json.dumps({"ok": True, "response": "OK", "session_id": "s-1"}, indent=2),
+        # 1.4 (G-11): approval NDJSON lines, then one single-line result; status on stderr.
+        APPROVAL_LINE
+        + "\n"
+        + APPROVAL_LINE
+        + "\n"
+        + json.dumps(
+            {"ok": True, "response": "OK", "session_id": "s-1", "events": [{"type": "x"}]}
+        ),
+        # 1.4 without approvals: just the single-line result.
+        json.dumps({"ok": True, "response": "OK", "session_id": "s-1"}),
+    ],
+    ids=["1.3-pretty", "1.3-approvals-pretty", "1.4-approvals-line", "1.4-line"],
+)
+def test_magagent_result_is_the_last_json_document(stdout: str) -> None:
+    output, raw, session_id = _normalize_output("magagent", stdout)
+
+    assert output == "OK"
+    assert raw is not None and raw["ok"] is True
+    assert session_id == "s-1"
+
+
+def test_json_lines_streams_still_use_the_assistant_turn() -> None:
+    events = [
+        {"role": "user", "content": "Reply with OK"},
+        {"role": "assistant", "content": "OK"},
+    ]
+    output, raw, _ = _normalize_output("pi", "\n".join(json.dumps(item) for item in events))
+    assert output == "OK" and raw is not None and len(raw["events"]) == 2

@@ -31,10 +31,20 @@ def normalize_json(stdout: str) -> NormalizedOutput:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
+        # A result document at the end of stdout wins over earlier JSON lines. MagAgent prints
+        # one-line AAIS envelopes before its result (and, in 1.3, a status line and a
+        # pretty-printed result); treating that as a JSON Lines stream would miss the reply.
+        last = _parse_trailing_object(text)
+        if last is not None and _top_level_text(last) is not None:
+            return (
+                _top_level_text(last) or "",
+                last,
+                _find_string(last, ("session_id", "sessionId")),
+            )
         payload = _parse_json_lines(text)
         streamed = payload is not None
         if payload is None:
-            payload = _parse_trailing_object(text)
+            payload = last
         if payload is None:
             return text, None, None
     if not isinstance(payload, dict):
