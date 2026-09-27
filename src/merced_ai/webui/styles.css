@@ -444,3 +444,12 @@ body[data-theme="light"] .diff-del { color: #b3261e; }
   .compare-patch { min-height: 220px; }
   .dialog footer { flex-wrap: wrap; }
 }
+
+/* The hidden attribute always wins over component display rules. */
+[hidden] { display: none !important; }
+/* Field labels in dialogs were 9px; option rows inherited their uppercase grid layout. */
+.dialog-fields label, .group-fields label { font-size: 11px; }
+.group-fields .group-option, .group-fields .check-field { display: flex; align-items: center; text-transform: none; letter-spacing: normal; font-size: 13px; color: var(--text); }
+.group-fields .group-option small { display: block; color: var(--muted); font-size: 11px; }
+.group-fields .check-field { align-items: flex-start; }
+.group-fields .group-option input, .group-fields .check-field input { width: 16px; height: 16px; flex: 0 0 auto; padding: 0; }
