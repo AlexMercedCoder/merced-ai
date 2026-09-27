@@ -20,15 +20,18 @@ from merced_ai.aais_presenter import AAISPresenter
 from merced_ai.application import (
     PreparedRun,
     RoutingError,
+    is_write_capable,
     participant_from_run,
     prepare_group,
     prepare_group_turn,
     prepare_run,
+    shared_workspace_writers,
+    write_serialization_message,
 )
 from merced_ai.bots import BotError, create_bot, delete_bot, discover_bots, update_bot
 from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import HarnessRunError
-from merced_ai.models import HarnessProbe, ProfileRecord, RunResult
+from merced_ai.models import BotBinding, HarnessProbe, ProfileRecord, RunResult
 from merced_ai.paths import ensure_user_layout
 from merced_ai.profile_generation import generate_profile_proposal
 from merced_ai.profiles import (
@@ -142,6 +145,8 @@ class MessageInput(BaseModel):
     approved: bool = False
     dispatch: str | None = Field(default=None, max_length=100)
     context: list[ContextReference] = Field(default_factory=list, max_length=20)
+    # Group turns serialize write-capable bots that share a workspace unless this is set.
+    allow_concurrent_writes: bool = False
 
 
 class SessionUpdateInput(BaseModel):
@@ -174,8 +179,16 @@ def _profile_payload(record: ProfileRecord, workspace: Path) -> dict[str, Any]:
 
 
 def _approval_needed(profile: ProfileRecord) -> bool:
-    permissions = profile.document.get("spec", {}).get("permissions", {})
-    return permissions.get("edit") != "deny" or permissions.get("shell") != "deny"
+    return is_write_capable(profile)
+
+
+def _bot_payload(binding: BotBinding, workspace: Path) -> dict[str, Any]:
+    payload = binding.model_dump(mode="json")
+    try:
+        payload["write_capable"] = is_write_capable(resolve_profile(binding.profile, workspace))
+    except (ProfileError, ValueError):
+        payload["write_capable"] = None  # Unknown until the profile resolves again.
+    return payload
 
 
 def _raw_events(result: RunResult) -> list[dict[str, Any]]:
@@ -339,7 +352,7 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
         return {
             "workspace": str(workspace),
             "profiles": [_profile_payload(item, workspace) for item in profiles],
-            "bots": [item.model_dump(mode="json") for item in discover_bots(workspace)],
+            "bots": [_bot_payload(item, workspace) for item in discover_bots(workspace)],
             "sessions": [item.model_dump(mode="json") for item in SessionStore(workspace).list()],
             "harnesses": detection.pop("harnesses"),
             "harness_detection": detection,
@@ -752,12 +765,18 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
         with cancellation_lock:
             cancellations[run_id] = cancellation
 
+        writers = shared_workspace_writers(prepared_runs)
+        serialize_writers = bool(writers) and not payload.allow_concurrent_writes
+
         async def event_stream() -> Any:
             started = time.monotonic()
             routes = [
                 {"bot_name": item.bot.name, "harness_id": item.request.harness_id}
                 for item in prepared_runs
             ]
+            # asyncio.Lock wakes waiters first-in, first-out, and tasks are created in
+            # participant order, so serialized writers run in participant order.
+            write_lock = asyncio.Lock()
             run_store = RunStore(workspace)
             run_record = run_store.start(
                 run_id, session_id, payload.content, routes, context_manifest
@@ -773,6 +792,12 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             store.append(session, "user", payload.content.strip())
 
             async def run_one(prepared: PreparedRun) -> RunResult:
+                if serialize_writers and prepared.bot.name in writers:
+                    async with write_lock:
+                        return await run_adapter(prepared)
+                return await run_adapter(prepared)
+
+            async def run_adapter(prepared: PreparedRun) -> RunResult:
                 adapter = default_registry().get(prepared.request.harness_id)
                 if hasattr(adapter, "run_cancellable"):
                     if prepared.request.harness_id not in {"magagent", "loro"}:
@@ -790,8 +815,31 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
                     )
                 return await asyncio.to_thread(adapter.run, prepared.request)  # pragma: no cover
 
+            if writers:
+                notice = {
+                    "run_id": run_id,
+                    "bots": list(writers),
+                    "serialized": serialize_writers,
+                    "message": (
+                        write_serialization_message(writers)
+                        if serialize_writers
+                        else "Concurrent writes allowed: "
+                        + ", ".join(writers)
+                        + " may edit this workspace at the same time."
+                    ),
+                }
+                run_record.events.append({"type": "write_serialization", **notice})
+                yield _sse("write_serialization", notice)
             for route in routes:
-                yield _sse("participant_started", {"run_id": run_id, **route})
+                name = route["bot_name"]
+                if serialize_writers and name in writers[1:]:
+                    ahead = writers[: writers.index(name)]
+                    yield _sse(
+                        "participant_queued",
+                        {"run_id": run_id, **route, "waiting_for": list(ahead)},
+                    )
+                else:
+                    yield _sse("participant_started", {"run_id": run_id, **route})
             tasks = {
                 asyncio.create_task(run_one(prepared)): (index, prepared)
                 for index, prepared in enumerate(prepared_runs)

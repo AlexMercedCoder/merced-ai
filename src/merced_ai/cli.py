@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any, Literal, NoReturn, cast
 
@@ -15,12 +16,15 @@ from rich.table import Table
 
 from merced_ai import __version__
 from merced_ai.application import (
+    PreparedRun,
     RoutingError,
     execute,
     participant_from_run,
     prepare_group,
     prepare_group_turn,
     prepare_run,
+    shared_workspace_writers,
+    write_serialization_message,
 )
 from merced_ai.bots import BotError, create_bot, discover_bots, resolve_bot
 from merced_ai.harnesses import default_registry
@@ -62,6 +66,12 @@ app.add_typer(group_app, name="group")
 console = Console()
 error_console = Console(stderr=True)
 DEFAULT_WORKSPACE = Path.cwd()
+WORKSPACE_HELP = "Project directory to use. Defaults to the current directory."
+JSON_HELP = "Print machine-readable JSON instead of formatted output."
+ALLOW_CONCURRENT_WRITES_HELP = (
+    "Let write-capable bots that share a workspace run at the same time. By default their "
+    "turns run one at a time so they cannot edit the same files concurrently."
+)
 
 
 def _version_callback(value: bool) -> None:
@@ -82,7 +92,9 @@ def main(
 
 @app.command("init")
 def initialize(
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
 ) -> None:
     """Create project-local Merced AI and OAP directories."""
     root = ensure_project_layout(workspace)
@@ -92,8 +104,10 @@ def initialize(
 
 @app.command("status")
 def status(
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """Summarize profiles, bots, sessions, and installed harnesses."""
     payload = {
@@ -112,7 +126,7 @@ def status(
 
 @harness_app.command("list")
 def harness_list(
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """List known harnesses and run safe local version probes."""
     probes = default_registry().probe_all()
@@ -125,7 +139,7 @@ def harness_list(
 @harness_app.command("show")
 def harness_show(
     harness_id: Annotated[str, typer.Argument(help="Harness identifier from `harness list`.")],
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """Show the current probe result for one harness."""
     try:
@@ -178,7 +192,9 @@ def doctor() -> None:
 
 @app.command("ui")
 def ui(
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
     host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
     port: Annotated[int, typer.Option("--port", min=1024, max=65535)] = 8765,
     no_open: Annotated[bool, typer.Option("--no-open")] = False,
@@ -194,8 +210,10 @@ def ui(
 
 @profile_app.command("list")
 def profile_list(
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """List valid profiles visible in the workspace."""
     profiles = _profile_action(lambda: discover_profiles(workspace))
@@ -217,7 +235,7 @@ def profile_list(
 @profile_app.command("validate")
 def profile_validate(
     path: Path,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """Validate one OAP profile with the reference implementation."""
     record = _profile_action(lambda: validate_profile(path))
@@ -232,8 +250,10 @@ def profile_validate(
 @profile_app.command("show")
 def profile_show(
     reference: str,
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """Show a discovered profile by name or path."""
     record = _profile_action(lambda: resolve_profile(reference, workspace))
@@ -250,7 +270,9 @@ def profile_create(
     name: str,
     description: Annotated[str, typer.Option("--description", "-d")],
     instructions: Annotated[str, typer.Option("--instructions", "-i")],
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
 ) -> None:
     """Create a minimal valid project-local OAP profile."""
     record = _profile_action(lambda: create_profile(name, description, instructions, workspace))
@@ -265,7 +287,9 @@ def profile_generate(
     scope: Annotated[str, typer.Option("--scope")] = "project",
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     yes: Annotated[bool, typer.Option("--yes")] = False,
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
 ) -> None:
     """Generate and validate a portable OAP profile through an installed harness."""
     proposal = _profile_action(
@@ -292,8 +316,10 @@ def profile_generate(
 def profile_effective(
     reference: str,
     harness_id: Annotated[str, typer.Option("--harness")],
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """Preview how a profile projects onto one harness without running it."""
     record = _profile_action(lambda: resolve_profile(reference, workspace))
@@ -306,8 +332,10 @@ def profile_effective(
 
 @bot_app.command("list")
 def bot_list(
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """List project and user bot bindings."""
     bots = _bot_action(lambda: discover_bots(workspace))
@@ -334,7 +362,9 @@ def bot_create(
     profile: Annotated[str, typer.Option("--profile")],
     harness: Annotated[str, typer.Option("--harness")],
     fallback: Annotated[list[str] | None, typer.Option("--fallback")] = None,
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
     user: Annotated[bool, typer.Option("--user", help="Create a user-global binding.")] = False,
     requires_webmcp: Annotated[
         bool,
@@ -368,8 +398,10 @@ def bot_create(
 @bot_app.command("show")
 def bot_show(
     name: str,
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """Show one bot binding."""
     binding = _bot_action(lambda: resolve_bot(name, workspace))
@@ -386,11 +418,13 @@ def bot_show(
 def ask(
     bot_name: str,
     prompt: str,
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
     harness: Annotated[str | None, typer.Option("--harness")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     explain: Annotated[bool, typer.Option("--explain")] = False,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """Run one prompt through a bot's selected harness."""
     try:
@@ -430,7 +464,9 @@ def ask(
 @app.command("chat")
 def chat(
     bot_name: str,
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
     harness: Annotated[str | None, typer.Option("--harness")] = None,
     resume_session: Annotated[str | None, typer.Option("--resume-session")] = None,
 ) -> None:
@@ -497,18 +533,37 @@ def _chat_loop(
 def group_ask(
     bot_names: Annotated[list[str], typer.Argument(help="Two or more bot names.")],
     prompt: Annotated[str, typer.Option("--prompt", "-p", help="Message sent to the group.")],
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
     mode: Annotated[str, typer.Option(help="mentions, all, or round_robin")] = "all",
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    allow_concurrent_writes: Annotated[
+        bool, typer.Option("--allow-concurrent-writes", help=ALLOW_CONCURRENT_WRITES_HELP)
+    ] = False,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
-    """Send one message to a new group conversation."""
+    """Send one message to a new group conversation.
+
+    Example: merced-ai group ask reviewer builder -p "Assess this change" --json
+    """
     session = _create_group_session(tuple(bot_names), workspace, mode)
-    results = _run_group_turn(session, prompt, workspace, dispatch=mode)
+    turn = _run_group_turn(
+        session,
+        prompt,
+        workspace,
+        dispatch=mode,
+        allow_concurrent_writes=allow_concurrent_writes,
+    )
+    results = turn.results
     if json_output:
         typer.echo(
             json.dumps(
                 {
                     "session_id": session.id,
+                    "write_serialization": {
+                        "serialized": turn.serialized,
+                        "bots": list(turn.writers),
+                    },
                     "responses": [
                         {
                             "bot_name": name,
@@ -531,12 +586,20 @@ def group_ask(
 @group_app.command("chat")
 def group_chat(
     bot_names: Annotated[list[str], typer.Argument(help="Two or more bot names.")],
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
     mode: Annotated[str, typer.Option(help="mentions, all, or round_robin")] = "mentions",
+    allow_concurrent_writes: Annotated[
+        bool, typer.Option("--allow-concurrent-writes", help=ALLOW_CONCURRENT_WRITES_HELP)
+    ] = False,
 ) -> None:
-    """Chat with a group; use @bot, /all, /round-robin, /exit, or /quit."""
+    """Chat with a group; use @bot, /all, /round-robin, /exit, or /quit.
+
+    Example: merced-ai group chat reviewer builder tester --mode all
+    """
     session = _create_group_session(tuple(bot_names), workspace, mode)
-    _group_chat_loop(session, workspace)
+    _group_chat_loop(session, workspace, allow_concurrent_writes=allow_concurrent_writes)
 
 
 def _create_group_session(bot_names: tuple[str, ...], workspace: Path, mode: str) -> SessionRecord:
@@ -552,37 +615,80 @@ def _create_group_session(bot_names: tuple[str, ...], workspace: Path, mode: str
         _fail(str(exc), 2)
 
 
+@dataclass
+class GroupTurn:
+    results: list[tuple[str, RunResult | Exception]]
+    writers: tuple[str, ...]
+    serialized: bool
+
+
 def _run_group_turn(
     session: SessionRecord,
     prompt: str,
     workspace: Path,
     *,
     dispatch: str | None = None,
-) -> list[tuple[str, RunResult | Exception]]:
+    allow_concurrent_writes: bool = False,
+) -> GroupTurn:
     try:
         prepared_runs = prepare_group_turn(session, prompt, workspace, dispatch=dispatch)
     except (ValueError, BotError, ProfileError, RoutingError) as exc:
         _fail(str(exc), 2)
+    writers = shared_workspace_writers(prepared_runs)
+    serialize = bool(writers) and not allow_concurrent_writes
+    if serialize:
+        error_console.print(
+            f"[yellow]Warning:[/yellow] {write_serialization_message(writers)} "
+            "Pass --allow-concurrent-writes to run them at the same time."
+        )
+    elif writers:
+        error_console.print(
+            "[yellow]Warning:[/yellow] concurrent writes allowed: "
+            f"{', '.join(writers)} may edit the same workspace at the same time."
+        )
     store = SessionStore(workspace)
     store.append(session, "user", prompt)
-    with ThreadPoolExecutor(max_workers=len(prepared_runs)) as pool:
-        futures = [pool.submit(execute, item) for item in prepared_runs]
-        results: list[tuple[str, RunResult | Exception]] = []
-        for prepared, future in zip(prepared_runs, futures, strict=True):
+    # Write-capable bots that share a workspace run one after another in participant order,
+    # on one worker; every other participant still runs concurrently.
+    serial = [item for item in prepared_runs if serialize and item.bot.name in writers]
+    parallel = [item for item in prepared_runs if item not in serial]
+
+    def run_serially() -> dict[str, RunResult | Exception]:
+        outcomes: dict[str, RunResult | Exception] = {}
+        for item in serial:
             try:
-                result = future.result()
-                store.append(
-                    session,
-                    "assistant",
-                    result.output,
-                    bot_name=prepared.bot.name,
-                    harness_id=result.harness_id,
-                    profile=prepared.profile,
-                )
-                results.append((prepared.bot.name, result))
-            except Exception as exc:  # Keep healthy group participants useful on partial failure.
-                results.append((prepared.bot.name, exc))
-    return results
+                outcomes[item.bot.name] = execute(item)
+            except Exception as exc:  # A failed writer must not block the next one.
+                outcomes[item.bot.name] = exc
+        return outcomes
+
+    def run_one(item: PreparedRun) -> dict[str, RunResult | Exception]:
+        try:
+            return {item.bot.name: execute(item)}
+        except Exception as exc:  # Keep healthy group participants useful on partial failure.
+            return {item.bot.name: exc}
+
+    outcomes: dict[str, RunResult | Exception] = {}
+    with ThreadPoolExecutor(max_workers=len(parallel) + (1 if serial else 0)) as pool:
+        futures = [pool.submit(run_one, item) for item in parallel]
+        if serial:
+            futures.append(pool.submit(run_serially))
+        for future in futures:
+            outcomes.update(future.result())
+    results: list[tuple[str, RunResult | Exception]] = []
+    for prepared in prepared_runs:
+        outcome = outcomes[prepared.bot.name]
+        if not isinstance(outcome, Exception):
+            store.append(
+                session,
+                "assistant",
+                outcome.output,
+                bot_name=prepared.bot.name,
+                harness_id=outcome.harness_id,
+                profile=prepared.profile,
+            )
+        results.append((prepared.bot.name, outcome))
+    return GroupTurn(results, writers, serialize)
 
 
 def _render_group_results(results: list[tuple[str, RunResult | Exception]]) -> None:
@@ -595,7 +701,9 @@ def _render_group_results(results: list[tuple[str, RunResult | Exception]]) -> N
             console.print(f"[dim]{result.harness_id} · {result.duration_ms} ms[/dim]")
 
 
-def _group_chat_loop(session: SessionRecord, workspace: Path) -> None:
+def _group_chat_loop(
+    session: SessionRecord, workspace: Path, *, allow_concurrent_writes: bool = False
+) -> None:
     names = ", ".join(item.bot_name for item in session.participants)
     console.print(f"Group chat with [bold]{names}[/bold] · {session.mode} · {session.id}")
     while True:
@@ -612,13 +720,22 @@ def _group_chat_loop(session: SessionRecord, workspace: Path) -> None:
             dispatch, prompt = "all", prompt[5:].strip()
         elif prompt.startswith("/round-robin "):
             dispatch, prompt = "round_robin", prompt[13:].strip()
-        _render_group_results(_run_group_turn(session, prompt, workspace, dispatch=dispatch))
+        turn = _run_group_turn(
+            session,
+            prompt,
+            workspace,
+            dispatch=dispatch,
+            allow_concurrent_writes=allow_concurrent_writes,
+        )
+        _render_group_results(turn.results)
 
 
 @session_app.command("list")
 def session_list(
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """List durable project sessions."""
     records = SessionStore(workspace).list()
@@ -640,8 +757,10 @@ def session_list(
 @session_app.command("show")
 def session_show(
     session_id: str,
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
-    json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """Show a stored conversation."""
     try:
@@ -661,7 +780,12 @@ def session_show(
 @session_app.command("resume")
 def session_resume(
     session_id: str,
-    workspace: Annotated[Path, typer.Option("--workspace", "-C")] = DEFAULT_WORKSPACE,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    allow_concurrent_writes: Annotated[
+        bool, typer.Option("--allow-concurrent-writes", help=ALLOW_CONCURRENT_WRITES_HELP)
+    ] = False,
 ) -> None:
     """Resume a stored conversation using its pinned bot and harness."""
     try:
@@ -669,7 +793,7 @@ def session_resume(
     except ValueError as exc:
         _fail(str(exc), 2)
     if record.kind == "group":
-        _group_chat_loop(record, workspace)
+        _group_chat_loop(record, workspace, allow_concurrent_writes=allow_concurrent_writes)
     else:
         _chat_loop(record.bot_name, workspace, resume_session=session_id)
 

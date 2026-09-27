@@ -53,9 +53,31 @@ preserve attribution across transcripts and inspector cards.
 - `round_robin`: one participant responds; persisted assistant-turn count chooses the next bot.
 - a bot name: only that participant responds (web API/UI).
 
-Multi-recipient runs execute concurrently. Prompts are isolated per bot and identify the intended
-speaker. Queued/running/completed/failed state and responses update progressively. Durable turns
+Multi-recipient runs execute concurrently, with one exception described in
+[Shared-workspace writes](#shared-workspace-writes). Prompts are isolated per bot and identify the
+intended speaker. Queued/running/completed/failed state and responses update progressively. Durable turns
 are committed in original participant order, keeping resumed/exported transcripts deterministic.
+
+## Shared-workspace writes
+
+Every participant in a room works in the same project directory. A bot is **write-capable** when
+its OAP profile does not deny both `edit` and `shell`; such a bot can change files in that
+directory. When a turn selects two or more write-capable bots that share a workspace, Merced AI
+runs those bots one at a time, in participant order, so they cannot edit the same files at once.
+Read-only participants (both `edit` and `shell` denied) still run concurrently with everyone.
+
+The room tells you when this happens:
+
+- **CLI:** `group ask`, `group chat`, and `session resume` print a warning to stderr naming the
+  bots. `group ask --json` adds `write_serialization: {"serialized": true, "bots": [...]}`.
+- **Web UI:** an amber notice above the composer names the bots and says they take turns. Queued
+  writers show "Queued until ... finishes (shared workspace)" in the run activity list, and the
+  stream carries `write_serialization` and `participant_queued` events.
+
+To let them run at the same time, pass `--allow-concurrent-writes` to `group ask`, `group chat`,
+or `session resume`, or tick **Run at the same time** in the web notice (remembered per
+conversation in this browser; the API field is `allow_concurrent_writes`). Only do this when the
+bots will not touch the same files. A planned worktree-per-bot mode will isolate them instead.
 
 ## Safety and failure behavior
 

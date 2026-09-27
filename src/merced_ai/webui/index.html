@@ -85,6 +85,11 @@
           </div>
 
           <footer class="composer-wrap">
+            <div id="write-notice" class="write-notice" role="status" hidden>
+              <span class="write-notice-icon" aria-hidden="true">!</span>
+              <p id="write-notice-copy"></p>
+              <label class="write-notice-toggle"><input type="checkbox" id="allow-concurrent-writes" /> Run at the same time</label>
+            </div>
             <form id="composer" class="composer">
               <textarea id="message-input" aria-label="Message" placeholder="Message your bot…" rows="1" maxlength="100000"></textarea>
               <div id="mention-menu" class="mention-menu" role="listbox" aria-label="Mention a bot" hidden></div>

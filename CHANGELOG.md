@@ -18,6 +18,16 @@ Targets 0.8.0.
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
 
+### Added
+
+- Group turns now run write-capable bots that share a workspace one at a time, in participant
+  order, and say so: a stderr warning in the CLI (plus `write_serialization` in
+  `group ask --json`), and an amber notice above the web composer with queued-participant status.
+  Read-only bots still run concurrently. Opt out with `--allow-concurrent-writes` on `group ask`,
+  `group chat`, and `session resume`, or the **Run at the same time** toggle in the web UI. See
+  [Shared-workspace writes](docs/GROUP_CHAT.md#shared-workspace-writes).
+- Every `--workspace/-C` and `--json` option now has help text.
+
 ### Changed
 
 - `harness show`, `harness list --json`, and the web UI Harnesses screen report each harness's

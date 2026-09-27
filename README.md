@@ -115,6 +115,7 @@ merced-ai ask reviewer "Review the current diff"
 merced-ai chat reviewer
 merced-ai group chat reviewer builder tester
 merced-ai group ask reviewer builder tester --prompt "Give independent assessments" --json
+# Write-capable bots in the same workspace take turns; opt out with --allow-concurrent-writes
 merced-ai session list
 merced-ai session resume <session-id>
 ```

@@ -16,6 +16,7 @@ const state = {
   contextDraft: [],
   contextFiles: [],
   view: "conversations",
+  concurrentWrites: {},
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -178,6 +179,33 @@ function messageTemplate(turn) {
   return `<article class="message assistant" ${identityStyle(turn.bot_name)}><div class="message-avatar bot-identity" aria-label="${escapeHtml(speaker)}">${escapeHtml(initials(turn.bot_name))}</div><div class="message-body"><strong class="message-speaker">${escapeHtml(speaker)}</strong>${body}<div class="message-meta"><span>${escapeHtml(turn.harness_id || "Harness response")}</span><span>${turn.pending ? "Waiting for completion" : turn.spec_digest ? "Profile verified" : "Saved response"}</span></div></div></article>`;
 }
 
+// Group rooms serialize write-capable bots that share this workspace unless the user opts out.
+function sharedWriters() {
+  const participants = currentParticipants();
+  if (participants.length < 2) return [];
+  return participants.filter((item) => state.data.bots.find((bot) => bot.name === item.bot_name)?.write_capable !== false).map((item) => item.bot_name);
+}
+function concurrentWritesKey() { return `merced-ai-concurrent-writes:${state.activeSession}`; }
+function concurrentWritesAllowed() {
+  if (!state.activeSession) return false;
+  if (state.activeSession in state.concurrentWrites) return state.concurrentWrites[state.activeSession];
+  try { return localStorage.getItem(concurrentWritesKey()) === "on"; } catch { return false; }
+}
+function listNames(names) { return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0] || ""; }
+function renderWriteNotice() {
+  const writers = sharedWriters().map((name) => titleCase(name));
+  const notice = $("#write-notice");
+  notice.hidden = writers.length < 2;
+  if (notice.hidden) return;
+  const allowed = concurrentWritesAllowed();
+  $("#allow-concurrent-writes").checked = allowed;
+  $("#allow-concurrent-writes").disabled = Boolean(state.activeRun);
+  notice.classList.toggle("allowed", allowed);
+  $("#write-notice-copy").textContent = allowed
+    ? `Concurrent writes on: ${listNames(writers)} may edit the same files at the same time.`
+    : `${listNames(writers)} can ${writers.length === 2 ? "both" : "all"} edit this workspace, so they take turns.`;
+}
+
 function renderConversation() {
   const bot = currentBot();
   const profile = currentProfile();
@@ -194,6 +222,7 @@ function renderConversation() {
   $("#derive-group").disabled = !session || state.data.bots.length < 2;
   $("#message-input").disabled = !bot || Boolean(state.activeRun);
   $("#send-message").disabled = !bot || Boolean(state.activeRun);
+  renderWriteNotice();
   bindCopyButtons();
 }
 
@@ -572,7 +601,8 @@ async function sendPrompt(approved = false) {
   try {
     const dispatch = state.pendingDispatch || (currentParticipants().length > 1 ? $("#dispatch-select").value : null);
     const context = state.selectedContext.map((item) => ({ path: item.path }));
-    const response = await api(`/api/sessions/${encodeURIComponent(session.id)}/messages`, { method: "POST", body: JSON.stringify({ content, approved, dispatch, context }) });
+    const allowConcurrentWrites = concurrentWritesAllowed();
+    const response = await api(`/api/sessions/${encodeURIComponent(session.id)}/messages`, { method: "POST", body: JSON.stringify({ content, approved, dispatch, context, allow_concurrent_writes: allowConcurrentWrites }) });
     for await (const item of receiveRunEvents(response)) {
         if (item.event === "approval_required") {
           setBusy(false, item.payload.authority);
@@ -600,6 +630,10 @@ async function sendPrompt(approved = false) {
           $("#composer-status").textContent = `Running ${routes.length} collaborator${routes.length === 1 ? "" : "s"}…`;
           renderConversation();
           scrollThread();
+        } else if (item.event === "write_serialization") {
+          $("#composer-status").textContent = item.payload.message;
+        } else if (item.event === "participant_queued") {
+          updateParticipantStatus(item.payload.bot_name, `Queued until ${listNames(item.payload.waiting_for.map(titleCase))} finishes (shared workspace)`, item.payload.harness_id);
         } else if (item.event === "participant_started") {
           updateParticipantStatus(item.payload.bot_name, "Waiting for harness completion", item.payload.harness_id);
         } else if (item.event === "tool_event") {
@@ -851,6 +885,16 @@ function bindEvents() {
   $("#message-input").addEventListener("input", (event) => { event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; renderMentionMenu(); });
   $("#mention-menu").addEventListener("click", (event) => { const button = event.target.closest("[data-mention]"); if (button) insertMention(button.dataset.mention); });
   $("#cancel-run").addEventListener("click", cancelRun);
+  $("#allow-concurrent-writes").addEventListener("change", (event) => {
+    const allowed = event.target.checked;
+    if (state.activeSession) state.concurrentWrites[state.activeSession] = allowed;
+    try {
+      if (allowed) localStorage.setItem(concurrentWritesKey(), "on");
+      else localStorage.removeItem(concurrentWritesKey());
+    } catch { /* storage unavailable: the choice lasts for this page only */ }
+    renderWriteNotice();
+    toast(allowed ? "Concurrent writes allowed for this conversation" : "Write-capable bots will take turns");
+  });
   $("#activity-list").addEventListener("click", (event) => { const retry = event.target.closest(".retry-run"); if (retry && state.lastPrompt) { state.pendingPrompt = state.lastPrompt; state.pendingDispatch = retry.dataset.bot || ""; sendPrompt(); } });
   $("#group-search").addEventListener("input", renderGroupPicker);
   $$(".group-cancel").forEach((button) => button.addEventListener("click", () => $("#group-dialog").close()));

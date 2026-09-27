@@ -23,6 +23,35 @@ class RoutingError(RuntimeError):
     pass
 
 
+def is_write_capable(profile: ProfileRecord) -> bool:
+    """A profile that does not deny both editing and shell access may change the workspace."""
+    permissions = profile.document.get("spec", {}).get("permissions", {})
+    return permissions.get("edit") != "deny" or permissions.get("shell") != "deny"
+
+
+def shared_workspace_writers(prepared: tuple[PreparedRun, ...]) -> tuple[str, ...]:
+    """Bots that could write to a workspace another selected write-capable bot also uses.
+
+    Returns their names in participant order, or an empty tuple when no two write-capable
+    participants share a workspace. Group turns serialize these bots by default.
+    """
+    by_workspace: dict[Path, list[str]] = {}
+    for item in prepared:
+        if is_write_capable(item.profile):
+            by_workspace.setdefault(item.request.workspace, []).append(item.bot.name)
+    shared = {name for names in by_workspace.values() if len(names) > 1 for name in names}
+    return tuple(item.bot.name for item in prepared if item.bot.name in shared)
+
+
+def write_serialization_message(writers: tuple[str, ...]) -> str:
+    names = ", ".join(writers[:-1]) + f" and {writers[-1]}" if len(writers) > 1 else writers[0]
+    quantifier = "both" if len(writers) == 2 else "all"
+    return (
+        f"{names} can {quantifier} change this workspace, so their turns run one at a time. "
+        "Allow concurrent writes only if they will not edit the same files."
+    )
+
+
 class PreparedRun:
     def __init__(
         self,

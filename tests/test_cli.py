@@ -215,7 +215,7 @@ def test_cli_group_ask_is_attributed_and_deterministic(
     )
 
     assert result.exit_code == 0, result.output
-    payload = json.loads(result.output)
+    payload = json.loads(result.stdout)
     assert [item["bot_name"] for item in payload["responses"]] == ["reviewer", "tester"]
     assert "You are reviewer; respond only as reviewer." in payload["responses"][0]["output"]
     assert "You are tester; respond only as tester." in payload["responses"][1]["output"]
