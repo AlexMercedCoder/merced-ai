@@ -7,6 +7,12 @@ python -m pip install -e '.[dev]'
 python -m pytest -q
 ```
 
+The OAP and AGS conformance tests read the upstream fixture repositories. Clone
+[open-agent-profile](https://github.com/alexmerced-oss/open-agent-profile) and
+[agentic-graph-spec](https://github.com/AlexMercedCoder/agentic-graph-spec) next to this checkout,
+or point `OAP_FIXTURE_REPO` and `AGS_FIXTURE_REPO` at them. Without either, those tests are skipped
+and pytest prints the reason.
+
 Keep changes focused and preserve unrelated worktree modifications. Before submitting:
 
 ```bash

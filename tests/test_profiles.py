@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
 import yaml
+from fixture_repos import fixture_params, locate_fixture_repo
 
 from merced_ai.profiles import (
     ProfileError,
@@ -16,12 +16,8 @@ from merced_ai.profiles import (
     validate_profile,
 )
 
-OAP_REPO = Path(
-    os.environ.get(
-        "OAP_FIXTURE_REPO",
-        str(Path(__file__).resolve().parents[4] / "open-agent-profile"),
-    )
-)
+_OAP_ENV, _OAP_SIBLING = "OAP_FIXTURE_REPO", "open-agent-profile"
+OAP_REPO = locate_fixture_repo(_OAP_ENV, _OAP_SIBLING, "examples")
 
 
 def test_create_discover_and_assemble_profile(workspace: Path) -> None:
@@ -204,8 +200,7 @@ def test_profile_editor_does_not_replace_valid_profile_with_invalid_candidate(
 
 @pytest.mark.parametrize(
     "path",
-    sorted((OAP_REPO / "examples").glob("*.agent.*")),
-    ids=lambda path: path.name,
+    fixture_params(OAP_REPO, "examples", "*.agent.*", env_var=_OAP_ENV, sibling=_OAP_SIBLING),
 )
 def test_all_immutable_upstream_profiles_load(path: Path) -> None:
     assert validate_profile(path).profile_digest.startswith("sha256:")
@@ -213,8 +208,9 @@ def test_all_immutable_upstream_profiles_load(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    sorted((OAP_REPO / "examples" / "invalid").glob("*.agent.*")),
-    ids=lambda path: path.name,
+    fixture_params(
+        OAP_REPO, "examples/invalid", "*.agent.*", env_var=_OAP_ENV, sibling=_OAP_SIBLING
+    ),
 )
 def test_all_immutable_upstream_invalid_profiles_are_rejected(path: Path) -> None:
     with pytest.raises(ProfileError):

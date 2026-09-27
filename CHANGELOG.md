@@ -12,6 +12,14 @@ Targets 0.8.0.
   name 0.7.0, the 0.7.0 changelog entry carries its release date, and the documentation index links
   the 0.7.0 release notes.
 
+### Testing
+
+- OAP and AGS fixture tests find the sibling `open-agent-profile` and `agentic-graph-spec` clones
+  when `OAP_FIXTURE_REPO` or `AGS_FIXTURE_REPO` is unset, and skip with a reason that says how to
+  enable them when neither exists. An explicitly configured path that is wrong fails collection.
+  The OAP upstream fixtures previously resolved to the wrong parent directory and were silently
+  skipped on developer machines.
+
 ## 0.7.0 — 2026-09-12
 
 See [release notes](docs/RELEASE_NOTES_0.7.0.md).

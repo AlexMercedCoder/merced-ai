@@ -1,21 +1,20 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
+from fixture_repos import fixture_params, locate_fixture_repo, missing_reason
 
 from merced_ai.graphs import GraphError, plan_graph
 
-AGS_REPO = Path(
-    os.environ.get(
-        "AGS_FIXTURE_REPO",
-        str(Path(__file__).resolve().parents[2] / "agentic-graph-spec"),
-    )
-)
+_ENV, _SIBLING = "AGS_FIXTURE_REPO", "agentic-graph-spec"
+AGS_REPO = locate_fixture_repo(_ENV, _SIBLING, "examples/minimal.agraph.yaml")
+requires_ags = pytest.mark.skipif(AGS_REPO is None, reason=missing_reason(_ENV, _SIBLING))
 
 
+@requires_ags
 def test_plan_graph_validates_and_orders_current_ags_example() -> None:
+    assert AGS_REPO is not None
     plan = plan_graph(AGS_REPO / "examples" / "minimal.agraph.yaml")
 
     assert plan.graph_id == "examples/minimal"
@@ -33,15 +32,16 @@ def test_plan_graph_validates_and_orders_current_ags_example() -> None:
     assert plan.unsupported_features == ("execution", "gate")
 
 
+@requires_ags
 def test_plan_graph_rejects_recursive_subgraph_fixture() -> None:
+    assert AGS_REPO is not None
     with pytest.raises(GraphError, match="AG131"):
         plan_graph(AGS_REPO / "conformance" / "invalid" / "ag131-recursive-subgraph.agraph.yaml")
 
 
 @pytest.mark.parametrize(
     "path",
-    sorted((AGS_REPO / "examples").glob("*.agraph.*")),
-    ids=lambda path: path.name,
+    fixture_params(AGS_REPO, "examples", "*.agraph.*", env_var=_ENV, sibling=_SIBLING),
 )
 def test_all_immutable_upstream_examples_plan(path: Path) -> None:
     assert plan_graph(path).digest.startswith("sha256-")
@@ -49,8 +49,7 @@ def test_all_immutable_upstream_examples_plan(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    sorted((AGS_REPO / "conformance" / "invalid").glob("*.agraph.*")),
-    ids=lambda path: path.name,
+    fixture_params(AGS_REPO, "conformance/invalid", "*.agraph.*", env_var=_ENV, sibling=_SIBLING),
 )
 def test_all_immutable_upstream_invalid_fixtures_are_rejected(path: Path) -> None:
     expected = path.name.split("-", 1)[0].upper()
