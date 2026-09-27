@@ -175,7 +175,7 @@ for the pinned revisions and exact boundary.
 
 | Harness | Discovery | Execution | OAP projection | Prompt delivery |
 | --- | --- | --- | --- | --- |
-| MagAgent | yes | one-shot with AAIS approval relay | native for project-discovered profiles | argument (stdin is the AAIS channel) |
+| MagAgent | yes | one-shot with AAIS approval relay | native for project-discovered profiles | private file (`--prompt-file`) on MagAgent with that flag; argument on older MagAgent |
 | Loro | yes | one-shot with AAIS approval relay | native for project-discovered profiles | private file (`--prompt-file`) on Loro with that flag; argument on older Loro |
 | Claude Code | yes | ACP session via `claude-agent-acp` (streaming, approvals, resume), else structured print mode | system-prompt projection (delimited prompt over ACP) | stdin; system prompt via private file |
 | Codex | yes | noninteractive exec | delimited prompt compatibility mode | stdin (`exec -`) |

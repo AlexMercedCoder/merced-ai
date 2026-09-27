@@ -136,7 +136,8 @@ tool environment fails to import (`anton version` raises), not because of an ada
 | Gemini CLI | 0.57.0 | stdin | `OK` with API-key auth. The machine's cached Google login fails with "client no longer supported for Gemini Code Assist for individuals", an account issue outside Merced AI. |
 | Goose | 1.48.0 | stdin (`--instructions -`) | `OK` after a fix: the reply had been the echoed user message |
 | OpenCode | 1.18.31 | stdin | `OK` after a fix: the reply had been empty |
-| MagAgent | 1.3.0 (repo build) | argument | `OK` via Nous after a fix: the reply had been empty; the globally installed 1.1.2 needs `magent user create` first |
+| MagAgent | `claude/next-release` build with G-11 | private file (`--prompt-file`) | `OK` via Nous in a throwaway venv, HOME, and user. |
+| MagAgent (earlier the same day) | 1.3.0 (repo build) | argument | `OK` via Nous after a fix: the reply had been empty; the globally installed 1.1.2 needs `magent user create` first |
 | Loro | `claude/next-release` build with L-8/L-9 | private file (`--prompt-file`), `--json` | `OK` via Nous, run from a throwaway venv and HOME after Loro fixed its run-path provider defaults. |
 | Loro (earlier the same day) | 0.21.0 (repo build) and 0.19.2 | argument | Not passing. Merced AI delivered the run, but `loro run` reported `provider_error` (HTTP 401 with an OpenAI-style "Incorrect API key" message) while `loro providers smoke` with the same config and key returned `ok`. This is a Loro issue; Merced AI now reports it as a failed run instead of returning the summary as the reply. |
 

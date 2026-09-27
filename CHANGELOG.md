@@ -40,6 +40,9 @@ Targets 0.8.0.
   reason, and Loro's session ID. A Loro provider error (non-zero exit) is reported with Loro's own
   message. Older Loro keeps the argument and its size guard; `harness show` reports the detected
   delivery. Adapter specs can declare such optional-feature detection (`HarnessSpec.features`).
+- MagAgent: when the installed `magent ask` offers `--prompt-file`, the task goes through a 0600
+  file in the run's private temp directory instead of the command line (detected and cached like
+  Loro's); older MagAgent keeps the argument and its size guard.
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
 

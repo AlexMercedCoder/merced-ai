@@ -103,14 +103,27 @@ def build_gemini(ctx: InvocationContext) -> HarnessInvocation:
     return HarnessInvocation(command, STDIN, stdin=ctx.prefixed_prompt)
 
 
+def magagent_features(executable: Path) -> frozenset[str]:
+    """MagAgent 1.4 added `ask --prompt-file` (with a clean --json stdout)."""
+    return help_flags([str(executable), "ask", "--help"], ("--prompt-file",))
+
+
 def build_magagent(ctx: InvocationContext) -> HarnessInvocation:
     mode = "paranoid" if ctx.edit_denied or ctx.shell_denied else "balanced"
-    # stdin is the AAIS approval channel and `magent ask` takes the task only as an argument,
-    # so this route stays on argv and is bounded by the argv guard.
+    # stdin is the AAIS approval channel, so the task goes through --prompt-file when this
+    # MagAgent has it (a 0600 file in the run's private temp dir) and otherwise on argv behind
+    # the argv guard.
+    task = ctx.prompt if ctx.native_profile else ctx.prefixed_prompt
+    delivery = ARGV
+    if "--prompt-file" in ctx.features:
+        task_args = ["--prompt-file", str(ctx.private_file("task.md", task))]
+        delivery = FILE
+    else:
+        task_args = [task]
     command = [
         str(ctx.executable),
         "ask",
-        ctx.prompt if ctx.native_profile else ctx.prefixed_prompt,
+        *task_args,
         "--project",
         str(ctx.workspace),
         "--permission-mode",
@@ -121,7 +134,7 @@ def build_magagent(ctx: InvocationContext) -> HarnessInvocation:
     ]
     if ctx.native_profile:
         command.extend(("--agent", ctx.profile.name))
-    return HarnessInvocation(command, ARGV)
+    return HarnessInvocation(command, delivery)
 
 
 LORO_FEATURES = ("--prompt-file", "--json")
@@ -311,6 +324,7 @@ BUILTIN_SPECS: tuple[HarnessSpec, ...] = (
         projection="native",
         output="json",
         aais_control=True,
+        features=magagent_features,
     ),
     HarnessSpec(
         descriptor(
