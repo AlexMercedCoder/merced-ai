@@ -29,6 +29,12 @@ What the client gets:
 - **Sessions are Merced AI conversations.** `session/new` creates one (a room when you pass more
   than one `--bot`); `session/load` replays it. The same conversation shows up in
   `merced-ai session list` and the web UI.
+- **Sessions belong to the process that started them.** A conversation started by another client,
+  by an earlier run of this command, or in the CLI or web UI loads read-only: its history is
+  replayed with a note, and prompting it is refused. To continue such conversations (for example
+  when your editor reopens its threads after a restart), add `--allow-resume`. Even then, only
+  conversations whose bots are all served by this command can be continued, so an agent started
+  for a read-only bot can never drive a room with write-capable bots.
 - **Streaming.** Replies from harnesses that run over ACP stream as `agent_message_chunk`
   updates; other harnesses send their reply when they finish. In a room each reply starts with
   the bot's name.

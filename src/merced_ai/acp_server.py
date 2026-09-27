@@ -8,6 +8,12 @@ Authority stays where it was: the client's user answers permission requests (Mer
 each harness's AAIS or ACP request as ``session/request_permission``), and launching a
 write-capable bot needs the user's consent once per session. The transport is the stdio pipe the
 client created, so no network port is opened.
+
+Sessions belong to the agent process that created them. Any conversation in the workspace can be
+loaded (its history is replayed), but only sessions this process started can be prompted. With
+``allow_resume`` (``--allow-resume``), a loaded conversation can be continued too, provided every
+bot in it is one this process serves, so a server started for a read-only bot can never drive a
+write-capable one.
 """
 
 from __future__ import annotations
@@ -77,6 +83,7 @@ class MercedAcpAgent:
         registry: HarnessRegistry | None = None,
         reader: IO[str] | None = None,
         writer: IO[str] | None = None,
+        allow_resume: bool = False,
     ) -> None:
         if not bots:
             raise ValueError("choose at least one bot with --bot")
@@ -93,6 +100,9 @@ class MercedAcpAgent:
         self._arrived = threading.Condition()
         self._cancellations: dict[str, threading.Event] = {}
         self._consented: set[str] = set()
+        self.allow_resume = allow_resume
+        # Sessions this process may prompt: the ones it created, plus loaded ones it may resume.
+        self._owned: set[str] = set()
         self._workers: list[threading.Thread] = []
         self._slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
 
@@ -265,7 +275,26 @@ class MercedAcpAgent:
             title=f"ACP · {', '.join(self.bots)}",
             isolation=self.isolation if len(prepared) > 1 else "shared",
         )
+        self._owned.add(session.id)
         return {"sessionId": session.id}
+
+    def _resume_refusal(self, session: SessionRecord) -> str | None:
+        """Why this process may not prompt ``session``, or None when it may."""
+        if session.id in self._owned:
+            return None
+        if not self.allow_resume:
+            return (
+                "This conversation was not started by this Merced AI agent, so it is read-only "
+                "here. Start a new conversation, or start `merced-ai acp` with --allow-resume to "
+                "continue conversations from other clients."
+            )
+        foreign = sorted({item.bot_name for item in session.participants} - set(self.bots))
+        if foreign:
+            return (
+                f"This conversation includes {', '.join(foreign)}, which this agent does not "
+                f"serve (it serves {', '.join(self.bots)}), so it is read-only here."
+            )
+        return None
 
     def load_session(self, params: dict[str, Any]) -> dict[str, Any]:
         workspace = self._workspace(params)
@@ -283,6 +312,11 @@ class MercedAcpAgent:
             self._update(
                 session.id, {"sessionUpdate": kind, "content": {"type": "text", "text": text}}
             )
+        refusal = self._resume_refusal(session)
+        if refusal is None:
+            self._owned.add(session.id)
+        else:
+            self._text(session.id, f"\n\n_{refusal}_")
         return {}
 
     def cancel(self, params: dict[str, Any]) -> None:
@@ -388,6 +422,13 @@ class MercedAcpAgent:
             session = store.load(session_id)
         except ValueError as error:
             raise RpcError(INVALID_PARAMS, str(error)) from error
+        if session_id not in self._owned:
+            # Loading is how a session becomes resumable; prompting blind is always refused.
+            raise RpcError(
+                INVALID_PARAMS,
+                self._resume_refusal(session)
+                or "load this conversation with session/load before prompting it",
+            )
         if not text.strip():
             raise RpcError(INVALID_PARAMS, "the prompt has no text")
         cancellation = threading.Event()

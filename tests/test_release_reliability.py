@@ -14,7 +14,38 @@ from merced_ai.run_supervisor import RunSupervisor
 from merced_ai.sessions import SessionStore
 
 
-def test_parallel_appends_and_stale_save(workspace):
+@pytest.fixture
+def storage_workspace(workspace, monkeypatch):
+    """A workspace for lock-contention tests that does not depend on disk latency.
+
+    Twelve writers each fsync the file and its directory while holding the lock. On a loaded
+    machine that queue took up to 28 s of the 30 s lock timeout, so the test failed with "Storage
+    is busy" although the locking was correct. Use tmpfs when there is one and give the test a
+    longer timeout; production keeps 30 s.
+    """
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    from merced_ai import storage
+
+    monkeypatch.setattr(storage, "LOCK_TIMEOUT_SECONDS", 180.0)
+    shm = Path("/dev/shm")
+    if not (shm.is_dir() and os.access(shm, os.W_OK)):
+        yield workspace
+        return
+    root = Path(tempfile.mkdtemp(prefix="merced-ai-test-", dir=shm))
+    try:
+        monkeypatch.setenv("MERCED_AI_HOME", str(root / "merced-home"))
+        path = root / "workspace"
+        path.mkdir()
+        yield path
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_parallel_appends_and_stale_save(storage_workspace):
+    workspace = storage_workspace
     profile = create_profile("reviewer", "Reviews code", "Review the code.", workspace)
     store = SessionStore(workspace)
     session = store.create("reviewer", "codex", profile)

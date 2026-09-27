@@ -82,6 +82,10 @@ regression test in `tests/test_security_review.py` that fails without the fix.
   line length, reply size (marked `truncated`), tool calls, and concurrent agent requests are
   bounded. ACP server: prompt size, line length, and concurrent requests are bounded.
 - Run journal: a line with a wrongly typed `sequence` or `sse` no longer crashes replay.
+- `merced-ai acp`: sessions belong to the agent process that created them. Loading any other
+  conversation in the workspace replays it read-only with a note, and prompting it is refused.
+  The new `--allow-resume` option lets a client continue loaded conversations (for example after
+  an editor restart), but only those whose bots this process serves.
 
 ### Added
 
@@ -227,6 +231,13 @@ regression test in `tests/test_security_review.py` that fails without the fix.
   process-group code is gated on `sys.platform` so it type-checks per OS.
 
 ### Testing
+
+- `test_parallel_appends_and_stale_save` no longer fails on a loaded machine. Twelve writers each
+  fsync while holding the session lock, and under disk load that queue took up to 37 s against the
+  30 s lock timeout, so the test reported "Storage is busy" although the locking was correct. The
+  test now runs on tmpfs (`/dev/shm`) when available with a 180 s lock timeout for tests only
+  (`storage.LOCK_TIMEOUT_SECONDS`; production stays at 30 s). Verified with 20 runs under `-n 4`
+  while a synchronous disk writer and four CPU spinners ran.
 
 - The coverage floor is raised from 70% to 75% (the suite is at about 80%).
 - OAP and AGS fixture tests find the sibling `open-agent-profile` and `agentic-graph-spec` clones

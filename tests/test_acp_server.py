@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 import sys
 import threading
@@ -10,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from merced_ai.acp_server import MercedAcpAgent, RpcError
 from merced_ai.bots import create_bot
 from merced_ai.harnesses.acp import AcpConnection, AcpError
 from merced_ai.profiles import create_profile
@@ -22,7 +24,13 @@ FAKE_CODEX = Path(__file__).parent / "fixtures" / "fake_codex.py"
 
 
 class Client:
-    def __init__(self, workspace: Path, *bots: str, permission: str = "allow") -> None:
+    def __init__(
+        self,
+        workspace: Path,
+        *bots: str,
+        permission: str = "allow",
+        extra: list[str] | None = None,
+    ) -> None:
         self.updates: list[dict[str, Any]] = []
         self.permission_requests: list[dict[str, Any]] = []
         self.permission = permission
@@ -35,6 +43,7 @@ class Client:
         argv = [sys.executable, "-m", "merced_ai", "acp", "-C", str(workspace)]
         for bot in bots:
             argv += ["--bot", bot]
+        argv += extra or []
         self.connection = AcpConnection(
             argv,
             cwd=workspace,
@@ -225,3 +234,92 @@ def test_harness_approvals_are_forwarded_to_the_client(workspace: Path) -> None:
 
     agent.request_client = lambda method, params: {"outcome": {"outcome": "cancelled"}}  # type: ignore[method-assign]
     assert validate(agent._relay_approval("s")(envelope, None))["decision"]["decision"] == "cancel"
+
+
+# ---- session ownership (SEC-2) ---------------------------------------------------------------
+
+
+def _agent(workspace: Path, *bots: str, allow_resume: bool = False) -> tuple[Any, io.StringIO]:
+    out = io.StringIO()
+    agent = MercedAcpAgent(
+        workspace, bots, reader=io.StringIO(), writer=out, allow_resume=allow_resume
+    )
+    return agent, out
+
+
+def _say(session_id: str, text: str = "Review this") -> dict[str, Any]:
+    return {"sessionId": session_id, "prompt": [{"type": "text", "text": text}]}
+
+
+def test_sessions_belong_to_the_process_that_created_them(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _bots(workspace)
+    monkeypatch.setenv("MERCED_AI_CODEX_PATH", str(FAKE_CODEX))
+    first, _ = _agent(workspace, "reviewer")
+    session_id = first.new_session({"cwd": str(workspace)})["sessionId"]
+    assert first.prompt(_say(session_id))["stopReason"] == "end_turn"
+
+    other, out = _agent(workspace, "reviewer")
+    with pytest.raises(RpcError, match="read-only"):
+        other.prompt(_say(session_id))  # prompting blind is refused
+    other.load_session({"sessionId": session_id, "cwd": str(workspace)})
+    assert "read-only here" in out.getvalue() and "--allow-resume" in out.getvalue()
+    with pytest.raises(RpcError, match="read-only"):
+        other.prompt(_say(session_id))  # loading shows history but does not grant prompting
+
+    turns = len(SessionStore(workspace).load(session_id).turns)
+    assert turns == 2  # nothing ran for the second client
+
+
+def test_allow_resume_continues_only_conversations_of_served_bots(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _bots(workspace)
+    monkeypatch.setenv("MERCED_AI_CODEX_PATH", str(FAKE_CODEX))
+    first, _ = _agent(workspace, "reviewer")
+    session_id = first.new_session({"cwd": str(workspace)})["sessionId"]
+    room, _ = _agent(workspace, "builder", "fixer")
+    room_id = room.new_session({"cwd": str(workspace)})["sessionId"]
+
+    resumer, out = _agent(workspace, "reviewer", allow_resume=True)
+    with pytest.raises(RpcError, match="session/load"):
+        resumer.prompt(_say(session_id))  # still has to load it first
+    resumer.load_session({"sessionId": session_id, "cwd": str(workspace)})
+    assert "read-only" not in out.getvalue()
+    assert resumer.prompt(_say(session_id))["stopReason"] == "end_turn"
+
+    # A server for a read-only bot must never drive a write-capable room.
+    resumer.load_session({"sessionId": room_id, "cwd": str(workspace)})
+    assert "does not serve" in out.getvalue()
+    with pytest.raises(RpcError, match="builder, fixer"):
+        resumer.prompt(_say(room_id, "@builder rm -rf build"))
+
+
+def test_cli_allow_resume_flag_reaches_the_agent(workspace: Path) -> None:
+    _bots(workspace)
+    first = Client(workspace, "reviewer")
+    try:
+        first.call("initialize", {"protocolVersion": 1})
+        session_id = first.call("session/new", {"cwd": str(workspace), "mcpServers": []})[
+            "sessionId"
+        ]
+    finally:
+        first.close()
+
+    second = Client(workspace, "reviewer")
+    try:
+        second.call("initialize", {"protocolVersion": 1})
+        second.call("session/load", {"sessionId": session_id, "cwd": str(workspace)})
+        with pytest.raises(AcpError, match="read-only"):
+            second.call("session/prompt", _say(session_id))
+    finally:
+        second.close()
+
+    third = Client(workspace, "reviewer", extra=["--allow-resume"])
+    try:
+        third.call("initialize", {"protocolVersion": 1})
+        third.call("session/load", {"sessionId": session_id, "cwd": str(workspace)})
+        assert third.call("session/prompt", _say(session_id))["stopReason"] == "end_turn"
+    finally:
+        third.close()

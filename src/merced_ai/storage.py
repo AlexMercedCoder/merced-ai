@@ -10,9 +10,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
 
+# How long a writer waits for another process's lock before reporting "Storage is busy".
+LOCK_TIMEOUT_SECONDS = 30.0
+
 
 @contextmanager
-def file_lock(path: Path, timeout: float = 30) -> Iterator[None]:
+def file_lock(path: Path, timeout: float | None = None) -> Iterator[None]:
+    if timeout is None:
+        timeout = LOCK_TIMEOUT_SECONDS
     path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = path.with_suffix(path.suffix + ".lock")
     if path.is_symlink() or lock_path.is_symlink():

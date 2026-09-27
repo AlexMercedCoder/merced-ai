@@ -51,6 +51,9 @@ STRIDE key: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclo
 
 Each regression test was run against the code before its fix and failed there.
 
+A follow-up (SEC-2) tied ACP server sessions to the process that created them; see the ACP
+server section below.
+
 ## ACP client (`harnesses/acp.py`, `harnesses/acp_rpc.py`)
 
 **Assets:** the user's files and shell (through the agent's permission requests), the approval
@@ -99,7 +102,9 @@ refusal of auto-approve, crash reporting, cancellation); `test_security_review.p
   multi-line title that imitates Merced AI.
 - *T:* The client passes a `cwd` outside the served workspace, or a crafted session id that
   escapes the sessions directory.
-- *I:* The client loads another conversation's session.
+- *I/T:* A client continues a conversation another client or the CLI started (session
+  hijack), or a server started for a read-only bot is used to drive a room with write-capable bots
+  by loading that room's session.
 - *D:* Oversized prompts or lines, or many concurrent requests.
 - *E:* A write-capable bot runs without the user's consent.
 
@@ -108,6 +113,11 @@ refusal of auto-approve, crash reporting, cancellation); `test_security_review.p
 - `session/new` refuses any `cwd` whose resolved path differs from the served workspace.
 - Session ids must match `session-[A-Za-z0-9-]+` (`sessions.py`), so they cannot contain path
   separators.
+- Sessions belong to the agent process that created them (`_owned`). `session/load` of any other
+  conversation replays its history and then says it is read-only; `session/prompt` on it is
+  refused, and prompting a session that was never loaded is refused too. The opt-in
+  `--allow-resume` (`allow_resume`) lets a loaded conversation be continued, but only when every
+  bot in it is one this process serves (`_resume_refusal`).
 - A write-capable bot needs `session/request_permission` consent once per session (`_consent`);
   declining runs nothing.
 - Forwarded approvals use Merced AI's own option names (`DECISION_OPTIONS`) and a single-line,
@@ -116,13 +126,18 @@ refusal of auto-approve, crash reporting, cancellation); `test_security_review.p
   run inline.
 - The transport is the stdio pipe of a process the client started, so there is no network listener.
 
-**Residual risk:** any client that can start `merced-ai acp` can load any conversation in that
-workspace. It runs as the user, so this is the same trust as the CLI. The action summary inside
-the title is still harness text, prefixed with the harness id.
+**Residual risk:** ownership is per process, not per user identity. ACP has no client
+authentication, so any client that can start `merced-ai acp` can still read (load) every
+conversation in that workspace. It runs as the user, which is the same trust as the CLI. With
+`--allow-resume`, any client of that server can continue any conversation of the served bots. The
+action summary inside the title is still harness text, prefixed with the harness id.
 
 **Tests:** `test_acp_server.py` (`test_errors_are_json_rpc_errors` covers the foreign `cwd` and
 unknown session, `test_declined_consent_runs_nothing`, `test_room_asks_consent_once...`,
-`test_threads_are_not_leaked`, `test_harness_approvals_are_forwarded_to_the_client`);
+`test_threads_are_not_leaked`, `test_harness_approvals_are_forwarded_to_the_client`,
+`test_sessions_belong_to_the_process_that_created_them`,
+`test_allow_resume_continues_only_conversations_of_served_bots`,
+`test_cli_allow_resume_flag_reaches_the_agent`);
 `test_security_review.py` (#15, #16).
 
 ## A2A endpoint and the loopback web UI (`web/app.py`, `web/context.py`, `web/routers/a2a.py`)

@@ -9,12 +9,15 @@
  Example: merced-ai acp --bot reviewer -C ~/code/project                                            
                                                                                                     
 ╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
-│ *  --bot        -b      <str>   Bot to serve; repeat for a group room (2 to 12). [required]      │
-│    --workspace  -C      <path>  Project directory to use. Defaults to the current directory.     │
-│    --mode               <str>   Room dispatch: mentions, all, or round_robin [default: all]      │
-│    --worktrees                  Give each write-capable bot its own git worktree and branch so   │
-│                                 they can work at the same time without touching your files;      │
-│                                 review with `group diff` and apply with `group apply`.           │
-│    --help                       Show this message and exit.                                      │
+│ *  --bot           -b      <str>   Bot to serve; repeat for a group room (2 to 12). [required]   │
+│    --workspace     -C      <path>  Project directory to use. Defaults to the current directory.  │
+│    --mode                  <str>   Room dispatch: mentions, all, or round_robin [default: all]   │
+│    --worktrees                     Give each write-capable bot its own git worktree and branch   │
+│                                    so they can work at the same time without touching your       │
+│                                    files; review with `group diff` and apply with `group apply`. │
+│    --allow-resume                  Let the client continue conversations this process did not    │
+│                                    start (for example after the editor restarts). Only           │
+│                                    conversations whose bots are all served here.                 │
+│    --help                          Show this message and exit.                                   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 

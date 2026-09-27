@@ -174,6 +174,14 @@ def acp_serve(
     ] = DEFAULT_WORKSPACE,
     mode: Annotated[str, typer.Option(help="Room dispatch: mentions, all, or round_robin")] = "all",
     worktrees: Annotated[bool, typer.Option("--worktrees", help=WORKTREES_HELP)] = False,
+    allow_resume: Annotated[
+        bool,
+        typer.Option(
+            "--allow-resume",
+            help="Let the client continue conversations this process did not start (for example "
+            "after the editor restarts). Only conversations whose bots are all served here.",
+        ),
+    ] = False,
 ) -> None:
     """Serve a bot or a room as an Agent Client Protocol agent on stdin/stdout.
 
@@ -192,6 +200,7 @@ def acp_serve(
             tuple(bot),
             mode=mode,
             isolation="worktree" if worktrees else "shared",
+            allow_resume=allow_resume,
         )
     except ValueError as exc:
         _fail(str(exc), 2)
