@@ -56,9 +56,6 @@ Targets 0.8.0.
 
 ### Changed
 
-- `harness show`, `harness list --json`, and the web UI Harnesses screen report each harness's
-  prompt delivery (`stdin`, `file`, or `argv`). The UI harness cache schema moved to 3.
-
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the
   harness documents for itself) and `broker_implements` (what Merced AI delivers through its
   adapter). Previously every rich harness advertised streaming, resume, approvals, attachments,
@@ -69,8 +66,10 @@ Targets 0.8.0.
   `capabilities` field equal to `broker_implements` for this release.
 - Removed the ACP transport claim from Gemini, OpenCode, Goose, Pi, Prime Agent, OpenClaw, and Kimi,
   and the `native` transport claim from Codex, Loro, and MagAgent. Every adapter runs a
-  structured (or, for Anton, text) subprocess. The UI harness cache schema moved to 2 so stale
-  snapshots are re-probed.
+  structured (or, for Anton, text) subprocess.
+- `harness show`, `harness list --json`, and the web UI Harnesses screen report each harness's
+  prompt delivery (`stdin`, `file`, or `argv`). The UI harness cache schema moved to 3, so
+  snapshots written by 0.7.0 are ignored and re-probed.
 - `harness list` shows a "Merced AI implements" column instead of a transport column, prints
   paths relative to `~`, and no longer shows a traceback line as the version of a failed probe.
 
