@@ -51,6 +51,14 @@ Targets 0.8.0.
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
 
+- Projection reports now list every profile section a prompt-context projection does not carry
+  (`dropped`): MCP servers, skills, tool allow and deny lists, permission rules, filesystem roots,
+  host allowlists, context files and documents, memory stores, runtime limits, lifecycle hooks,
+  and model tier or parameters, naming any marked `required: true`. Before, `profile effective`
+  for a rich profile on a degraded harness reported only the role and permissions, which
+  understated what the run lost. Found in cross-harness integration testing with the OAP
+  `data-engineer` example.
+
 ### Security
 
 A security self-review of everything new in 0.8.0 (see [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md);

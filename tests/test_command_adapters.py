@@ -351,6 +351,50 @@ def test_projection_does_not_send_anthropic_model_to_codex(workspace: Path) -> N
     assert any(item.field == "spec.model" for item in projection.adjustments)
 
 
+@pytest.mark.parametrize("harness_id", ["codex", "loro", "magagent"])
+def test_prompt_projection_reports_every_section_it_drops(harness_id: str, workspace: Path) -> None:
+    profile = create_profile(
+        "engineer",
+        "Drafts SQL against governed tables.",
+        "Read the schema before drafting.",
+        workspace,
+    )
+    spec = profile.document["spec"]
+    spec["tools"] = {
+        "mcp_servers": [{"name": "catalog", "transport": "stdio", "command": "catalog-mcp"}],
+        "skills": [{"name": "sql-review", "source": "./skills/sql-review", "required": True}],
+    }
+    spec["memory"] = {"stores": [{"name": "team", "kind": "maggraph", "required": False}]}
+    spec["runtime"] = {"max_turns": 5, "max_cost_usd": 1.0}
+    spec["lifecycle"] = {"on_start": [{"hook": "verify-catalog", "required": True}]}
+    spec["model"] = {"tier": "advanced"}
+
+    # A path outside the harness's discovery roots forces the prompt-context projection.
+    projection = _adapter(harness_id).project_profile(profile.model_copy(update={"source": "path"}))
+
+    dropped = {
+        item.field: item.reason for item in projection.adjustments if item.action == "dropped"
+    }
+    assert projection.support_level in {"degraded", "projected"}
+    assert set(dropped) >= {
+        "spec.tools.mcp_servers",
+        "spec.tools.skills",
+        "spec.memory.stores",
+        "spec.runtime",
+        "spec.lifecycle.on_start",
+        "spec.model.tier",
+    }
+    assert "Marked required: sql-review" in dropped["spec.tools.skills"]
+    assert "Marked required: verify-catalog" in dropped["spec.lifecycle.on_start"]
+    assert "Marked required" not in dropped["spec.memory.stores"]
+
+
+def test_minimal_profile_projection_reports_nothing_dropped(workspace: Path) -> None:
+    profile = create_profile("plain", "Answers briefly.", "Answer briefly.", workspace)
+    projection = _adapter("codex").project_profile(profile)
+    assert [item for item in projection.adjustments if item.action == "dropped"] == []
+
+
 @pytest.mark.parametrize("harness_id", ["opencode", "pi", "prime-agent"])
 def test_multi_provider_adapters_qualify_model_id(
     harness_id: str, workspace: Path, monkeypatch: pytest.MonkeyPatch

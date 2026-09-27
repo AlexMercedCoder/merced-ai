@@ -114,6 +114,12 @@ merced-ai ask reviewer "Review the current diff" --dry-run --explain
 merced-ai profile effective reviewer --harness codex
 ```
 
+When a harness receives the profile as prompt context rather than natively, the report lists each
+profile section that the run does not carry as `dropped`: MCP servers, skills, tool allow and deny
+lists, permission rules, filesystem roots, host allowlists, context files and documents, memory
+stores, runtime limits, lifecycle hooks, and model tier or parameters. Sections marked
+`required: true` are named, because such a run is not the whole profile.
+
 Run or chat:
 
 ```bash

@@ -186,6 +186,7 @@ class CommandHarnessAdapter:
             ]
             if model_adjustment:
                 adjustments.append(model_adjustment)
+            adjustments.extend(unprojected_sections(profile.document))
             return ProfileProjection(
                 harness_id=harness_id,
                 support_level="projected",
@@ -207,6 +208,7 @@ class CommandHarnessAdapter:
         ]
         if model_adjustment:
             adjustments.append(model_adjustment)
+        adjustments.extend(unprojected_sections(profile.document))
         return ProfileProjection(
             harness_id=harness_id,
             support_level="degraded",
@@ -372,6 +374,60 @@ def _clean_environment() -> dict[str, str]:
         if key.startswith("COV_CORE_"):
             env.pop(key, None)
     return env
+
+
+# Profile sections that a prompt-context projection cannot carry. The role, persona, objectives,
+# constraints and bounded state go into the prompt; permissions and the model are reported
+# separately. Everything here is silently absent from the harness run unless it is reported.
+_PROMPT_UNCARRIED: tuple[tuple[str, str], ...] = (
+    ("spec.tools.mcp_servers", "MCP servers are not configured in the harness"),
+    ("spec.tools.skills", "Skills are not installed or loaded in the harness"),
+    ("spec.tools.allow", "the tool allowlist is not enforced; harness tool policy applies"),
+    ("spec.tools.deny", "the tool denylist is not enforced; harness tool policy applies"),
+    ("spec.permissions.rules", "per-tool permission rules are not enforced"),
+    ("spec.permissions.filesystem", "filesystem roots and deny paths are not enforced"),
+    ("spec.permissions.allow_hosts", "the network host allowlist is not enforced"),
+    ("spec.context.files", "context files are not loaded"),
+    ("spec.context.documents", "context documents are not loaded"),
+    ("spec.memory.stores", "memory stores are not connected"),
+    ("spec.runtime", "turn, tool-call, time and cost limits are not applied"),
+    ("spec.lifecycle.on_start", "start hooks do not run"),
+    ("spec.lifecycle.on_end", "end hooks do not run"),
+    ("spec.model.tier", "the model tier is not applied; the harness model is used"),
+    ("spec.model.parameters", "model parameters are not applied"),
+)
+
+
+def _lookup(document: dict[str, Any], dotted: str) -> Any:
+    value: Any = document
+    for part in dotted.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value
+
+
+def unprojected_sections(document: dict[str, Any]) -> list[ProjectionAdjustment]:
+    """Report each profile section a prompt-context projection drops.
+
+    A section marked ``required: true`` (a skill, memory store or hook) is called out, because
+    OAP says a profile whose required dependency is missing must not run as if it were whole.
+    """
+    adjustments: list[ProjectionAdjustment] = []
+    for dotted, consequence in _PROMPT_UNCARRIED:
+        value = _lookup(document, dotted)
+        if value in (None, [], {}, ""):
+            continue
+        required = sorted(
+            str(item.get("name") or item.get("hook") or "?")
+            for item in (value if isinstance(value, list) else [])
+            if isinstance(item, dict) and item.get("required") is True
+        )
+        reason = f"Not carried by this adapter: {consequence}."
+        if required:
+            reason += f" Marked required: {', '.join(required)}."
+        adjustments.append(ProjectionAdjustment(field=dotted, action="dropped", reason=reason))
+    return adjustments
 
 
 def _projected_model(
