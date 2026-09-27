@@ -85,7 +85,8 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
         return HarnessProbe(
             harness_id=descriptor.id,
             status=HarnessStatus.NOT_INSTALLED,
-            capabilities=descriptor.capabilities,
+            harness_supports=descriptor.harness_supports,
+            broker_implements=descriptor.broker_implements,
             duration_ms=_elapsed_ms(started),
         )
 
@@ -105,7 +106,8 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
             harness_id=descriptor.id,
             status=HarnessStatus.PROBE_FAILED,
             path=executable,
-            capabilities=descriptor.capabilities,
+            harness_supports=descriptor.harness_supports,
+            broker_implements=descriptor.broker_implements,
             warnings=(f"Version probe failed: {type(exc).__name__}",),
             duration_ms=_elapsed_ms(started),
         )
@@ -117,12 +119,13 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
             status=HarnessStatus.PROBE_FAILED,
             path=executable,
             version=output,
-            capabilities=descriptor.capabilities,
+            harness_supports=descriptor.harness_supports,
+            broker_implements=descriptor.broker_implements,
             warnings=(f"Version probe exited with status {completed.returncode}.",),
             duration_ms=_elapsed_ms(started),
         )
 
-    capabilities = descriptor.capabilities
+    capabilities = descriptor.broker_implements
     verified = False
     warnings = ["Authentication and protocol readiness have not been checked yet."]
     if descriptor.id in {"loro", "magagent"}:
@@ -166,7 +169,8 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
         path=executable,
         version=output,
         transport=descriptor.transports[0] if descriptor.transports else None,
-        capabilities=capabilities,
+        harness_supports=descriptor.harness_supports,
+        broker_implements=capabilities,
         capabilities_verified=verified,
         warnings=tuple(warnings),
         duration_ms=_elapsed_ms(started),

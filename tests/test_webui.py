@@ -26,6 +26,10 @@ def test_profile_management_surface_renders_discovery_and_trust_warnings() -> No
     assert 'class="profile-warnings" role="status"' in script
 
 
+# Run journals fsync on every event; allow for slow disks under parallel load.
+STREAM_TIMEOUT = 60
+
+
 @pytest.fixture
 def ready_harnesses(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
@@ -37,7 +41,7 @@ def ready_harnesses(monkeypatch: pytest.MonkeyPatch) -> None:
             path=Path(adapter.descriptor.executable_names[0]),
             version="test 1.0",
             transport=adapter.descriptor.transports[0],
-            capabilities=adapter.descriptor.capabilities,
+            broker_implements=adapter.descriptor.broker_implements,
             capabilities_verified=True,
         ),
     )
@@ -139,7 +143,7 @@ async def test_webui_bootstrap_is_immediate_and_harness_detection_is_progressive
             path=Path(adapter.descriptor.executable_names[0]),
             version="progressive 1.0",
             transport=adapter.descriptor.transports[0],
-            capabilities=adapter.descriptor.capabilities,
+            broker_implements=adapter.descriptor.broker_implements,
         )
 
     monkeypatch.setattr(CommandHarnessAdapter, "probe", controlled_probe)
@@ -386,7 +390,7 @@ async def test_webui_requires_approval_and_reports_runtime_errors(
         session = await client.post("/api/sessions", json={"bot_name": "builder"})
         path = f"/api/sessions/{session.json()['id']}/messages"
         approval = await asyncio.wait_for(
-            client.post(path, json={"content": "Make the change."}), timeout=15
+            client.post(path, json={"content": "Make the change."}), timeout=STREAM_TIMEOUT
         )
 
         def fail_run(*_args: object) -> RunResult:
@@ -395,14 +399,14 @@ async def test_webui_requires_approval_and_reports_runtime_errors(
         monkeypatch.setattr(CommandHarnessAdapter, "run_cancellable", fail_run)
         failed = await asyncio.wait_for(
             client.post(path, json={"content": "Make the change.", "approved": True}),
-            timeout=15,
+            timeout=STREAM_TIMEOUT,
         )
         missing_session = await asyncio.wait_for(
             client.post("/api/sessions/session-missing/messages", json={"content": "Hello"}),
-            timeout=15,
+            timeout=STREAM_TIMEOUT,
         )
         missing_cancel = await asyncio.wait_for(
-            client.post("/api/runs/run-missing/cancel"), timeout=15
+            client.post("/api/runs/run-missing/cancel"), timeout=STREAM_TIMEOUT
         )
 
     assert "event: approval_required" in approval.text

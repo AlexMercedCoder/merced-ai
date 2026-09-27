@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 
 class HarnessStatus(StrEnum):
@@ -21,13 +21,26 @@ class HarnessStatus(StrEnum):
 
 
 class TransportKind(StrEnum):
+    # Reserved for an in-process SDK or RPC client. Built-in adapters all use subprocesses today.
     NATIVE = "native"
+    # Reserved for the planned ACP client adapter. No built-in descriptor claims it until a
+    # client exists, because Merced AI cannot speak ACP to any harness yet.
     ACP_STDIO = "acp_stdio"
     STRUCTURED_SUBPROCESS = "structured_subprocess"
     TEXT_SUBPROCESS = "text_subprocess"
 
 
 class HarnessCapabilities(BaseModel):
+    """A set of session features.
+
+    The same shape describes two different things, and they must not be confused:
+
+    - ``harness_supports``: what the harness's own CLI or protocol offers natively, as documented
+      by that harness. Merced AI does not necessarily use any of it.
+    - ``broker_implements``: what Merced AI actually delivers end to end through its adapter.
+      Only this set is shown to users as a capability.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     streaming: bool = False
@@ -47,7 +60,13 @@ class HarnessDescriptor(BaseModel):
     executable_names: tuple[str, ...]
     transports: tuple[TransportKind, ...]
     version_args: tuple[str, ...] = ("--version",)
-    capabilities: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
+    harness_supports: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
+    broker_implements: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
+
+    @property
+    def capabilities(self) -> HarnessCapabilities:
+        """Deprecated alias for ``broker_implements``."""
+        return self.broker_implements
 
 
 class HarnessProbe(BaseModel):
@@ -58,10 +77,17 @@ class HarnessProbe(BaseModel):
     path: Path | None = None
     version: str | None = None
     transport: TransportKind | None = None
-    capabilities: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
+    harness_supports: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
+    broker_implements: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
     capabilities_verified: bool = False
     warnings: tuple[str, ...] = ()
     duration_ms: int = 0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def capabilities(self) -> HarnessCapabilities:
+        """Deprecated alias for ``broker_implements``, kept in JSON output for one release."""
+        return self.broker_implements
 
 
 class SessionEvent(BaseModel):

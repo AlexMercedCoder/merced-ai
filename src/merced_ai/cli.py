@@ -25,7 +25,13 @@ from merced_ai.application import (
 from merced_ai.bots import BotError, create_bot, discover_bots, resolve_bot
 from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import HarnessRunError
-from merced_ai.models import HarnessProbe, ProfileProjection, RunResult, SessionRecord
+from merced_ai.models import (
+    HarnessCapabilities,
+    HarnessProbe,
+    ProfileProjection,
+    RunResult,
+    SessionRecord,
+)
 from merced_ai.paths import ensure_project_layout, ensure_user_layout
 from merced_ai.profile_generation import generate_profile_proposal
 from merced_ai.profiles import (
@@ -130,6 +136,21 @@ def harness_show(
         typer.echo(json.dumps(probe.model_dump(mode="json"), indent=2))
         return
     _render_probe_table((probe,))
+    console.print(f"[bold]Transport:[/bold] {probe.transport.value if probe.transport else '-'}")
+    console.print(
+        "[bold]Merced AI implements:[/bold] "
+        + (", ".join(_capability_labels(probe.broker_implements, probe)) or "one-shot runs only")
+    )
+    advertised = [
+        name
+        for name, enabled in probe.harness_supports.model_dump().items()
+        if enabled and not getattr(probe.broker_implements, name)
+    ]
+    if advertised:
+        console.print(
+            "[bold]Harness advertises, not used by Merced AI yet:[/bold] "
+            + ", ".join(name.replace("_", " ") for name in advertised)
+        )
     for warning in probe.warnings:
         console.print(f"[yellow]Warning:[/yellow] {warning}")
 
@@ -648,18 +669,50 @@ def session_resume(
 
 def _render_probe_table(probes: tuple[HarnessProbe, ...]) -> None:
     table = Table(title="Merced AI harness inventory")
-    for column in ("Harness", "Status", "Version", "Transport", "WebMCP", "Executable"):
-        table.add_column(column)
+    table.add_column("Harness", no_wrap=True)
+    table.add_column("Status", no_wrap=True)
+    table.add_column("Version")
+    table.add_column("Merced AI implements")
+    table.add_column("Executable", overflow="fold")
     for probe in probes:
+        version = probe.version if probe.status.value != "probe_failed" else None
         table.add_row(
             probe.harness_id,
             probe.status.value,
-            probe.version or "-",
-            probe.transport.value if probe.transport else "-",
-            "native" if probe.capabilities.webmcp else "-",
-            str(probe.path) if probe.path else "-",
+            (version or "-").splitlines()[0],
+            ", ".join(_capability_labels(probe.broker_implements, probe)) or "-",
+            _display_path(probe.path),
         )
     console.print(table)
+
+
+def _display_path(path: Path | None) -> str:
+    if path is None:
+        return "-"
+    try:
+        return "~/" + path.relative_to(Path.home()).as_posix()
+    except (ValueError, RuntimeError):
+        return str(path)
+
+
+def _capability_labels(capabilities: HarnessCapabilities, probe: HarnessProbe) -> list[str]:
+    """Human labels for what the broker delivers; never the harness's own advertised features."""
+    labels = []
+    if capabilities.native_oap:
+        labels.append("native OAP")
+    if capabilities.approvals:
+        labels.append("AAIS approval relay")
+    if capabilities.attachments:
+        labels.append("context files")
+    if capabilities.webmcp:
+        labels.append("WebMCP" if probe.capabilities_verified else "WebMCP (unverified)")
+    if capabilities.streaming:
+        labels.append("streaming")
+    if capabilities.resume:
+        labels.append("native resume")
+    if capabilities.model_listing:
+        labels.append("model listing")
+    return labels
 
 
 def _render_projection(projection: ProfileProjection, json_output: bool) -> None:

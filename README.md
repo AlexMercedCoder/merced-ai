@@ -161,8 +161,8 @@ for the pinned revisions and exact boundary.
 
 | Harness | Discovery | Execution | OAP projection |
 | --- | --- | --- | --- |
-| MagAgent | yes | native one-shot | native for project-discovered profiles |
-| Loro | yes | native one-shot | native for project-discovered profiles |
+| MagAgent | yes | one-shot with AAIS approval relay | native for project-discovered profiles |
+| Loro | yes | one-shot with AAIS approval relay | native for project-discovered profiles |
 | Claude Code | yes | structured print mode | system-prompt projection |
 | Codex | yes | noninteractive exec | delimited prompt compatibility mode |
 | Gemini CLI | yes | structured headless mode | delimited prompt compatibility mode |
@@ -175,6 +175,11 @@ for the pinned revisions and exact boundary.
 | Prime Agent | yes | structured print mode | system-prompt projection |
 | OpenClaw | yes | embedded local agent | delimited prompt compatibility mode |
 | Kimi Code CLI | yes | read-only print mode | delimited prompt compatibility mode |
+
+Every adapter runs one noninteractive subprocess per turn: replies appear when the harness
+finishes, and each turn replays a bounded transcript rather than resuming a native session. The
+Harnesses screen and `merced-ai harness show` list what Merced AI delivers separately from what the
+harness offers on its own; see [Harness compatibility](docs/COMPATIBILITY.md).
 
 "Native" means the harness receives the OAP profile name through its own CLI. It does not mean
 Merced AI can supersede harness policy. Projection labels describe Merced AI's broker behavior, not

@@ -58,6 +58,24 @@ execute it without a shell, normalize output, bound time/output, and expose hone
 Native OAP support is used only when a harness actually consumes the discovered profile. Other
 harnesses receive a delimited prompt or a dedicated system-prompt flag.
 
+### Capabilities: what the harness offers versus what Merced AI delivers
+
+Each harness descriptor carries two capability sets:
+
+- `harness_supports`: features the harness documents for its own interactive or protocol surface,
+  such as streaming, native session resume, or model listing. Merced AI records these for
+  reference and does not use them yet.
+- `broker_implements`: what Merced AI actually delivers through its adapter today. This is the
+  only set the CLI (`harness list`, `harness show`) and the web UI present as a capability.
+
+Today every adapter runs one noninteractive subprocess per turn. Output arrives when the process
+exits (no streaming), each turn replays a bounded transcript instead of resuming a native session,
+and selected workspace files are inlined into the prompt. MagAgent and Loro additionally relay AAIS
+approvals over stdio, receive project OAP profiles by name, and can satisfy WebMCP routing once
+their readiness report verifies. No built-in descriptor claims the ACP transport, because Merced AI
+has no ACP client yet. Probe JSON still contains a `capabilities` field equal to
+`broker_implements` for one release so existing automation keeps working.
+
 Permission projection is advisory and may only narrow intent. The harness remains responsible for
 credentials, provider traffic, approvals, sandboxing, tools, and final policy enforcement.
 
@@ -69,8 +87,9 @@ credentials, provider traffic, approvals, sandboxing, tools, and final policy en
 - Group sessions own an ordered participant list. Each participant pins its bot, routed harness,
   and profile/spec snapshot; assistant turns carry bot and harness attribution.
 - Harness-native state, credentials, model catalogs, and provider logs remain harness-owned.
-- Cached UI probe snapshots contain only executable paths, bounded version output, capabilities,
-  status, and timestamps; they never contain provider credentials.
+- Cached UI probe snapshots contain only executable paths, bounded version output, both capability
+  sets, status, and timestamps; they never contain provider credentials. The cache schema is
+  versioned, and a snapshot written by an older release is ignored and re-probed.
 
 ## Failure model
 

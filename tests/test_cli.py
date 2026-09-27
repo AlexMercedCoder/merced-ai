@@ -32,7 +32,7 @@ def test_cli_profile_bot_and_dry_run(workspace: Path, monkeypatch: pytest.Monkey
             status=HarnessStatus.READY,
             path=Path(adapter.descriptor.executable_names[0]),
             transport=adapter.descriptor.transports[0],
-            capabilities=adapter.descriptor.capabilities,
+            broker_implements=adapter.descriptor.broker_implements,
             capabilities_verified=True,
         ),
     )
@@ -154,7 +154,7 @@ def test_cli_group_ask_is_attributed_and_deterministic(
             status=HarnessStatus.READY,
             path=Path(adapter.descriptor.executable_names[0]),
             transport=adapter.descriptor.transports[0],
-            capabilities=adapter.descriptor.capabilities,
+            broker_implements=adapter.descriptor.broker_implements,
             capabilities_verified=True,
         ),
     )

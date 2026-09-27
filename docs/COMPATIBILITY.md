@@ -20,6 +20,19 @@ It was last updated on 2026-08-27.
 | OpenClaw | yes | yes | yes | yes, embedded OpenAI agent |
 | Kimi Code CLI | yes | yes | yes | yes, OpenAI Responses provider |
 
+## What Merced AI delivers per harness
+
+"Supported" in this document means Merced AI can run the harness. It does not mean Merced AI uses
+every feature the harness offers. The broker-implemented set is:
+
+| Harness | Merced AI delivers | Harness offers but Merced AI does not use yet |
+| --- | --- | --- |
+| MagAgent, Loro | one-shot runs, native OAP profile by name, AAIS approval relay, inlined context files, WebMCP routing when verified | streaming, native session resume, model listing |
+| All other adapters | one-shot runs, inlined context files | streaming, native session resume, native approvals, native attachments, model listing (as each harness documents) |
+
+Responses appear when the harness process exits. Each turn starts a fresh process and replays up to
+the last twenty turns as a transcript. ACP is not used for any harness yet.
+
 "Contract-tested" means Merced AI tests argv construction, OAP projection, permission narrowing,
 bounded subprocess behavior, and structured output/error parsing using controlled executables. It
 does not imply that provider credentials, quota, or every native capability is ready.

@@ -58,7 +58,9 @@ def default_registry() -> HarnessRegistry:
     )
 
 
-_RICH_SESSION = HarnessCapabilities(
+# What the harnesses document for their own interactive or protocol surfaces. Merced AI records
+# these for reference only; it does not use them yet.
+_NATIVE_SESSION = HarnessCapabilities(
     streaming=True,
     resume=True,
     approvals=True,
@@ -66,104 +68,78 @@ _RICH_SESSION = HarnessCapabilities(
     model_listing=True,
 )
 
+# What Merced AI delivers end to end through a noninteractive subprocess adapter: output arrives
+# when the run completes, each turn starts a fresh harness process with a bounded transcript, and
+# selected workspace files are inlined into the prompt as context.
+_BROKER_SUBPROCESS = HarnessCapabilities(attachments=True)
+
+# MagAgent and Loro additionally relay AAIS approvals over stdio, receive project OAP profiles
+# natively, and can satisfy WebMCP routing once their readiness report is verified.
+_BROKER_AAIS_NATIVE = _BROKER_SUBPROCESS.model_copy(
+    update={"approvals": True, "native_oap": True, "webmcp": True}
+)
+
+
+def _descriptor(
+    harness_id: str,
+    name: str,
+    executable: str,
+    *,
+    transports: tuple[TransportKind, ...] = (TransportKind.STRUCTURED_SUBPROCESS,),
+    harness_supports: HarnessCapabilities = _NATIVE_SESSION,
+    broker_implements: HarnessCapabilities = _BROKER_SUBPROCESS,
+    version_args: tuple[str, ...] = ("--version",),
+) -> HarnessDescriptor:
+    return HarnessDescriptor(
+        id=harness_id,
+        name=name,
+        executable_names=(executable,),
+        transports=transports,
+        version_args=version_args,
+        harness_supports=harness_supports,
+        broker_implements=broker_implements,
+    )
+
+
+_NATIVE_OAP = _NATIVE_SESSION.model_copy(update={"native_oap": True, "webmcp": True})
+
 _BUILTIN_DESCRIPTORS = (
-    HarnessDescriptor(
-        id="codex",
-        name="Codex",
-        executable_names=("codex",),
-        transports=(TransportKind.NATIVE, TransportKind.STRUCTURED_SUBPROCESS),
-        capabilities=_RICH_SESSION,
+    _descriptor("codex", "Codex", "codex"),
+    _descriptor("claude", "Claude Code", "claude"),
+    _descriptor("gemini", "Gemini CLI", "gemini"),
+    _descriptor("opencode", "OpenCode", "opencode"),
+    _descriptor("goose", "Goose", "goose"),
+    _descriptor(
+        "loro",
+        "Loro",
+        "loro",
+        harness_supports=_NATIVE_OAP,
+        broker_implements=_BROKER_AAIS_NATIVE,
     ),
-    HarnessDescriptor(
-        id="claude",
-        name="Claude Code",
-        executable_names=("claude",),
-        transports=(TransportKind.STRUCTURED_SUBPROCESS,),
-        capabilities=_RICH_SESSION,
+    _descriptor(
+        "magagent",
+        "MagAgent",
+        "magent",
+        harness_supports=_NATIVE_OAP,
+        broker_implements=_BROKER_AAIS_NATIVE,
     ),
-    HarnessDescriptor(
-        id="gemini",
-        name="Gemini CLI",
-        executable_names=("gemini",),
-        transports=(TransportKind.ACP_STDIO, TransportKind.STRUCTURED_SUBPROCESS),
-        capabilities=_RICH_SESSION,
-    ),
-    HarnessDescriptor(
-        id="opencode",
-        name="OpenCode",
-        executable_names=("opencode",),
-        transports=(TransportKind.ACP_STDIO, TransportKind.STRUCTURED_SUBPROCESS),
-        capabilities=_RICH_SESSION,
-    ),
-    HarnessDescriptor(
-        id="goose",
-        name="Goose",
-        executable_names=("goose",),
-        transports=(TransportKind.ACP_STDIO, TransportKind.STRUCTURED_SUBPROCESS),
-        capabilities=_RICH_SESSION,
-    ),
-    HarnessDescriptor(
-        id="loro",
-        name="Loro",
-        executable_names=("loro",),
-        transports=(TransportKind.NATIVE, TransportKind.STRUCTURED_SUBPROCESS),
-        capabilities=_RICH_SESSION.model_copy(update={"native_oap": True, "webmcp": True}),
-    ),
-    HarnessDescriptor(
-        id="magagent",
-        name="MagAgent",
-        executable_names=("magent",),
-        transports=(TransportKind.NATIVE, TransportKind.STRUCTURED_SUBPROCESS),
-        capabilities=_RICH_SESSION.model_copy(update={"native_oap": True, "webmcp": True}),
-    ),
-    HarnessDescriptor(
-        id="anton",
-        name="Anton",
-        executable_names=("anton",),
+    _descriptor(
+        "anton",
+        "Anton",
+        "anton",
         transports=(TransportKind.TEXT_SUBPROCESS,),
         version_args=("version",),
-        capabilities=_RICH_SESSION.model_copy(update={"model_listing": False}),
+        harness_supports=_NATIVE_SESSION.model_copy(update={"model_listing": False}),
     ),
-    HarnessDescriptor(
-        id="dsh",
-        name="DeepSeek Harness",
-        executable_names=("dsh",),
-        transports=(TransportKind.STRUCTURED_SUBPROCESS,),
-        capabilities=_RICH_SESSION.model_copy(update={"attachments": False}),
+    _descriptor(
+        "dsh",
+        "DeepSeek Harness",
+        "dsh",
+        harness_supports=_NATIVE_SESSION.model_copy(update={"attachments": False}),
     ),
-    HarnessDescriptor(
-        id="agy",
-        name="Antigravity CLI",
-        executable_names=("agy",),
-        transports=(TransportKind.STRUCTURED_SUBPROCESS,),
-        capabilities=_RICH_SESSION,
-    ),
-    HarnessDescriptor(
-        id="pi",
-        name="Pi Coding Agent",
-        executable_names=("pi",),
-        transports=(TransportKind.STRUCTURED_SUBPROCESS, TransportKind.ACP_STDIO),
-        capabilities=_RICH_SESSION,
-    ),
-    HarnessDescriptor(
-        id="prime-agent",
-        name="Prime Agent",
-        executable_names=("prime-agent",),
-        transports=(TransportKind.STRUCTURED_SUBPROCESS, TransportKind.ACP_STDIO),
-        capabilities=_RICH_SESSION,
-    ),
-    HarnessDescriptor(
-        id="openclaw",
-        name="OpenClaw",
-        executable_names=("openclaw",),
-        transports=(TransportKind.STRUCTURED_SUBPROCESS, TransportKind.ACP_STDIO),
-        capabilities=_RICH_SESSION,
-    ),
-    HarnessDescriptor(
-        id="kimi",
-        name="Kimi Code CLI",
-        executable_names=("kimi",),
-        transports=(TransportKind.STRUCTURED_SUBPROCESS, TransportKind.ACP_STDIO),
-        capabilities=_RICH_SESSION,
-    ),
+    _descriptor("agy", "Antigravity CLI", "agy"),
+    _descriptor("pi", "Pi Coding Agent", "pi"),
+    _descriptor("prime-agent", "Prime Agent", "prime-agent"),
+    _descriptor("openclaw", "OpenClaw", "openclaw"),
+    _descriptor("kimi", "Kimi Code CLI", "kimi"),
 )

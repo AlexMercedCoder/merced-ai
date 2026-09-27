@@ -62,7 +62,8 @@ except ImportError:  # pragma: no cover
 
 COOKIE_NAME = "merced_ai_ui"
 MAX_MESSAGE_CHARS = 100_000
-HARNESS_CACHE_SCHEMA = 1
+# Schema 2 split capabilities into harness_supports and broker_implements.
+HARNESS_CACHE_SCHEMA = 2
 HARNESS_CACHE_MAX_AGE_SECONDS = 300
 
 
@@ -189,7 +190,9 @@ def _detecting_probe(descriptor: Any, previous: dict[str, Any] | None = None) ->
         {
             "harness_id": descriptor.id,
             "status": "detecting",
-            "capabilities": descriptor.capabilities.model_dump(mode="json"),
+            "harness_supports": descriptor.harness_supports.model_dump(mode="json"),
+            "broker_implements": descriptor.broker_implements.model_dump(mode="json"),
+            "capabilities": descriptor.broker_implements.model_dump(mode="json"),
             "capabilities_verified": False,
             "warnings": ["Bounded executable detection is running in the background."],
             "duration_ms": 0,
@@ -341,7 +344,7 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             "recent_runs": [item.model_dump(mode="json") for item in RunStore(workspace).list(20)],
             "webmcp": {
                 "supported_harnesses": [
-                    item.id for item in descriptors if item.capabilities.webmcp
+                    item.id for item in descriptors if item.broker_implements.webmcp
                 ],
                 "setup": {
                     "magagent": "magent webmcp origins",

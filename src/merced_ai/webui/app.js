@@ -286,8 +286,36 @@ function renderManagement() {
   } else if (view === "bots") {
     $("#management-list").innerHTML = state.data.bots.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.source)} BINDING</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.profile)} → ${escapeHtml(titleCase(item.harness.preferred))}</p><div class="tag-row">${item.harness.requires_webmcp ? "<span>requires WebMCP</span>" : ""}${item.harness.fallbacks.map((value) => `<span>fallback: ${escapeHtml(value)}</span>`).join("") || "<span>No fallbacks</span>"}</div></div><div class="card-actions"><button class="secondary-button use-bot" data-bot="${escapeHtml(item.name)}">Open</button>${item.source === "project" ? `<button class="secondary-button edit-bot" data-bot="${escapeHtml(item.name)}">Edit</button><button class="secondary-button danger-button delete-bot" data-bot="${escapeHtml(item.name)}">Delete</button>` : ""}</div></article>`).join("") || emptyState("No bots", "Create a profile, then bind it to an installed harness.");
   } else {
-    $("#management-list").innerHTML = state.data.harnesses.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.status === "detecting" ? "DETECTING…" : item.status)}</span><h2><span class="status-dot ${ready(item) ? "online" : ""} ${item.status === "detecting" ? "detecting" : ""}"></span> ${escapeHtml(titleCase(item.harness_id))}</h2><p>${escapeHtml(item.status === "detecting" ? "Checking executable and bounded version metadata…" : item.path || "Executable not found")}</p><div class="tag-row"><span>${escapeHtml(item.transport || "no transport")}</span><span>${"response on completion"}</span><span>${item.capabilities.approvals ? "approvals" : "no approval bridge"}</span><span>${item.capabilities.webmcp && item.capabilities_verified ? "WebMCP prerequisites ready" : "WebMCP unverified or unavailable"}</span></div></div><small>${escapeHtml((item.version || (item.status === "detecting" ? "Previous result retained while checking" : "No version reported")).split("\n")[0])}</small></article>`).join("");
+    $("#management-list").innerHTML = state.data.harnesses.map(harnessCard).join("");
   }
+}
+
+// Only what Merced AI itself delivers through the adapter is shown as a capability. Features the
+// harness advertises for its own interactive surfaces are listed separately and marked unused.
+function brokerCapabilityLabels(item) {
+  const caps = item.broker_implements || item.capabilities || {};
+  const labels = [];
+  if (caps.native_oap) labels.push("Native OAP profile");
+  if (caps.approvals) labels.push("AAIS approval relay");
+  if (caps.attachments) labels.push("Context files inlined");
+  if (caps.webmcp) labels.push(item.capabilities_verified ? "WebMCP ready" : "WebMCP unverified");
+  if (caps.streaming) labels.push("Streaming");
+  if (caps.resume) labels.push("Native resume");
+  if (caps.model_listing) labels.push("Model listing");
+  return labels;
+}
+const capabilityNames = { streaming: "streaming", resume: "native resume", approvals: "approvals", attachments: "attachments", model_listing: "model listing", native_oap: "native OAP", webmcp: "WebMCP" };
+function unusedHarnessFeatures(item) {
+  const supports = item.harness_supports || {};
+  const broker = item.broker_implements || {};
+  return Object.keys(capabilityNames).filter((name) => supports[name] && !broker[name]).map((name) => capabilityNames[name]);
+}
+function harnessCard(item) {
+  const detecting = item.status === "detecting";
+  const version = (item.status === "probe_failed" ? "" : item.version) || (detecting ? "Previous result retained while checking" : "No version reported");
+  const unused = unusedHarnessFeatures(item);
+  const tags = [...brokerCapabilityLabels(item), "Reply on completion"].map((label) => `<span>${escapeHtml(label)}</span>`).join("");
+  return `<article class="management-card"><div><span class="card-kicker">${escapeHtml(detecting ? "DETECTING…" : item.status.replaceAll("_", " "))}</span><h2><span class="status-dot ${ready(item) ? "online" : ""} ${detecting ? "detecting" : ""}"></span> ${escapeHtml(titleCase(item.harness_id))}</h2><p>${escapeHtml(detecting ? "Checking executable and bounded version metadata…" : item.path || "Executable not found")}</p><p class="tag-caption">Merced AI provides</p><div class="tag-row" aria-label="Capabilities Merced AI provides">${tags}</div>${unused.length ? `<p class="unused-features">Harness also offers ${escapeHtml(unused.join(", "))}; Merced AI does not use these yet.</p>` : ""}</div><small>${escapeHtml(version.split("\n")[0])}</small></article>`;
 }
 
 function emptyState(title, copy) { return `<div class="empty-state"><div class="bot-orb large">✦</div><h2>${title}</h2><p>${copy}</p></div>`; }

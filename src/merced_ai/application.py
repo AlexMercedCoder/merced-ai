@@ -153,7 +153,7 @@ def _route_harness(
         )
         if probe.path is not None and probe.status.value != "probe_failed":
             if bot.harness.requires_webmcp and not (
-                probe.capabilities.webmcp and probe.capabilities_verified
+                probe.broker_implements.webmcp and probe.capabilities_verified
             ):
                 failures.append(f"{harness_id}: WebMCP unsupported or readiness unverified")
                 continue

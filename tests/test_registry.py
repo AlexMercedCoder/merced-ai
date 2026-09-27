@@ -176,3 +176,41 @@ def test_fallback_dirs_cover_macos_package_manager_bins(monkeypatch: pytest.Monk
 
     assert Path("/opt/homebrew/bin") in paths
     assert Path("/usr/local/bin") in paths
+
+
+def test_descriptors_separate_harness_claims_from_broker_delivery() -> None:
+    descriptors = {item.id: item for item in default_registry().descriptors()}
+
+    for descriptor in descriptors.values():
+        broker = descriptor.broker_implements
+        # Merced AI returns output on completion and replays a bounded transcript per turn.
+        assert not broker.streaming, descriptor.id
+        assert not broker.resume, descriptor.id
+        assert not broker.model_listing, descriptor.id
+        # Workspace context is inlined into the prompt for every runnable adapter.
+        assert broker.attachments, descriptor.id
+        assert descriptor.capabilities == broker  # deprecated alias
+    relayed = {item.id for item in descriptors.values() if item.broker_implements.approvals}
+    assert relayed == {"loro", "magagent"}
+    native = {item.id for item in descriptors.values() if item.broker_implements.native_oap}
+    assert native == {"loro", "magagent"}
+    assert descriptors["gemini"].harness_supports.streaming
+    assert not descriptors["gemini"].broker_implements.streaming
+
+
+def test_no_descriptor_claims_an_unimplemented_transport() -> None:
+    for descriptor in default_registry().descriptors():
+        assert TransportKind.ACP_STDIO not in descriptor.transports, descriptor.id
+        assert TransportKind.NATIVE not in descriptor.transports, descriptor.id
+
+
+def test_probe_json_reports_both_capability_sets_and_legacy_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("merced_ai.harnesses.detection.locate_executable", lambda _d: None)
+    probe = default_registry().get("claude").probe()
+    payload = probe.model_dump(mode="json")
+
+    assert payload["broker_implements"]["streaming"] is False
+    assert payload["harness_supports"]["streaming"] is True
+    assert payload["capabilities"] == payload["broker_implements"]
