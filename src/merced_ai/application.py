@@ -173,13 +173,7 @@ def _route_harness(
         except KeyError:
             failures.append(f"{harness_id}: unknown")
             continue
-        from merced_ai.harnesses.adapters.command import CommandHarnessAdapter
-
-        probe = (
-            adapter.probe(workspace=workspace)
-            if isinstance(adapter, CommandHarnessAdapter)
-            else adapter.probe()
-        )
+        probe = registry.cached_probe(harness_id, workspace)
         if probe.path is not None and probe.status.value != "probe_failed":
             if bot.harness.requires_webmcp and not (
                 probe.broker_implements.webmcp and probe.capabilities_verified

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import threading
+import time
 from collections.abc import Iterable
+from pathlib import Path
 
 from merced_ai.harnesses.adapters.command import CommandHarnessAdapter
 from merced_ai.harnesses.adapters.executable import ExecutableProbeAdapter
@@ -15,12 +19,54 @@ from merced_ai.models import (
     TransportKind,
 )
 
+DEFAULT_PROBE_TTL_SECONDS = 30.0
+
+
+def probe_ttl_seconds() -> float:
+    """Routing probe cache lifetime; ``MERCED_AI_PROBE_TTL_SECONDS=0`` disables the cache."""
+    try:
+        return max(0.0, float(os.environ.get("MERCED_AI_PROBE_TTL_SECONDS", "")))
+    except ValueError:
+        return DEFAULT_PROBE_TTL_SECONDS
+
 
 class HarnessRegistry:
     def __init__(self, adapters: Iterable[HarnessAdapter] = ()) -> None:
         self._adapters: dict[str, HarnessAdapter] = {}
+        self._probe_cache: dict[tuple[str, str], tuple[float, HarnessProbe]] = {}
+        self._probe_lock = threading.Lock()
         for adapter in adapters:
             self.register(adapter)
+
+    def cached_probe(self, harness_id: str, workspace: Path | None = None) -> HarnessProbe:
+        """Probe a harness, reusing a recent result for the same workspace.
+
+        Routing probes on every turn; spawning each harness's version command (and, for Loro and
+        MagAgent, a capability report) each time added seconds per turn. Results are reused for
+        a short TTL, so a newly installed or removed harness is noticed within that window.
+        """
+        ttl = probe_ttl_seconds()
+        key = (harness_id, str(workspace or ""))
+        now = time.monotonic()
+        if ttl > 0:
+            with self._probe_lock:
+                cached = self._probe_cache.get(key)
+            if cached and now - cached[0] < ttl:
+                return cached[1]
+        adapter = self.get(harness_id)
+        probe = (
+            adapter.probe(workspace=workspace)
+            if isinstance(adapter, CommandHarnessAdapter)
+            else adapter.probe()
+        )
+        if ttl > 0:
+            with self._probe_lock:
+                self._probe_cache[key] = (now, probe)
+        return probe
+
+    def clear_probe_cache(self) -> None:
+        with self._probe_lock:
+            self._probe_cache.clear()
 
     def register(self, adapter: HarnessAdapter) -> None:
         harness_id = adapter.descriptor.id

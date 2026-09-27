@@ -54,6 +54,7 @@ or potentially mutating request through another harness.
 | `MERCED_AI_HARNESS_PATHS` | Add OS-path-separated executable search directories. |
 | `MERCED_AI_<HARNESS>_PATH` | Pin one harness executable, for example `MERCED_AI_PRIME_AGENT_PATH`. |
 | `MERCED_AI_KIMI_CONFIG_FILE` | Pass an alternate Kimi TOML/JSON configuration file. |
+| `MERCED_AI_PROBE_TTL_SECONDS` | How long routing reuses a harness probe within one chat, room, or UI server (default 30; `0` probes every turn). |
 | `OPENCLAW_WORKSPACE_DIR` | Set by the OpenClaw adapter to the selected Merced workspace. |
 
 Provider keys remain owned by harnesses. Merced AI inherits the process environment but never

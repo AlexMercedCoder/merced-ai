@@ -90,6 +90,20 @@ has no ACP client yet. Probe JSON still contains a `capabilities` field equal to
 Permission projection is advisory and may only narrow intent. The harness remains responsible for
 credentials, provider traffic, approvals, sandboxing, tools, and final policy enforcement.
 
+## Run journal
+
+Web runs are owned by the broker, not by the HTTP request. Every server-sent event is appended to
+`.merced-ai/run-events/<run-id>.jsonl` (a `header` line, one `event` line per event with its
+sequence number, and a `complete` line). Reconnecting clients replay from a sequence number; the
+replay window keeps the last 1,000 events (at most 24 MB) and reports a `replay_gap` when a client
+asks for something older. Appends are flushed immediately and fsynced at most four times a second
+plus once at completion, so appending stays constant-cost however long a run gets. 0.7.0 journals
+(`<run-id>.json`) are converted the first time they are read.
+
+Routing probes each candidate harness before a turn. Within one CLI chat, one group room, or one
+UI server, a probe result is reused for `MERCED_AI_PROBE_TTL_SECONDS` (30 s by default), so a turn
+no longer pays for spawning version and capability commands every time.
+
 ## Data ownership
 
 - OAP profiles own portable identity, instructions, model preference, and bounded learned state.

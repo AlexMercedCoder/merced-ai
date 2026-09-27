@@ -88,6 +88,18 @@ Targets 0.8.0.
   and the release-notes link agree. CI runs it on every push: advisory on branches, strict on `v*`
   tag builds (the workflow now also triggers on tags).
 
+### Performance
+
+- The run journal is append-only JSON Lines (`.merced-ai/run-events/<run-id>.jsonl`). 0.7.0
+  rewrote and fsynced the whole event history on every event, so a long run got slower per event
+  (up to 24 MB per write); appending is now constant-cost, reconnect and replay by sequence number
+  are unchanged, fsync is batched (at most every 250 ms, always at completion), and 0.7.0 `.json`
+  journals are converted on first read. `tests/test_run_journal.py` includes a benchmark that fails
+  if the per-event cost grows with run length.
+- Routing reuses a harness probe for 30 seconds within one chat, group room, or UI server instead
+  of spawning the harness's version (and capability) command on every turn. Set
+  `MERCED_AI_PROBE_TTL_SECONDS=0` to probe every turn.
+
 ### Internal structure
 
 - The 1,000-line `webui_server.py` is now the `merced_ai.web` package: an app composer, a shared

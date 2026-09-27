@@ -29,6 +29,7 @@ from merced_ai.application import (
 from merced_ai.bots import BotError, create_bot, discover_bots, resolve_bot
 from merced_ai.harnesses import default_registry
 from merced_ai.harnesses.adapters.command import HarnessRunError
+from merced_ai.harnesses.registry import HarnessRegistry
 from merced_ai.models import (
     HarnessCapabilities,
     HarnessProbe,
@@ -482,6 +483,8 @@ def _chat_loop(
     resume_session: str | None = None,
 ) -> None:
     store = SessionStore(workspace)
+    # One registry for the whole chat, so routing reuses harness probes between turns.
+    registry = default_registry()
     existing = None
     if resume_session:
         try:
@@ -496,7 +499,11 @@ def _chat_loop(
         harness = existing.harness_id
     try:
         initial = prepare_run(
-            bot_name, "Start the conversation.", workspace, harness_override=harness
+            bot_name,
+            "Start the conversation.",
+            workspace,
+            harness_override=harness,
+            registry=registry,
         )
     except (BotError, ProfileError, RoutingError) as exc:
         _fail(str(exc), 2)
@@ -515,7 +522,9 @@ def _chat_loop(
             break
         try:
             session = store.load(session.id)
-            prepared = prepare_group_turn(session, prompt, workspace, dispatch=bot_name)[0]
+            prepared = prepare_group_turn(
+                session, prompt, workspace, dispatch=bot_name, registry=registry
+            )[0]
         except (ValueError, BotError, ProfileError, RoutingError) as exc:
             console.print(f"[red]{exc}[/red]")
             continue
@@ -629,9 +638,12 @@ def _run_group_turn(
     *,
     dispatch: str | None = None,
     allow_concurrent_writes: bool = False,
+    registry: HarnessRegistry | None = None,
 ) -> GroupTurn:
     try:
-        prepared_runs = prepare_group_turn(session, prompt, workspace, dispatch=dispatch)
+        prepared_runs = prepare_group_turn(
+            session, prompt, workspace, dispatch=dispatch, registry=registry
+        )
     except (ValueError, BotError, ProfileError, RoutingError) as exc:
         _fail(str(exc), 2)
     writers = shared_workspace_writers(prepared_runs)
@@ -706,6 +718,7 @@ def _group_chat_loop(
 ) -> None:
     names = ", ".join(item.bot_name for item in session.participants)
     console.print(f"Group chat with [bold]{names}[/bold] · {session.mode} · {session.id}")
+    registry = default_registry()  # Reused across turns so routing probes are cached.
     while True:
         try:
             prompt = console.input("[bold cyan]you>[/bold cyan] ").strip()
@@ -726,6 +739,7 @@ def _group_chat_loop(
             workspace,
             dispatch=dispatch,
             allow_concurrent_writes=allow_concurrent_writes,
+            registry=registry,
         )
         _render_group_results(turn.results)
 
