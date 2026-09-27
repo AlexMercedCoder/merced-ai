@@ -453,3 +453,25 @@ body[data-theme="light"] .diff-del { color: #b3261e; }
 .group-fields .group-option small { display: block; color: var(--muted); font-size: 11px; }
 .group-fields .check-field { align-items: flex-start; }
 .group-fields .group-option input, .group-fields .check-field input { width: 16px; height: 16px; flex: 0 0 auto; padding: 0; }
+
+/* OAP state inbox */
+.inbox-card { align-items: flex-start; }
+.inbox-card .inbox-main { flex: 1; min-width: 0; }
+.inbox-card h3 { margin: 14px 0 6px; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.inbox-card h3 small { text-transform: none; letter-spacing: normal; font-weight: 400; }
+.op-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.op-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 12px; }
+.op-list li > div { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1; min-width: 0; }
+.op-list small { flex-basis: 100%; color: var(--muted); font-size: 12px; }
+.op-list code { overflow-wrap: anywhere; }
+.op-value { color: var(--text-soft); overflow-wrap: anywhere; }
+.op-badge, .risk-badge, .status-chip { padding: 2px 7px; border-radius: 99px; border: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+.risk-badge.high { border-color: #d9534f; color: #ff8a80; }
+.risk-badge.medium { border-color: var(--amber); color: var(--amber); }
+.risk-badge.low { color: var(--muted); }
+body[data-theme="light"] .risk-badge.high { color: #b3261e; }
+.proposal.high { border-color: rgba(217,83,79,.5); }
+.inbox-result { margin-top: 10px !important; color: var(--text) !important; }
+.muted-inline { color: var(--muted); }
+.inbox-card.status-applied, .inbox-card.status-rejected { opacity: .8; }
+@media (max-width: 720px) { .inbox-card { flex-direction: column; } }

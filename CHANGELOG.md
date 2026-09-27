@@ -93,6 +93,14 @@ Targets 0.8.0.
   binding and token (`Authorization: Bearer`). Write-capable bots need `metadata.approved`;
   streaming and push notifications are not implemented. See [Serving](docs/SERVING.md).
 
+- Reviewed OAP state-delta inbox (`merced-ai inbox list/show/add/remember/approve/reject/proposal`
+  and an **Inbox** page in the web UI). Deltas are validated on arrival, applied only after
+  approval with the OAP reference applicator (atomic, revision- and digest-checked, retention,
+  history with approver, validated before writing), conflicts never blind-write and id-addressed
+  deltas can be rebased, and proposals to change a profile's metadata or spec are decided one at a
+  time with computed risk. Implements the OAP Level 2 applicator requirements; the claimed level
+  stays 1. See [OAP state inbox](docs/INBOX.md).
+
 ### Changed
 
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the

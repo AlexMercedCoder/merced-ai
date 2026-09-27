@@ -10,6 +10,7 @@ Use this index as the release documentation entry point.
 - [Harness adapter plugins](PLUGINS.md): the adapter API, entry points, and the contract-test kit.
 - [Serving Merced AI](SERVING.md): run a bot or room as an ACP agent for editors, or through the
   experimental A2A endpoint.
+- [OAP state inbox](INBOX.md): review learned-state deltas and profile change proposals.
 - [Executable detection](DETECTION.md): discovery order, operating-system coverage, overrides, and
   known limits.
 - [Architecture](ARCHITECTURE.md): component boundaries, execution flow, data ownership, and

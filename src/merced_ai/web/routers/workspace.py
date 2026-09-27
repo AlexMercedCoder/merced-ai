@@ -11,6 +11,7 @@ from fastapi.responses import Response
 
 from merced_ai.application import is_write_capable
 from merced_ai.bots import BotError, discover_bots
+from merced_ai.inbox import DeltaInbox
 from merced_ai.models import BotBinding, ProfileRecord
 from merced_ai.paths import ensure_user_layout
 from merced_ai.profiles import ProfileError, discover_profiles, resolve_profile
@@ -69,6 +70,10 @@ def bootstrap_payload(context: WebContext) -> dict[str, Any]:
         "harness_detection": detection,
         "recent_runs": [item.model_dump(mode="json") for item in RunStore(workspace).list(20)],
         "notices": list(context.presenter.notices),
+        "inbox_pending": sum(
+            item["status"] in {"pending", "conflict"}
+            for item in DeltaInbox(context.workspace).items()
+        ),
         "webmcp": {
             "supported_harnesses": [
                 item.id for item in context.probes.descriptors if item.broker_implements.webmcp

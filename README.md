@@ -227,7 +227,9 @@ User-global data defaults to `~/.config/merced-ai` on Linux and follows the plat
 directory on Windows. Set `MERCED_AI_HOME` to override it for automation or tests.
 
 OAP profiles remain the authoritative source for identity and learned state. Session JSON files do
-not replace profile state.
+not replace profile state. Changes to a profile's learned state arrive as OAP state deltas and wait
+in a reviewed inbox (`merced-ai inbox`, or **Inbox** in the web UI) until you approve them; see
+[OAP state inbox](docs/INBOX.md).
 
 ## Security posture
 

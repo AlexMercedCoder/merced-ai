@@ -154,6 +154,7 @@ function render() {
   $("#bot-count").textContent = bots.length;
   $("#profile-count").textContent = profiles.length;
   $("#harness-count").textContent = harnesses.filter(ready).length;
+  $("#inbox-count").textContent = state.data.inbox_pending ?? 0;
   $("#workspace-name").textContent = workspace.split(/[\\/]/).filter(Boolean).at(-1) || workspace;
   renderSelectors();
   renderRecents();
@@ -336,14 +337,17 @@ function renderManagement() {
     bots: ["BOT BINDINGS", "Bots", "Bind portable OAP profiles to preferred and fallback harnesses."],
     profiles: ["OPEN AGENT PROFILE", "Profiles", "Create and validate portable identities, models, and permission requests."],
     harnesses: ["LOCAL RUNTIMES", "Harnesses", "Inspect detection, versions, capabilities, and readiness."],
+    inbox: ["OAP STATE REVIEW", "Inbox", "Learned state that sessions proposed for a profile. Nothing is applied until you approve it, and changes to a profile's rules are decided one by one."],
   }[view];
   if (!copy) return;
   [$("#management-eyebrow").textContent, $("#management-title").textContent, $("#management-copy").textContent] = copy;
   $("#management-action").hidden = false;
   $("#generate-profile").hidden = view !== "profiles";
   $("#management-action").disabled = view === "harnesses" && state.harnessDetection.refreshing;
-  $("#management-action").textContent = view === "profiles" ? "Create profile" : view === "bots" ? "Create bot" : state.harnessDetection.refreshing ? "Detecting…" : "Refresh detection";
-  if (view === "profiles") {
+  $("#management-action").textContent = view === "profiles" ? "Create profile" : view === "bots" ? "Create bot" : view === "inbox" ? "Remember something" : state.harnessDetection.refreshing ? "Detecting…" : "Refresh detection";
+  if (view === "inbox") {
+    renderInbox();
+  } else if (view === "profiles") {
     $("#management-list").innerHTML = state.data.profiles.map((item) => `<article class="management-card"><div><span class="card-kicker">REVISION ${item.revision} · ${escapeHtml(item.source)}</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.description)}</p><div class="tag-row"><span>${escapeHtml(item.model?.provider || "harness model")}</span><span>${escapeHtml(item.model?.id || "default")}</span><span>edit: ${escapeHtml(item.permissions?.edit || "inherit")}</span><span>shell: ${escapeHtml(item.permissions?.shell || "inherit")}</span></div>${item.warnings?.length ? `<div class="profile-warnings" role="status"><strong>Profile adjustments</strong>${item.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}</div><div class="card-actions"><button class="secondary-button edit-profile" data-profile="${escapeHtml(item.name)}" ${item.editable ? "" : "disabled"}>${item.editable ? "Edit" : "Read only"}</button>${item.editable ? `<button class="secondary-button danger-button delete-profile" data-profile="${escapeHtml(item.name)}">Delete</button>` : ""}</div></article>`).join("") || emptyState("No profiles", "Create an OAP profile before making a bot.");
   } else if (view === "bots") {
     $("#management-list").innerHTML = state.data.bots.map((item) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(item.source)} BINDING</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.profile)} → ${escapeHtml(titleCase(item.harness.preferred))}</p><div class="tag-row">${item.harness.requires_webmcp ? "<span>requires WebMCP</span>" : ""}${item.harness.fallbacks.map((value) => `<span>fallback: ${escapeHtml(value)}</span>`).join("") || "<span>No fallbacks</span>"}</div></div><div class="card-actions"><button class="secondary-button use-bot" data-bot="${escapeHtml(item.name)}">Open</button>${item.source === "project" ? `<button class="secondary-button edit-bot" data-bot="${escapeHtml(item.name)}">Edit</button><button class="secondary-button danger-button delete-bot" data-bot="${escapeHtml(item.name)}">Delete</button>` : ""}</div></article>`).join("") || emptyState("No bots", "Create a profile, then bind it to an installed harness.");
@@ -823,6 +827,74 @@ async function discardCompare() {
   } catch (error) { $("#compare-error").textContent = error.message; }
 }
 
+// ---- OAP state inbox ----
+function inboxValue(value) {
+  if (value === undefined) return "";
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return text.length > 220 ? `${text.slice(0, 220)}…` : text;
+}
+
+function inboxCard(item) {
+  const delta = item.delta;
+  const open = ["pending", "conflict"].includes(item.status);
+  const operations = (delta.operations || []).map((op) => `<li><span class="op-badge">${escapeHtml(op.op)}</span><code>${escapeHtml(op.path)}</code>${op.value !== undefined ? `<span class="op-value">${escapeHtml(inboxValue(op.value))}</span>` : ""}${op.reason ? `<small>${escapeHtml(op.reason)}</small>` : ""}</li>`).join("");
+  const proposals = item.proposals.map((proposal) => `<li class="proposal ${escapeHtml(proposal.risk)}"><div><span class="risk-badge ${escapeHtml(proposal.risk)}">${escapeHtml(proposal.risk)} risk</span><span class="op-badge">${escapeHtml(proposal.op)}</span><code>${escapeHtml(proposal.path)}</code>${proposal.value !== undefined ? `<span class="op-value">${escapeHtml(inboxValue(proposal.value))}</span>` : ""}<small>${escapeHtml(proposal.rationale || "")}</small></div>${proposal.status === "pending" && item.status !== "rejected" ? `<div class="card-actions"><button class="secondary-button" data-inbox-action="proposal" data-id="${escapeHtml(item.id)}" data-index="${proposal.index}" data-approve="true">Apply this change</button><button class="secondary-button danger-button" data-inbox-action="proposal" data-id="${escapeHtml(item.id)}" data-index="${proposal.index}" data-approve="false">Decline</button></div>` : `<span class="status-chip">${escapeHtml(proposal.status)}</span>`}</li>`).join("");
+  const conflict = item.conflict ? `<div class="profile-warnings" role="status"><strong>Revision conflict</strong><span>${escapeHtml(item.conflict.message)}</span>${item.conflict.rebaseable ? "<span>Every operation addresses entries by id, so it can be rebased onto the current revision.</span>" : "<span>It addresses entries by position; reject it and let the harness produce a new delta.</span>"}</div>` : "";
+  const applied = item.applied ? `<p class="inbox-result">Applied as revision ${item.applied.revision} by ${escapeHtml(item.applied.approved_by)}${item.applied.warnings.length ? ` · ${escapeHtml(item.applied.warnings.join("; "))}` : ""}</p>` : "";
+  const actions = open ? `<div class="card-actions">${item.status === "conflict" && item.conflict?.rebaseable ? `<button class="primary-button" data-inbox-action="approve" data-rebase="true" data-id="${escapeHtml(item.id)}">Rebase and apply</button>` : item.status === "pending" && (delta.operations || []).length ? `<button class="primary-button" data-inbox-action="approve" data-id="${escapeHtml(item.id)}">Apply state changes</button>` : ""}<button class="secondary-button danger-button" data-inbox-action="reject" data-id="${escapeHtml(item.id)}">Reject</button></div>` : "";
+  return `<article class="management-card inbox-card status-${escapeHtml(item.status)}"><div class="inbox-main"><span class="card-kicker">${escapeHtml(item.status)} · ${escapeHtml(item.source)}</span><h2>${escapeHtml(titleCase(item.profile))}</h2><p>${escapeHtml(delta.summary || "State update")} <span class="muted-inline">· targets revision ${escapeHtml(String(delta.target?.revision))}</span></p>${operations ? `<h3>State operations</h3><ul class="op-list">${operations}</ul>` : ""}${proposals ? `<h3>Proposed rule changes <small>(each needs its own approval)</small></h3><ul class="op-list">${proposals}</ul>` : ""}${conflict}${applied}</div>${actions}</article>`;
+}
+
+async function renderInbox() {
+  const list = $("#management-list");
+  if (!state.inbox) list.innerHTML = '<div class="empty-mini" role="status">Loading the inbox…</div>';
+  try {
+    state.inbox = await (await api("/api/inbox")).json();
+  } catch (error) {
+    list.innerHTML = `<div class="profile-warnings" role="alert"><strong>Could not load the inbox</strong><span>${escapeHtml(error.message)}</span></div>`;
+    return;
+  }
+  if (state.view !== "inbox") return;
+  $("#inbox-count").textContent = state.inbox.pending;
+  list.innerHTML = state.inbox.items.map(inboxCard).join("") || emptyState("Nothing to review", "When a harness session proposes learned state for a profile, or you ask a profile to remember something, it waits here for your approval.");
+}
+
+async function inboxDecision(data) {
+  const id = encodeURIComponent(data.id);
+  try {
+    if (data.inboxAction === "approve") {
+      if (!window.confirm(data.rebase ? "Rebase this delta onto the profile's current revision and apply it?" : "Apply these state operations to the profile?")) return;
+      const item = await (await api(`/api/inbox/${id}/approve`, { method: "POST", body: JSON.stringify({ rebase: data.rebase === "true" }) })).json();
+      toast(item.status === "conflict" ? "Revision conflict: the profile changed since this delta was made" : `Applied as revision ${item.applied.revision}`);
+    } else if (data.inboxAction === "reject") {
+      if (!window.confirm("Reject this delta? The profile will not change.")) return;
+      await api(`/api/inbox/${id}/reject`, { method: "POST", body: JSON.stringify({ reason: "" }) });
+      toast("Rejected");
+    } else if (data.inboxAction === "proposal") {
+      const approve = data.approve === "true";
+      if (approve && !window.confirm("Apply this change to the profile's rules? This is recorded in the profile history as approved by you.")) return;
+      await api(`/api/inbox/${id}/proposals/${encodeURIComponent(data.index)}`, { method: "POST", body: JSON.stringify({ approve }) });
+      toast(approve ? "Change applied to the profile" : "Proposal declined");
+    }
+    await refresh({ quiet: true });
+    renderInbox();
+  } catch (error) { toast(error.message); }
+}
+
+function openRememberEditor() {
+  if (!state.data.profiles.length) { toast("Create a profile first"); return; }
+  openEditor({
+    title: "Remember something",
+    eyebrow: "OAP STATE",
+    busyLabel: "Queuing",
+    progressCopy: "The entry goes to the inbox; it is applied only when you approve it.",
+    fields: field("Profile", "profile", state.data.profiles[0].name, { required: true, select: state.data.profiles.map((item) => item.name) })
+      + field("Kind", "kind", "fact", { select: [{ value: "fact", label: "Fact" }, { value: "preference", label: "Preference" }, { value: "thread", label: "Open thread" }] })
+      + field("What should it remember?", "text", "", { textarea: true, rows: 4, required: true }),
+    submit: async (values) => { await api("/api/inbox/remember", { method: "POST", body: JSON.stringify(values) }); state.inbox = null; },
+  });
+}
+
 function summarizeEvent(event) {
   if (typeof event?.type === "string") return titleCase(event.type);
   if (typeof event?.name === "string") return event.name;
@@ -1076,12 +1148,15 @@ function bindEvents() {
     } catch (error) { $("#group-error").textContent = error.message; }
   });
   $("#management-action").addEventListener("click", () => {
-    if (state.view === "profiles") openProfileEditor();
+    if (state.view === "inbox") openRememberEditor();
+    else if (state.view === "profiles") openProfileEditor();
     else if (state.view === "bots") openBotEditor();
     else refreshHarnesses({ announce: true }).catch((error) => toast(error.message));
   });
   $("#generate-profile").addEventListener("click", openProfileGenerator);
   $("#management-list").addEventListener("click", async (event) => {
+    const inboxAction = event.target.closest("[data-inbox-action]");
+    if (inboxAction) { await inboxDecision(inboxAction.dataset); return; }
     const editProfile = event.target.closest(".edit-profile"); const deleteProfile = event.target.closest(".delete-profile");
     const use = event.target.closest(".use-bot"); const editBot = event.target.closest(".edit-bot"); const deleteBot = event.target.closest(".delete-bot");
     if (editProfile) openProfileEditor(state.data.profiles.find((item) => item.name === editProfile.dataset.profile));
