@@ -252,3 +252,75 @@ def test_safety_notices_and_broker_capabilities(
     finally:
         server.should_exit = True
         thread.join(timeout=10)
+
+
+def test_inbox_review_and_harness_eval(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Approve a state delta and run an eval entirely through the browser."""
+    from playwright.sync_api import expect, sync_playwright
+    from uvicorn import Config, Server
+
+    from merced_ai.bots import create_bot
+    from merced_ai.inbox import DeltaInbox
+    from merced_ai.profiles import create_profile
+    from merced_ai.webui_server import create_web_app
+
+    monkeypatch.setenv(
+        "MERCED_AI_CODEX_PATH", str(Path(__file__).parent / "fixtures" / "fake_codex.py")
+    )
+    create_profile(
+        "analyst",
+        "Analyses data.",
+        "Analyse.",
+        workspace,
+        edit_permission="deny",
+        shell_permission="deny",
+    )
+    create_bot("analyst", "analyst", "codex", (), workspace)
+    DeltaInbox(workspace).remember("analyst", "Tables partition by day", actor="tester")
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = Server(
+        Config(create_web_app(workspace, "token"), host="127.0.0.1", port=port, log_level="error")
+    )
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.05)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 900})
+            page.on("dialog", lambda dialog: dialog.accept())
+            page.goto(f"http://127.0.0.1:{port}/#token=token")
+            expect(page.locator("#inbox-count")).to_have_text("1", timeout=30_000)
+            page.locator('.nav-item[data-view="inbox"]').click()
+            card = page.locator(".inbox-card").first
+            expect(card).to_contain_text("remembered by tester")
+            card.locator('[data-inbox-action="approve"]').click()
+            expect(page.locator(".inbox-card").first).to_contain_text(
+                "Applied as revision 2", timeout=30_000
+            )
+            expect(page.locator("#inbox-count")).to_have_text("0")
+
+            page.locator('.nav-item[data-view="evals"]').click()
+            expect(page.locator(".empty-state")).to_contain_text("No evals yet")
+            expect(page.locator("#harness-detection-state")).to_have_text(
+                "Detection complete", timeout=30_000
+            )
+            page.locator("#management-action").click()
+            page.locator("#eval-prompt").fill("Validate")
+            page.locator(".eval-check-value").first.fill("validated")
+            # Only the fake harness: never call a real harness installed on the machine.
+            for box in page.locator("#eval-harness-options input").all():
+                box.uncheck()
+            page.locator('#eval-harness-options input[value="codex"]').check()
+            page.locator("#eval-submit").click()
+            expect(page.locator(".eval-column")).to_have_count(1, timeout=60_000)
+            expect(page.locator(".eval-column")).to_contain_text("1/1 checks")
+            browser.close()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=10)

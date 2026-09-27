@@ -951,6 +951,12 @@ function inboxValue(value) {
   return text.length > 220 ? `${text.slice(0, 220)}…` : text;
 }
 
+function inboxSource(source = "") {
+  if (source.startsWith("remember:")) return `remembered by ${source.slice(9)}`;
+  if (source.startsWith("file:")) return `imported from ${source.slice(5)}`;
+  return source;
+}
+
 function inboxCard(item) {
   const delta = item.delta;
   const open = ["pending", "conflict"].includes(item.status);
@@ -959,7 +965,7 @@ function inboxCard(item) {
   const conflict = item.conflict ? `<div class="profile-warnings" role="status"><strong>Revision conflict</strong><span>${escapeHtml(item.conflict.message)}</span>${item.conflict.rebaseable ? "<span>Every operation addresses entries by id, so it can be rebased onto the current revision.</span>" : "<span>It addresses entries by position; reject it and let the harness produce a new delta.</span>"}</div>` : "";
   const applied = item.applied ? `<p class="inbox-result">Applied as revision ${item.applied.revision} by ${escapeHtml(item.applied.approved_by)}${item.applied.warnings.length ? ` · ${escapeHtml(item.applied.warnings.join("; "))}` : ""}</p>` : "";
   const actions = open ? `<div class="card-actions">${item.status === "conflict" && item.conflict?.rebaseable ? `<button class="primary-button" data-inbox-action="approve" data-rebase="true" data-id="${escapeHtml(item.id)}">Rebase and apply</button>` : item.status === "pending" && (delta.operations || []).length ? `<button class="primary-button" data-inbox-action="approve" data-id="${escapeHtml(item.id)}">Apply state changes</button>` : ""}<button class="secondary-button danger-button" data-inbox-action="reject" data-id="${escapeHtml(item.id)}">Reject</button></div>` : "";
-  return `<article class="management-card inbox-card status-${escapeHtml(item.status)}"><div class="inbox-main"><span class="card-kicker">${escapeHtml(item.status)} · ${escapeHtml(item.source)}</span><h2>${escapeHtml(titleCase(item.profile))}</h2><p>${escapeHtml(delta.summary || "State update")} <span class="muted-inline">· targets revision ${escapeHtml(String(delta.target?.revision))}</span></p>${operations ? `<h3>State operations</h3><ul class="op-list">${operations}</ul>` : ""}${proposals ? `<h3>Proposed rule changes <small>(each needs its own approval)</small></h3><ul class="op-list">${proposals}</ul>` : ""}${conflict}${applied}</div>${actions}</article>`;
+  return `<article class="management-card inbox-card status-${escapeHtml(item.status)}"><div class="inbox-main"><span class="card-kicker">${escapeHtml(item.status)} · ${escapeHtml(inboxSource(item.source))}</span><h2>${escapeHtml(titleCase(item.profile))}</h2><p>${escapeHtml(delta.summary || "State update")} <span class="muted-inline">· targets revision ${escapeHtml(String(delta.target?.revision))}</span></p>${operations ? `<h3>State operations</h3><ul class="op-list">${operations}</ul>` : ""}${proposals ? `<h3>Proposed rule changes <small>(each needs its own approval)</small></h3><ul class="op-list">${proposals}</ul>` : ""}${conflict}${applied}</div>${actions}</article>`;
 }
 
 async function renderInbox() {

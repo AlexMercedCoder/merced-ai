@@ -515,3 +515,7 @@ body[data-theme="light"] .eval-error { color: #b3261e; }
   .eval-check-row .eval-check-value { grid-column: 1 / 2; }
   .eval-results { padding: 14px; }
 }
+
+.header-actions button { white-space: nowrap; }
+.profile-warnings strong { font-size: 12px; }
+.profile-warnings span { font-size: 12px; }
