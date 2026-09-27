@@ -35,6 +35,9 @@ Targets 0.8.0.
   enable them when neither exists. An explicitly configured path that is wrong fails collection.
   The OAP upstream fixtures previously resolved to the wrong parent directory and were silently
   skipped on developer machines.
+- Approval-presenter and web run tests wait on generous deadlines instead of fixed short polls.
+  Each presenter and journal step fsyncs, and under parallel disk load the old one-to-two-second
+  budgets failed intermittently.
 
 ## 0.7.0 — 2026-09-12
 
