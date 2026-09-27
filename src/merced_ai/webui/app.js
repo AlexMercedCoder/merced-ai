@@ -126,8 +126,20 @@ function currentProfile() {
 function activeHarnessId() { return state.harnessOverride || currentSession()?.harness_id || currentBot()?.harness.preferred || ""; }
 function activeProbe() { return state.data.harnesses.find((item) => item.harness_id === activeHarnessId()); }
 
+// Server-side recovery notices (for example a quarantined approval-state file). Dismissal lasts
+// for this browser tab only, so a restart still shows anything that needs attention.
+function dismissedNotices() {
+  try { return JSON.parse(sessionStorage.getItem("merced-ai-dismissed-notices") || "[]"); } catch { return []; }
+}
+function renderNotices() {
+  const dismissed = dismissedNotices();
+  const notices = (state.data.notices || []).filter((item) => !dismissed.includes(item.id));
+  $("#app-notices").innerHTML = notices.map((item) => `<div class="app-notice ${escapeHtml(item.level || "warning")}"><span class="write-notice-icon" aria-hidden="true">!</span><div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.message)}</p>${item.quarantined_path ? `<small>The unreadable file was kept for inspection at <code>${escapeHtml(item.quarantined_path)}</code></small>` : ""}</div><button type="button" class="secondary-button" data-dismiss-notice="${escapeHtml(item.id)}" aria-label="Dismiss: ${escapeHtml(item.title)}">Dismiss</button></div>`).join("");
+}
+
 function render() {
   const { profiles, bots, sessions, harnesses, workspace } = state.data;
+  renderNotices();
   $("#session-count").textContent = sessions.length;
   $("#bot-count").textContent = bots.length;
   $("#profile-count").textContent = profiles.length;
@@ -885,6 +897,13 @@ function bindEvents() {
   $("#message-input").addEventListener("input", (event) => { event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; renderMentionMenu(); });
   $("#mention-menu").addEventListener("click", (event) => { const button = event.target.closest("[data-mention]"); if (button) insertMention(button.dataset.mention); });
   $("#cancel-run").addEventListener("click", cancelRun);
+  $("#app-notices").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-dismiss-notice]");
+    if (!button) return;
+    const dismissed = dismissedNotices();
+    try { sessionStorage.setItem("merced-ai-dismissed-notices", JSON.stringify([...dismissed, button.dataset.dismissNotice])); } catch { /* keep in-page only */ }
+    button.closest(".app-notice").remove();
+  });
   $("#allow-concurrent-writes").addEventListener("change", (event) => {
     const allowed = event.target.checked;
     if (state.activeSession) state.concurrentWrites[state.activeSession] = allowed;

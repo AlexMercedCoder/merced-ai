@@ -76,6 +76,13 @@ bypass that check. Trust the project once in an interactive `gemini` session, or
 `GEMINI_CLI_TRUST_WORKSPACE=true` in the environment you start Merced AI from if you accept that
 for every folder.
 
+## "Approval state was reset" banner
+
+`.merced-ai/aais-presenter.json` could not be parsed, so Merced AI moved it to
+`aais-presenter.corrupt-<timestamp>.json` next to it and started with empty approval state. Nothing
+was approved; a harness that was waiting asks again or times out. Inspect or delete the kept file
+once you no longer need it. If this repeats, check for another tool writing into `.merced-ai/`.
+
 ## Safe diagnostic capture
 
 Prefer metadata and redacted output:

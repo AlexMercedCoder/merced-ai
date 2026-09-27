@@ -15,6 +15,12 @@ Targets 0.8.0.
 - MagAgent, Loro, DSH, and Antigravity still take the prompt as an argument (MagAgent and Loro use
   stdin for AAIS approvals). A new guard refuses any command line over 100 KB on POSIX or 24 KB on
   Windows with a clear message and exit status 7, instead of failing to start the process.
+- A corrupt `.merced-ai/aais-presenter.json` no longer stops `merced-ai ui` from starting. The
+  file is moved aside as `aais-presenter.corrupt-<timestamp>.json`, the presenter starts with empty
+  state, `merced-ai ui` prints a warning, and the web UI shows a dismissible banner naming the kept
+  file. State is applied only after the whole file validates, so a bad file never leaves partial
+  state, and an invalid AAIS envelope in the file is treated as corruption instead of escaping as an
+  unhandled library error.
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
 
@@ -27,6 +33,9 @@ Targets 0.8.0.
   `group chat`, and `session resume`, or the **Run at the same time** toggle in the web UI. See
   [Shared-workspace writes](docs/GROUP_CHAT.md#shared-workspace-writes).
 - Every `--workspace/-C` and `--json` option now has help text.
+- A Windows CI test cancels a run whose child has spawned a grandchild and checks that the
+  grandchild is gone (`taskkill /T`). It is skipped on other platforms with a reason; the POSIX
+  process-group case keeps its own test.
 
 ### Changed
 

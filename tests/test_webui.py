@@ -570,3 +570,44 @@ async def test_webui_group_validation_and_approval_aggregation(
 def test_webui_rejects_non_loopback_binding(workspace: Path) -> None:
     with pytest.raises(ValueError, match="loopback-only"):
         run_web_ui(workspace, host="0.0.0.0", open_browser=False)
+
+
+@pytest.mark.anyio
+async def test_webui_starts_with_corrupt_approval_state_and_reports_it(workspace: Path) -> None:
+    state = workspace / ".merced-ai" / "aais-presenter.json"
+    state.parent.mkdir(parents=True)
+    state.write_text("{truncated", encoding="utf-8")
+
+    async with authenticated_client(workspace) as (client, _):
+        bootstrap = (await client.get("/api/bootstrap")).json()
+        recovery = (await client.get("/api/approvals/recovery")).json()
+        snapshot = await client.get("/api/approvals/snapshot")
+
+    [notice] = bootstrap["notices"]
+    assert notice["kind"] == "approval_state_quarantined"
+    assert Path(notice["quarantined_path"]).read_text(encoding="utf-8") == "{truncated"
+    assert recovery["notices"] == [notice]
+    assert snapshot.status_code == 200
+
+
+def test_run_web_ui_prints_recovery_warning(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import types
+
+    from merced_ai.webui_server import run_web_ui
+
+    state = workspace / ".merced-ai" / "aais-presenter.json"
+    state.parent.mkdir(parents=True)
+    state.write_text("[]", encoding="utf-8")
+    monkeypatch.setitem(
+        __import__("sys").modules, "uvicorn", types.SimpleNamespace(run=lambda *a, **k: None)
+    )
+
+    run_web_ui(workspace, open_browser=False)
+
+    captured = capsys.readouterr()
+    assert "Approval state" not in captured.out
+    assert "could not be read" in captured.err
+    assert "aais-presenter.corrupt-" in captured.err
+    assert "Merced AI UI: http://127.0.0.1:8765/#token=" in captured.out

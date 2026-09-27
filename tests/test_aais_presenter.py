@@ -106,3 +106,52 @@ def test_expired_request_is_cancelled_without_waiting_for_user(tmp_path):
     decision = presenter.present(envelope)
     assert decision["decision"]["decision"] == "cancel"
     assert presenter.snapshot()["snapshot"]["pending"] == []
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"{not json",
+        b'{"schema": "something-else"}',
+        b'{"schema": "merced-ai.aais-presenter.v1", "envelopes": [{"aais": "0.1"}]}',
+        b"\xff\xfe\x00garbage",
+        b"[]",
+    ],
+    ids=["truncated", "wrong-schema", "invalid-envelope", "not-utf8", "not-object"],
+)
+def test_corrupt_state_is_quarantined_and_presenter_starts_fresh(
+    tmp_path: Path, content: bytes
+) -> None:
+    state = tmp_path / ".merced-ai" / "aais-presenter.json"
+    state.parent.mkdir(parents=True)
+    state.write_bytes(content)
+
+    presenter = AAISPresenter(tmp_path)
+
+    quarantined = list(state.parent.glob("aais-presenter.corrupt-*.json"))
+    assert len(quarantined) == 1
+    assert quarantined[0].read_bytes() == content
+    assert not state.exists()
+    [notice] = presenter.notices
+    assert notice["kind"] == "approval_state_quarantined"
+    assert notice["quarantined_path"] == str(quarantined[0])
+    assert presenter.recovery()["notices"] == [notice]
+    assert presenter.snapshot()["snapshot"]["pending"] == []
+
+    # The fresh store works end to end.
+    result: list[dict] = []
+    worker = threading.Thread(target=lambda: result.append(presenter.present(request())))
+    worker.start()
+    pending = _poll(lambda: presenter.snapshot()["snapshot"]["pending"])
+    assert pending
+    presenter.decide(pending[0]["id"], "deny", "once")
+    worker.join(WAIT_SECONDS)
+    assert result and result[0]["decision"]["decision"] == "deny"
+    assert state.exists()
+
+
+def test_valid_state_is_not_quarantined(tmp_path: Path) -> None:
+    AAISPresenter(tmp_path)._persist()
+    presenter = AAISPresenter(tmp_path)
+    assert presenter.notices == []
+    assert not list(presenter.path.parent.glob("*.corrupt-*"))

@@ -148,3 +148,48 @@ def test_child_does_not_inherit_test_coverage_settings(workspace, monkeypatch):
     )
     assert result.returncode == 0
     assert result.stdout.strip() == "[]"
+
+
+@pytest.mark.skipif(
+    os.name != "nt",
+    reason=(
+        "Windows process-tree cancellation (taskkill /T); runs in the Windows CI job. POSIX "
+        "process-group termination is covered by test_timeout_stops_descendant."
+    ),
+)
+def test_windows_cancel_terminates_grandchild(workspace):  # pragma: no cover - Windows CI
+    import time
+
+    from merced_ai.process_liveness import process_alive
+
+    pidfile = workspace / "grandchild.pid"
+    code = (
+        "import subprocess,sys,time; "
+        "p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(120)']); "
+        f"open({str(pidfile)!r},'w').write(str(p.pid)); time.sleep(120)"
+    )
+    cancellation = threading.Event()
+
+    def cancel_when_grandchild_exists() -> None:
+        deadline = time.monotonic() + 60
+        while not pidfile.exists() or not pidfile.read_text().strip():
+            if time.monotonic() > deadline:
+                break
+            time.sleep(0.05)
+        cancellation.set()
+
+    threading.Thread(target=cancel_when_grandchild_exists, daemon=True).start()
+    with pytest.raises(ChildProcessError, match="cancelled"):
+        run_child(
+            [sys.executable, "-c", code],
+            workspace=workspace,
+            env=dict(os.environ),
+            timeout=90,
+            cancellation=cancellation,
+            limit=10_000,
+        )
+    pid = int(pidfile.read_text())
+    deadline = time.monotonic() + 15
+    while process_alive(pid) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    assert not process_alive(pid), "grandchild survived cancellation"

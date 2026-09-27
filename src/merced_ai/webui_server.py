@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import secrets
+import sys
 import threading
 import time
 import webbrowser
@@ -357,6 +358,7 @@ def create_web_app(workspace: Path, access_token: str | None = None) -> Any:
             "harnesses": detection.pop("harnesses"),
             "harness_detection": detection,
             "recent_runs": [item.model_dump(mode="json") for item in RunStore(workspace).list(20)],
+            "notices": list(approval_presenter.notices),
             "webmcp": {
                 "supported_harnesses": [
                     item.id for item in descriptors if item.broker_implements.webmcp
@@ -1001,5 +1003,12 @@ def run_web_ui(
     url = f"http://{host}:{port}/#token={token}"
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+    app = create_web_app(workspace, token)
+    for notice in app.state.aais_presenter.notices:
+        print(
+            f"Warning: {notice['message']} The unreadable file was kept at "
+            f"{notice['quarantined_path']}.",
+            file=sys.stderr,
+        )
     print(f"Merced AI UI: {url}")
-    uvicorn.run(create_web_app(workspace, token), host=host, port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="warning")

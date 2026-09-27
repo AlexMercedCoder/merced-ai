@@ -11,9 +11,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from aais import ApprovalStore, ConflictError, create_decision, validate
+from aais import ApprovalError, ApprovalStore, ConflictError, create_decision, validate
 
 from merced_ai.storage import atomic_write, file_lock
+
+
+class StateCorruptError(ValueError):
+    """The presenter state file exists but cannot be parsed or validated."""
 
 
 @dataclass
@@ -34,20 +38,71 @@ class AAISPresenter:
         self._decisions: dict[str, dict[str, Any]] = {}
         self._receipts: dict[str, dict[str, Any]] = {}
         self._owners: dict[str, int] = {}
+        # Recovery notices for the UI, for example a quarantined state file.
+        self.notices: list[dict[str, Any]] = []
         with self._lock, file_lock(self.path):
             self._load()
 
     def _load(self) -> None:
+        """Reload shared state; quarantine an unreadable file instead of failing."""
+        try:
+            self._read_state()
+        except StateCorruptError as error:
+            self._quarantine(error)
+
+    def _quarantine(self, error: StateCorruptError) -> None:
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        target = self.path.with_name(f"{self.path.stem}.corrupt-{stamp}{self.path.suffix}")
+        try:
+            os.replace(self.path, target)
+        except OSError as move_error:
+            raise ValueError(
+                f"Approval presenter state is unreadable and could not be moved aside: {self.path}"
+            ) from move_error
+        # Start clean. Requests this process is still presenting stay in memory and are written
+        # back on the next change; requests owned by other processes must be issued again.
+        self._decisions = {}
+        self._receipts = {}
+        self._owners = {key: value for key, value in self._owners.items() if key in self._pending}
+        self.notices.append(
+            {
+                "id": f"approval-state-{stamp}",
+                "kind": "approval_state_quarantined",
+                "level": "warning",
+                "title": "Approval state was reset",
+                "message": (
+                    "The saved approval state could not be read, so Merced AI moved it aside and "
+                    "started fresh. Any approval that was waiting will be asked again by its "
+                    "harness, or has timed out."
+                ),
+                "reason": str(error.__cause__ or error),
+                "quarantined_path": str(target),
+                "detected_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            }
+        )
+
+    def _read_state(self) -> None:
         if not self.path.exists():
             return
         try:
-            payload = json.loads(self.path.read_text())
+            text = self.path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            raise StateCorruptError(
+                f"Approval presenter state is not UTF-8: {self.path}"
+            ) from error
+        except OSError as error:
+            # Unreadable for another reason (permissions, I/O): not safe to move aside.
+            raise ValueError(f"Approval presenter state cannot be read: {self.path}") from error
+        try:
+            payload = json.loads(text)
+            if not isinstance(payload, dict):
+                raise ValueError("Presenter storage must be a JSON object")
             if payload.get("schema") != "merced-ai.aais-presenter.v1":
                 raise ValueError("Unsupported presenter storage")
-            self._sequence = int(payload.get("sequence", 0))
-            self._decisions = payload.get("decisions", {})
-            self._receipts = payload.get("receipts", {})
-            self._owners = payload.get("owners", {})
+            sequence = int(payload.get("sequence", 0))
+            decisions = dict(payload.get("decisions", {}))
+            receipts = dict(payload.get("receipts", {}))
+            owners = dict(payload.get("owners", {}))
             envelopes = payload.get("envelopes")
             if envelopes is None:
                 envelopes = [
@@ -62,18 +117,27 @@ class AAISPresenter:
                     }
                     for request in payload.get("pending", [])
                 ]
-            existing = self._pending
-            self._pending = {}
-            for envelope in envelopes:
-                envelope = validate(envelope)
-                request_id = envelope["request"]["id"]
-                item = existing.get(request_id) or _Pending(envelope, threading.Event())
-                item.decision = self._decisions.get(request_id)
-                if item.decision:
-                    item.decided.set()
-                self._pending[request_id] = item
-        except (OSError, ValueError, KeyError, TypeError) as error:
-            raise ValueError(f"Approval presenter state requires recovery: {self.path}") from error
+            validated = [validate(envelope) for envelope in envelopes]
+        except (ValueError, KeyError, TypeError, AttributeError, ApprovalError) as error:
+            raise StateCorruptError(
+                f"Approval presenter state requires recovery: {self.path}"
+            ) from error
+        # Apply only after the whole file parsed, so a failure never leaves partial state.
+        self._sequence, self._decisions, self._receipts, self._owners = (
+            sequence,
+            decisions,
+            receipts,
+            owners,
+        )
+        existing = self._pending
+        self._pending = {}
+        for envelope in validated:
+            request_id = envelope["request"]["id"]
+            item = existing.get(request_id) or _Pending(envelope, threading.Event())
+            item.decision = self._decisions.get(request_id)
+            if item.decision:
+                item.decided.set()
+            self._pending[request_id] = item
 
     def _persist(self) -> None:
         # Keep replay receipts bounded independently of active requests.
@@ -244,6 +308,7 @@ class AAISPresenter:
         with self._lock, file_lock(self.path):
             self._load()
             return {
+                "notices": list(self.notices),
                 "orphaned": [
                     key for key in self._pending if not self._owner_alive(self._owners.get(key))
                 ],

@@ -10,6 +10,13 @@ creates the exact action; Merced AI displays its arguments, origin, risk, digest
 relays the decision through that child's dedicated standard-input channel. Pending requests are
 durably mirrored in `.merced-ai/aais-presenter.json`.
 
+If that file cannot be read (for example it was truncated by a crash or edited by hand), the UI
+still starts. Merced AI renames the file to `aais-presenter.corrupt-<timestamp>.json`, starts with
+empty approval state, prints a warning when `merced-ai ui` starts, and shows a dismissible
+"Approval state was reset" banner with the kept file's path. Any request that was waiting is asked
+again by its harness or times out; nothing is approved on its behalf. A file that exists but cannot
+be opened (for example a permissions error) is not moved, and approval endpoints report the error.
+
 The preflight dialog remains launch consent. Runtime permission is a separate exact-action decision.
 Adapters without AAIS continue using their native safe-mode behavior and never receive an automatic
 approval from Merced AI.
