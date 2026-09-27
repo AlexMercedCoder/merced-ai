@@ -21,6 +21,7 @@ from merced_ai.web.context import ReadContext, WebContext, WriteContext
 from merced_ai.web.models import AAISDecisionInput, MessageInput, SessionInput, SessionUpdateInput
 from merced_ai.web.runs import RunService
 from merced_ai.workspace_context import RunStore
+from merced_ai.worktrees import WorktreeError, WorktreeManager
 
 router = APIRouter()
 
@@ -50,10 +51,13 @@ async def session_create(payload: SessionInput, context: WriteContext) -> dict[s
         prepared = _prepare_participants(context, payload, "Start the conversation.")
     except (BotError, ProfileError, RoutingError, ValueError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if payload.isolation == "worktree" and len(prepared) < 2:
+        raise HTTPException(status_code=409, detail="worktree isolation is for group rooms")
     session = SessionStore(context.workspace).create_group(
         tuple(participant_from_run(item) for item in prepared),
         mode=payload.mode,
         title=payload.title,
+        isolation=payload.isolation,
     )
     return session.model_dump(mode="json")
 
@@ -80,10 +84,17 @@ async def session_delete(session_id: str, context: WriteContext) -> Response:
         raise HTTPException(
             status_code=409, detail="Cancel the active run before deleting this conversation"
         )
+    store = SessionStore(context.workspace)
     try:
-        SessionStore(context.workspace).delete(session_id)
+        session = store.load(session_id)
+        store.delete(session_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if session.isolation == "worktree":
+        try:
+            WorktreeManager(context.workspace, session_id).remove_all()
+        except WorktreeError:
+            pass  # The repository is gone or was never a repository; nothing to clean.
     return Response(status_code=204)
 
 
@@ -102,6 +113,7 @@ async def session_derive(
             mode=payload.mode,
             title=payload.title,
             derived_from=session_id,
+            isolation=payload.isolation if len(prepared) > 1 else "shared",
         )
     except (ValueError, BotError, ProfileError, RoutingError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

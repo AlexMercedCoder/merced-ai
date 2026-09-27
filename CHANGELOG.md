@@ -75,6 +75,15 @@ Targets 0.8.0.
   verified; `MERCED_AI_ACP=0` turns ACP off. The ACP transport claim is back for the four verified
   harnesses only. Reply turns now record the harness session ID.
 
+- Worktree-per-bot group rooms (`group ask/chat --worktrees`, or the option in the web group
+  dialog): each write-capable bot works in its own `git worktree` and branch outside the project,
+  so they run concurrently without touching your files. Compare their changes with
+  `merced-ai group diff` or the web **Compare changes** view, apply one bot's patch with
+  `merced-ai group apply` or **Apply to workspace** (only when it applies cleanly; nothing is
+  written otherwise), and remove them with `merced-ai group cleanup` or **Discard all
+  worktrees**. Non-git workspaces fall back to taking turns. See
+  [Worktree isolation](docs/GROUP_CHAT.md#worktree-isolation).
+
 ### Changed
 
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the

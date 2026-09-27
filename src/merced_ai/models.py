@@ -226,6 +226,8 @@ class SessionRecord(BaseModel):
     kind: Literal["single", "group"] = "single"
     mode: Literal["mentions", "all", "round_robin"] = "mentions"
     participants: list[SessionParticipant] = Field(default_factory=list)
+    # "worktree" gives each write-capable bot its own git worktree (group rooms only).
+    isolation: Literal["shared", "worktree"] = "shared"
     turns: list[ConversationTurn] = Field(default_factory=list)
 
     @model_validator(mode="after")

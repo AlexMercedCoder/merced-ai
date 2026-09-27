@@ -6,7 +6,7 @@ import json
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any, Literal, NoReturn, cast
 
@@ -22,6 +22,7 @@ from merced_ai.application import (
     PreparedRun,
     RoutingError,
     execute,
+    isolate_group_turn,
     participant_from_run,
     prepare_group,
     prepare_group_turn,
@@ -51,6 +52,7 @@ from merced_ai.profiles import (
     validate_profile,
 )
 from merced_ai.sessions import SessionStore
+from merced_ai.worktrees import WorktreeError, WorktreeManager
 
 app = typer.Typer(
     name="merced-ai",
@@ -72,6 +74,10 @@ error_console = Console(stderr=True)
 DEFAULT_WORKSPACE = Path.cwd()
 WORKSPACE_HELP = "Project directory to use. Defaults to the current directory."
 JSON_HELP = "Print machine-readable JSON instead of formatted output."
+WORKTREES_HELP = (
+    "Give each write-capable bot its own git worktree and branch so they can work at the same "
+    "time without touching your files; review with `group diff` and apply with `group apply`."
+)
 ALLOW_CONCURRENT_WRITES_HELP = (
     "Let write-capable bots that share a workspace run at the same time. By default their "
     "turns run one at a time so they cannot edit the same files concurrently."
@@ -632,13 +638,14 @@ def group_ask(
     allow_concurrent_writes: Annotated[
         bool, typer.Option("--allow-concurrent-writes", help=ALLOW_CONCURRENT_WRITES_HELP)
     ] = False,
+    worktrees: Annotated[bool, typer.Option("--worktrees", help=WORKTREES_HELP)] = False,
     json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """Send one message to a new group conversation.
 
     Example: merced-ai group ask reviewer builder -p "Assess this change" --json
     """
-    session = _create_group_session(tuple(bot_names), workspace, mode)
+    session = _create_group_session(tuple(bot_names), workspace, mode, worktrees=worktrees)
     turn = _run_group_turn(
         session,
         prompt,
@@ -656,6 +663,7 @@ def group_ask(
                         "serialized": turn.serialized,
                         "bots": list(turn.writers),
                     },
+                    "worktrees": turn.worktrees,
                     "responses": [
                         {
                             "bot_name": name,
@@ -685,16 +693,19 @@ def group_chat(
     allow_concurrent_writes: Annotated[
         bool, typer.Option("--allow-concurrent-writes", help=ALLOW_CONCURRENT_WRITES_HELP)
     ] = False,
+    worktrees: Annotated[bool, typer.Option("--worktrees", help=WORKTREES_HELP)] = False,
 ) -> None:
     """Chat with a group; use @bot, /all, /round-robin, /exit, or /quit.
 
     Example: merced-ai group chat reviewer builder tester --mode all
     """
-    session = _create_group_session(tuple(bot_names), workspace, mode)
+    session = _create_group_session(tuple(bot_names), workspace, mode, worktrees=worktrees)
     _group_chat_loop(session, workspace, allow_concurrent_writes=allow_concurrent_writes)
 
 
-def _create_group_session(bot_names: tuple[str, ...], workspace: Path, mode: str) -> SessionRecord:
+def _create_group_session(
+    bot_names: tuple[str, ...], workspace: Path, mode: str, *, worktrees: bool = False
+) -> SessionRecord:
     if mode not in {"mentions", "all", "round_robin"}:
         _fail("mode must be mentions, all, or round_robin", 2)
     try:
@@ -702,6 +713,7 @@ def _create_group_session(bot_names: tuple[str, ...], workspace: Path, mode: str
         return SessionStore(workspace).create_group(
             tuple(participant_from_run(item) for item in prepared),
             mode=cast(Literal["mentions", "all", "round_robin"], mode),
+            isolation="worktree" if worktrees else "shared",
         )
     except (ValueError, BotError, ProfileError, RoutingError) as exc:
         _fail(str(exc), 2)
@@ -712,6 +724,7 @@ class GroupTurn:
     results: list[tuple[str, RunResult | Exception]]
     writers: tuple[str, ...]
     serialized: bool
+    worktrees: dict[str, str] = field(default_factory=dict)
 
 
 def _run_group_turn(
@@ -729,9 +742,22 @@ def _run_group_turn(
         )
     except (ValueError, BotError, ProfileError, RoutingError) as exc:
         _fail(str(exc), 2)
-    writers = shared_workspace_writers(prepared_runs)
-    serialize = bool(writers) and not allow_concurrent_writes
+    plan = isolate_group_turn(
+        session, prepared_runs, workspace, allow_concurrent_writes=allow_concurrent_writes
+    )
+    prepared_runs = plan.prepared
+    writers = shared_workspace_writers(prepared_runs) if not plan.worktrees else ()
+    serialize = bool(plan.serialized)
+    if plan.worktrees:
+        error_console.print(
+            f"[cyan]Isolated:[/cyan] {', '.join(plan.worktrees)} each work in their own git "
+            f"worktree. Review with `merced-ai group diff {session.id}` and apply with "
+            f"`merced-ai group apply {session.id} BOT`."
+        )
+    if plan.fallback_reason:
+        error_console.print(f"[yellow]Warning:[/yellow] {plan.fallback_reason}")
     if serialize:
+        writers = plan.serialized
         error_console.print(
             f"[yellow]Warning:[/yellow] {write_serialization_message(writers)} "
             "Pass --allow-concurrent-writes to run them at the same time."
@@ -783,7 +809,7 @@ def _run_group_turn(
                 profile=prepared.profile,
             )
         results.append((prepared.bot.name, outcome))
-    return GroupTurn(results, writers, serialize)
+    return GroupTurn(results, writers, serialize, plan.worktrees)
 
 
 def _render_group_results(results: list[tuple[str, RunResult | Exception]]) -> None:
@@ -825,6 +851,120 @@ def _group_chat_loop(
             registry=registry,
         )
         _render_group_results(turn.results)
+
+
+def _worktree_manager(session_id: str, workspace: Path) -> WorktreeManager:
+    try:
+        session = SessionStore(workspace).load(session_id)
+    except ValueError as exc:
+        _fail(str(exc), 2)
+    if session.isolation != "worktree":
+        _fail(
+            f"conversation {session_id!r} does not use worktrees; start one with "
+            "`merced-ai group chat BOT BOT --worktrees`",
+            2,
+        )
+    try:
+        return WorktreeManager(workspace, session_id)
+    except WorktreeError as exc:
+        _fail(str(exc), 2)
+
+
+@group_app.command("diff")
+def group_diff(
+    session_id: Annotated[str, typer.Argument(help="Conversation ID from `session list`.")],
+    bot: Annotated[str | None, typer.Argument(help="Show one bot's full patch.")] = None,
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
+) -> None:
+    """Compare what each bot changed in its worktree.
+
+    Example: merced-ai group diff session-1234... builder
+    """
+    manager = _worktree_manager(session_id, workspace)
+    names = [bot] if bot else [item.bot_name for item in manager.worktrees()]
+    try:
+        diffs = [manager.diff(name) for name in names]
+    except WorktreeError as exc:
+        _fail(str(exc), 2)
+    if json_output:
+        typer.echo(json.dumps([item.as_dict() for item in diffs], indent=2))
+        return
+    if not diffs:
+        console.print("No bot has worked in a worktree in this conversation yet.")
+        return
+    table = Table(title="Changes by bot")
+    for column in ("Bot", "Branch", "Files", "+", "-"):
+        table.add_column(column)
+    for item in diffs:
+        summary = item.as_dict()
+        table.add_row(
+            item.bot_name,
+            item.branch,
+            str(len(item.files)),
+            str(summary["insertions"]),
+            str(summary["deletions"]),
+        )
+    console.print(table)
+    if bot and diffs[0].patch:
+        console.print(diffs[0].patch, markup=False, highlight=False)
+        if diffs[0].truncated:
+            console.print("[yellow]Patch truncated; see the branch for the rest.[/yellow]")
+
+
+@group_app.command("apply")
+def group_apply(
+    session_id: Annotated[str, typer.Argument(help="Conversation ID from `session list`.")],
+    bot: Annotated[str, typer.Argument(help="The bot whose changes to apply.")],
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Apply without asking.")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
+) -> None:
+    """Apply one bot's worktree changes to your workspace, only if they apply cleanly."""
+    manager = _worktree_manager(session_id, workspace)
+    try:
+        diff = manager.diff(bot)
+        if not yes and not json_output:
+            console.print(f"{bot} changed {len(diff.files)} file(s):")
+            for item in diff.files:
+                console.print(f"  {item['path']} (+{item['insertions']} -{item['deletions']})")
+            if not typer.confirm("Apply these changes to your workspace?", default=False):
+                console.print("Nothing was applied.")
+                raise typer.Exit(1)
+        result = manager.apply(bot)
+    except WorktreeError as exc:
+        _fail(str(exc), 3)
+    if json_output:
+        typer.echo(json.dumps(result, indent=2))
+    else:
+        console.print(result["message"])
+
+
+@group_app.command("cleanup")
+def group_cleanup(
+    session_id: Annotated[str, typer.Argument(help="Conversation ID from `session list`.")],
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Remove without asking.")] = False,
+) -> None:
+    """Delete this conversation's bot worktrees and branches (unapplied changes are lost)."""
+    manager = _worktree_manager(session_id, workspace)
+    names = [item.bot_name for item in manager.worktrees()]
+    if not names:
+        console.print("There are no worktrees to remove.")
+        return
+    if not yes and not typer.confirm(
+        f"Remove the worktrees and branches for {', '.join(names)}?", default=False
+    ):
+        console.print("Nothing was removed.")
+        raise typer.Exit(1)
+    manager.remove_all()
+    console.print(f"Removed worktrees for {', '.join(names)}.")
 
 
 @session_app.command("list")

@@ -40,6 +40,7 @@ class SessionStore:
         mode: Literal["mentions", "all", "round_robin"] = "mentions",
         title: str | None = None,
         derived_from: str | None = None,
+        isolation: Literal["shared", "worktree"] = "shared",
     ) -> SessionRecord:
         if not participants:
             raise ValueError("a session requires at least one participant")
@@ -66,6 +67,7 @@ class SessionStore:
             kind="group" if len(participants) > 1 else "single",
             mode=mode,
             participants=list(participants),
+            isolation=isolation,
         )
         self.save(session)
         return session

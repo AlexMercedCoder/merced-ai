@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from merced_ai.bots import resolve_bot
@@ -46,6 +47,54 @@ def shared_workspace_writers(prepared: tuple[PreparedRun, ...]) -> tuple[str, ..
             by_workspace.setdefault(item.request.workspace, []).append(item.bot.name)
     shared = {name for names in by_workspace.values() if len(names) > 1 for name in names}
     return tuple(item.bot.name for item in prepared if item.bot.name in shared)
+
+
+@dataclass
+class IsolationPlan:
+    """How a group turn keeps write-capable bots from editing the same files."""
+
+    prepared: tuple[PreparedRun, ...]
+    # Bots that still share the workspace and must take turns.
+    serialized: tuple[str, ...] = ()
+    # Bot name -> branch, for bots running in their own worktree.
+    worktrees: dict[str, str] = field(default_factory=dict)
+    fallback_reason: str | None = None
+
+
+def isolate_group_turn(
+    session: SessionRecord,
+    prepared: tuple[PreparedRun, ...],
+    workspace: Path,
+    *,
+    allow_concurrent_writes: bool = False,
+) -> IsolationPlan:
+    """Give write-capable bots their own worktree, or serialize them when that is impossible."""
+    writers = shared_workspace_writers(prepared)
+    if not writers:
+        return IsolationPlan(prepared)
+    if session.isolation == "worktree":
+        from merced_ai.worktrees import WorktreeError, WorktreeManager
+
+        try:
+            manager = WorktreeManager(workspace, session.id)
+            branches: dict[str, str] = {}
+            isolated = []
+            for item in prepared:
+                if item.bot.name in writers:
+                    item_workspace = manager.workspace_for(item.bot.name)
+                    worktree = manager.get(item.bot.name)
+                    branches[item.bot.name] = worktree.branch if worktree else ""
+                    item.request = item.request.model_copy(update={"workspace": item_workspace})
+                isolated.append(item)
+            return IsolationPlan(tuple(isolated), worktrees=branches)
+        except WorktreeError as error:
+            reason = str(error)
+            return IsolationPlan(
+                prepared,
+                serialized=() if allow_concurrent_writes else writers,
+                fallback_reason=reason,
+            )
+    return IsolationPlan(prepared, serialized=() if allow_concurrent_writes else writers)
 
 
 def write_serialization_message(writers: tuple[str, ...]) -> str:

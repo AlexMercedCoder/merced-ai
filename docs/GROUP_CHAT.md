@@ -77,7 +77,35 @@ The room tells you when this happens:
 To let them run at the same time, pass `--allow-concurrent-writes` to `group ask`, `group chat`,
 or `session resume`, or tick **Run at the same time** in the web notice (remembered per
 conversation in this browser; the API field is `allow_concurrent_writes`). Only do this when the
-bots will not touch the same files. A planned worktree-per-bot mode will isolate them instead.
+bots will not touch the same files; worktree isolation (below) is the safer way.
+
+## Worktree isolation
+
+A room can instead give every write-capable bot its own `git worktree`:
+
+```bash
+merced-ai group chat builder fixer reviewer --worktrees
+```
+
+In the web UI, tick **Give each write-capable bot its own git worktree** when creating the room.
+
+- The first time a write-capable bot runs, Merced AI creates a worktree on branch
+  `merced/<conversation>/<bot>` from the commit checked out at that moment, under the Merced AI
+  user directory (not inside your project, so it never appears as untracked files). The bot runs
+  in the same subdirectory of that worktree as your workspace. Later turns reuse it.
+- Isolated bots run at the same time; read-only bots keep using your workspace.
+- Your uncommitted changes are not copied into the worktrees; commit first if a bot needs them.
+- Compare: `merced-ai group diff SESSION` (a per-bot table) or `group diff SESSION BOT` (the
+  patch), `--json` for both; in the web UI, **Compare changes** opens a side-by-side view with
+  each bot's files, insertions and deletions, and colored diff.
+- Apply: `merced-ai group apply SESSION BOT` (asks first; `--yes` to skip) or **Apply to
+  workspace**. The patch must apply cleanly to your files as they are now; otherwise nothing is
+  written and the message says which file conflicts, so you can commit or stash your edits or
+  merge the bot's branch yourself.
+- Discard: `merced-ai group cleanup SESSION` or **Discard all worktrees** removes the worktrees and
+  branches. Deleting the conversation in the web UI does the same.
+- A workspace that is not in a git repository cannot be isolated; the room says so and falls back
+  to running write-capable bots one at a time.
 
 ## Safety and failure behavior
 

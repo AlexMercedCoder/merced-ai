@@ -68,6 +68,7 @@ class SessionInput(BaseModel):
     harness: str | None = None
     mode: DispatchMode = "mentions"
     title: str | None = Field(default=None, max_length=120)
+    isolation: Literal["shared", "worktree"] = "shared"
 
     @model_validator(mode="after")
     def validate_participants(self) -> SessionInput:

@@ -65,6 +65,7 @@
             <button id="new-group" class="subtle-button"><span>＋</span> Group</button>
             <button id="derive-group" class="subtle-button" disabled>Participants</button>
             <button id="rename-session" class="subtle-button" disabled>Rename</button>
+            <button id="compare-changes" class="subtle-button" hidden>Compare changes</button>
             <button id="export-session" class="subtle-button" disabled>Export</button>
             <button id="delete-session" class="subtle-button danger-button" disabled>Delete</button>
             <button id="toggle-inspector" class="subtle-button" aria-expanded="true"><span>⌘</span> Inspect</button>
@@ -91,6 +92,7 @@
               <span class="write-notice-icon" aria-hidden="true">!</span>
               <p id="write-notice-copy"></p>
               <label class="write-notice-toggle"><input type="checkbox" id="allow-concurrent-writes" /> Run at the same time</label>
+              <button type="button" id="write-notice-compare" class="secondary-button" hidden>Compare changes</button>
             </div>
             <form id="composer" class="composer">
               <textarea id="message-input" aria-label="Message" placeholder="Message your bot…" rows="1" maxlength="100000"></textarea>
@@ -197,9 +199,31 @@
           <label>Default dispatch<select id="group-mode"><option value="mentions">Explicit mentions / first bot</option><option value="all">Ask everyone</option><option value="round_robin">Round robin</option></select></label>
           <label class="full-field">Find bots<input id="group-search" type="search" placeholder="Search bots…" /></label>
           <div class="group-columns full-field"><div><strong>Available bots</strong><div id="group-options" class="group-options"></div></div><div><strong>Participant order</strong><div id="group-selected" class="group-selected"></div></div></div>
+          <label class="full-field check-field"><input type="checkbox" id="group-worktrees" /><span><strong>Give each write-capable bot its own git worktree</strong><small>They work at the same time on separate branches, and you compare and apply their changes. Requires a git repository; otherwise they take turns.</small></span></label>
         </div>
         <p id="group-error" class="form-error" role="alert"></p>
         <footer><button class="secondary-button group-cancel" type="button">Cancel</button><button id="group-submit" class="primary-button" type="submit">Create conversation</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="compare-dialog" class="dialog compare-dialog" aria-labelledby="compare-title">
+      <form method="dialog">
+        <header><div><span class="eyebrow">WORKTREE ISOLATION</span><h2 id="compare-title">Compare changes</h2></div><button class="icon-button" value="close" aria-label="Close">×</button></header>
+        <div class="compare-body">
+          <nav id="compare-bots" class="compare-bots" aria-label="Bots with worktrees"></nav>
+          <section class="compare-detail" aria-live="polite">
+            <p id="compare-summary" class="compare-summary"></p>
+            <ul id="compare-files" class="compare-files"></ul>
+            <pre id="compare-patch" class="compare-patch" tabindex="0" aria-label="Unified diff"></pre>
+          </section>
+        </div>
+        <p id="compare-error" class="form-error" role="alert"></p>
+        <footer>
+          <button id="compare-discard" class="secondary-button danger-button" type="button">Discard all worktrees</button>
+          <span class="footer-spacer"></span>
+          <button class="secondary-button" value="close">Close</button>
+          <button id="compare-apply" class="primary-button" type="button" disabled>Apply to workspace</button>
+        </footer>
       </form>
     </dialog>
 

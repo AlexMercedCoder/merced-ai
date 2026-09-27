@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
 
@@ -17,6 +17,7 @@ from merced_ai.application import (
     PreparedRun,
     RoutingError,
     is_write_capable,
+    isolate_group_turn,
     prepare_group_turn,
     shared_workspace_writers,
     write_serialization_message,
@@ -51,6 +52,8 @@ class TurnPlan:
     prepared: tuple[PreparedRun, ...]
     context_manifest: list[dict[str, Any]]
     writers: tuple[str, ...]
+    worktrees: dict[str, str] = field(default_factory=dict)
+    fallback_reason: str | None = None
 
     @property
     def serialize_writers(self) -> bool:
@@ -77,7 +80,22 @@ class RunService:
             )
         except (ValueError, BotError, ProfileError, RoutingError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
-        return TurnPlan(session, payload, prepared, manifest, shared_workspace_writers(prepared))
+        isolation = isolate_group_turn(
+            session,
+            prepared,
+            workspace,
+            allow_concurrent_writes=payload.allow_concurrent_writes,
+        )
+        writers = () if isolation.worktrees else shared_workspace_writers(isolation.prepared)
+        return TurnPlan(
+            session,
+            payload,
+            isolation.prepared,
+            manifest,
+            writers,
+            isolation.worktrees,
+            isolation.fallback_reason,
+        )
 
     def approval_response(self, plan: TurnPlan) -> StreamingResponse | None:
         """Launch consent for profiles that may edit or run commands, unless already given."""
@@ -184,12 +202,25 @@ class RunService:
                 result = exc
             await queue.put(("done", (index, prepared, result)))
 
+        if plan.worktrees:
+            isolation_notice: dict[str, Any] = {
+                "run_id": run_id,
+                "bots": list(plan.worktrees),
+                "branches": plan.worktrees,
+                "message": (
+                    f"{', '.join(plan.worktrees)} each work in their own git worktree; "
+                    "compare and apply their changes when they finish."
+                ),
+            }
+            record.events.append({"type": "worktree_isolation", **isolation_notice})
+            yield sse("worktree_isolation", isolation_notice)
         writers = plan.writers
         if writers:
-            notice = {
+            notice: dict[str, Any] = {
                 "run_id": run_id,
                 "bots": list(writers),
                 "serialized": plan.serialize_writers,
+                "fallback_reason": plan.fallback_reason,
                 "message": (
                     write_serialization_message(writers)
                     if plan.serialize_writers

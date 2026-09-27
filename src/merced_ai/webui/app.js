@@ -221,6 +221,14 @@ function renderWriteNotice() {
   const notice = $("#write-notice");
   notice.hidden = writers.length < 2;
   if (notice.hidden) return;
+  const isolated = currentSession()?.isolation === "worktree";
+  notice.classList.toggle("isolated", isolated);
+  $(".write-notice-toggle").hidden = isolated;
+  $("#write-notice-compare").hidden = !isolated;
+  if (isolated) {
+    $("#write-notice-copy").textContent = `${listNames(writers)} each work in their own git worktree, so they can run at the same time without touching your files.`;
+    return;
+  }
   const allowed = concurrentWritesAllowed();
   $("#allow-concurrent-writes").checked = allowed;
   $("#allow-concurrent-writes").disabled = Boolean(state.activeRun);
@@ -244,6 +252,7 @@ function renderConversation() {
   $("#rename-session").disabled = !session;
   $("#delete-session").disabled = !session || Boolean(state.activeRun);
   $("#derive-group").disabled = !session || state.data.bots.length < 2;
+  $("#compare-changes").hidden = session?.isolation !== "worktree";
   $("#message-input").disabled = !bot || Boolean(state.activeRun);
   $("#send-message").disabled = !bot || Boolean(state.activeRun);
   renderWriteNotice();
@@ -480,6 +489,7 @@ function openGroupEditor(derive = false) {
   $("#group-submit").textContent = derive ? "Start derived conversation" : "Create conversation";
   $("#group-title").value = derive && session?.title ? `${session.title} — follow-up` : "";
   $("#group-mode").value = derive ? session?.mode || "mentions" : "mentions";
+  $("#group-worktrees").checked = derive ? session?.isolation === "worktree" : false;
   $("#group-search").value = "";
   $("#group-error").textContent = "";
   renderGroupPicker();
@@ -669,6 +679,8 @@ async function sendPrompt(approved = false) {
           $("#composer-status").textContent = `${titleCase(item.payload.bot_name)} is waiting for your approval: ${item.payload.summary}`;
         } else if (item.event === "acp_session") {
           if (item.payload.resumed) updateParticipantStatus(item.payload.bot_name, "Resumed native session", item.payload.harness_id);
+        } else if (item.event === "worktree_isolation") {
+          $("#composer-status").textContent = item.payload.message;
         } else if (item.event === "write_serialization") {
           $("#composer-status").textContent = item.payload.message;
         } else if (item.event === "participant_queued") {
@@ -721,6 +733,94 @@ function scheduleStreamRender() {
   if (streamRenderPending) return;
   streamRenderPending = true;
   requestAnimationFrame(() => { streamRenderPending = false; renderConversation(); scrollThread(); });
+}
+
+// ---- Worktree compare view ----
+const compareState = { bots: [], selected: "", patch: null };
+
+function diffLineClass(line) {
+  if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff --git")) return "diff-file";
+  if (line.startsWith("@@")) return "diff-hunk";
+  if (line.startsWith("+")) return "diff-add";
+  if (line.startsWith("-")) return "diff-del";
+  return "";
+}
+
+function renderCompare() {
+  const { bots, selected, patch } = compareState;
+  $("#compare-bots").innerHTML = bots.length
+    ? bots.map((bot) => `<button type="button" class="compare-bot${bot.bot_name === selected ? " active" : ""}" data-compare-bot="${escapeHtml(bot.bot_name)}" aria-pressed="${bot.bot_name === selected}" ${identityStyle(bot.bot_name)}><span class="message-avatar bot-identity">${escapeHtml(initials(bot.bot_name))}</span><span><strong>${escapeHtml(titleCase(bot.bot_name))}</strong><small>${bot.error ? escapeHtml(bot.error) : `${bot.files?.length || 0} file${bot.files?.length === 1 ? "" : "s"} · <span class="diff-add">+${bot.insertions || 0}</span> <span class="diff-del">−${bot.deletions || 0}</span>`}</small></span></button>`).join("")
+    : '<div class="empty-mini">No bot has worked in a worktree yet. Send a message to the room first.</div>';
+  const bot = bots.find((item) => item.bot_name === selected);
+  $("#compare-apply").disabled = !bot || !bot.files?.length;
+  $("#compare-discard").disabled = !bots.length;
+  if (!bot) {
+    $("#compare-summary").textContent = bots.length ? "Choose a bot to see its changes." : "";
+    $("#compare-files").innerHTML = "";
+    $("#compare-patch").innerHTML = "";
+    return;
+  }
+  $("#compare-summary").textContent = bot.files?.length
+    ? `${titleCase(bot.bot_name)} changed ${bot.files.length} file${bot.files.length === 1 ? "" : "s"} on branch ${bot.branch}.`
+    : `${titleCase(bot.bot_name)} has not changed any files.`;
+  $("#compare-files").innerHTML = (bot.files || []).map((file) => `<li><code>${escapeHtml(file.path)}</code><span class="diff-add">+${file.insertions}</span><span class="diff-del">−${file.deletions}</span></li>`).join("");
+  $("#compare-patch").innerHTML = patch === null
+    ? '<span class="diff-hunk">Loading diff…</span>'
+    : (patch.patch || "").split("\n").map((line) => `<span class="${diffLineClass(line)}">${escapeHtml(line)}</span>`).join("\n") + (patch.truncated ? '\n<span class="diff-hunk">… diff truncated; see the branch for the rest.</span>' : "");
+}
+
+async function selectCompareBot(name) {
+  const session = currentSession();
+  compareState.selected = name;
+  compareState.patch = null;
+  renderCompare();
+  try {
+    compareState.patch = await (await api(`/api/sessions/${encodeURIComponent(session.id)}/worktrees/${encodeURIComponent(name)}/diff`)).json();
+    if (compareState.selected === name) renderCompare();
+  } catch (error) { $("#compare-error").textContent = error.message; }
+}
+
+async function openCompare() {
+  const session = currentSession();
+  if (!session) return;
+  const dialog = $("#compare-dialog");
+  $("#compare-error").textContent = "";
+  $("#compare-summary").textContent = "Loading changes…";
+  compareState.bots = [];
+  compareState.selected = "";
+  renderCompare();
+  $("#compare-summary").textContent = "Loading changes…";
+  if (!dialog.open) dialog.showModal();
+  try {
+    compareState.bots = (await (await api(`/api/sessions/${encodeURIComponent(session.id)}/worktrees`)).json()).bots;
+    const first = compareState.bots.find((bot) => bot.files?.length) || compareState.bots[0];
+    renderCompare();
+    if (first) await selectCompareBot(first.bot_name);
+  } catch (error) {
+    $("#compare-summary").textContent = "";
+    $("#compare-error").textContent = error.message;
+  }
+}
+
+async function applyCompare() {
+  const session = currentSession();
+  const name = compareState.selected;
+  if (!session || !name || !window.confirm(`Apply ${titleCase(name)}'s changes to your workspace? Nothing is written unless they apply cleanly.`)) return;
+  try {
+    const result = await (await api(`/api/sessions/${encodeURIComponent(session.id)}/worktrees/${encodeURIComponent(name)}/apply`, { method: "POST" })).json();
+    toast(result.message);
+    $("#compare-error").textContent = "";
+  } catch (error) { $("#compare-error").textContent = error.message; }
+}
+
+async function discardCompare() {
+  const session = currentSession();
+  if (!session || !window.confirm("Delete every bot worktree and branch for this conversation? Changes you have not applied are lost.")) return;
+  try {
+    const result = await (await api(`/api/sessions/${encodeURIComponent(session.id)}/worktrees`, { method: "DELETE" })).json();
+    toast(`Removed ${result.removed.length} worktree${result.removed.length === 1 ? "" : "s"}`);
+    await openCompare();
+  } catch (error) { $("#compare-error").textContent = error.message; }
 }
 
 function summarizeEvent(event) {
@@ -932,6 +1032,11 @@ function bindEvents() {
   $("#message-input").addEventListener("input", (event) => { event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; renderMentionMenu(); });
   $("#mention-menu").addEventListener("click", (event) => { const button = event.target.closest("[data-mention]"); if (button) insertMention(button.dataset.mention); });
   $("#cancel-run").addEventListener("click", cancelRun);
+  $("#compare-changes").addEventListener("click", openCompare);
+  $("#write-notice-compare").addEventListener("click", openCompare);
+  $("#compare-bots").addEventListener("click", (event) => { const button = event.target.closest("[data-compare-bot]"); if (button) selectCompareBot(button.dataset.compareBot); });
+  $("#compare-apply").addEventListener("click", applyCompare);
+  $("#compare-discard").addEventListener("click", discardCompare);
   $("#app-notices").addEventListener("click", (event) => {
     const button = event.target.closest("[data-dismiss-notice]");
     if (!button) return;
@@ -957,7 +1062,7 @@ function bindEvents() {
   $("#group-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (state.groupDraft.length < 2) { $("#group-error").textContent = "Select at least two bots."; return; }
-    const payload = { bot_names: state.groupDraft, mode: $("#group-mode").value, title: $("#group-title").value.trim() || null };
+    const payload = { bot_names: state.groupDraft, mode: $("#group-mode").value, title: $("#group-title").value.trim() || null, isolation: $("#group-worktrees").checked ? "worktree" : "shared" };
     const path = state.deriveFrom ? `/api/sessions/${encodeURIComponent(state.deriveFrom)}/derive` : "/api/sessions";
     try {
       const session = await (await api(path, { method: "POST", body: JSON.stringify(payload) })).json();

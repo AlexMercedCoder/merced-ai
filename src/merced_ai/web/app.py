@@ -21,7 +21,7 @@ from merced_ai.paths import ensure_user_layout
 from merced_ai.run_supervisor import RunSupervisor
 from merced_ai.web.context import WebContext
 from merced_ai.web.probes import HarnessProbeCache
-from merced_ai.web.routers import catalog, conversations
+from merced_ai.web.routers import catalog, conversations, worktrees
 from merced_ai.web.routers import workspace as workspace_routes
 from merced_ai.workspace_context import RunStore
 
@@ -85,7 +85,7 @@ def create_web_app(
         return HTMLResponse((STATIC_ROOT / "index.html").read_text(encoding="utf-8"))
 
     app.mount("/assets", StaticFiles(directory=STATIC_ROOT), name="assets")
-    for module in (workspace_routes, catalog, conversations):
+    for module in (workspace_routes, catalog, conversations, worktrees):
         app.include_router(module.router)
     return app
 
