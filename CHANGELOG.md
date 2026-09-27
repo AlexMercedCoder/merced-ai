@@ -156,6 +156,10 @@ Targets 0.8.0.
 
 ### Internal structure
 
+- The 1,800-line `cli.py` is now the `merced_ai.cli` package, one module per command family,
+  none over 400 lines. Golden tests captured before the split pin every `--help` screen and every
+  `--json` output shape, and they are unchanged.
+
 - The 1,000-line `webui_server.py` is now the `merced_ai.web` package: an app composer, a shared
   `WebContext` with typed read/write authentication dependencies, a harness probe cache service, a
   run service that owns turn planning and supervised execution, and three routers (workspace,

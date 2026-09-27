@@ -53,7 +53,9 @@ routing or subprocess pipeline.
 - `evals.py`: cross-harness eval runs, checks, judge, and ranking.
 - `sessions.py`: atomic normalized session persistence, exact mention selection, and deterministic
   group dispatch.
-- `cli.py`: human and JSON automation surfaces.
+- `cli/`: human and JSON automation surfaces, one module per command family (`workspace`,
+  `catalog`, `chat`, `group`, `inbox`, `evals`) plus shared helpers in `common`. Golden files in
+  `tests/golden/` pin every `--help` screen and every `--json` output shape.
 - `web/`: the optional loopback-first UI over the same application records.
   - `app.py` composes the FastAPI app (security headers, static assets, routers) and
     `run_web_ui` enforces loopback binding and the one-time token.
