@@ -1,6 +1,20 @@
 # Merced AI
 
-Release: [0.7.0 release notes](docs/RELEASE_NOTES_0.7.0.md).
+One portable agent identity across the harnesses you already use, with honest reports of what each one drops.
+
+Current release: 0.7.0 ([release notes](docs/RELEASE_NOTES_0.7.0.md)). Unreleased work is tracked in
+the [changelog](CHANGELOG.md).
+
+## Which tool do I want?
+
+Merced AI is one of four related open-source agent projects. Pick by what you are trying to do:
+
+| Goal | Tool |
+| --- | --- |
+| I want a governed agent for a team or data platform | [Loro](https://github.com/alexmerced-oss/loro) |
+| I want a personal agent that remembers me | [MagAgent](https://github.com/AlexMercedCoder/MagAgent) |
+| I want a desktop app for my agent | [Mag Command Center](https://github.com/AlexMercedCoder/MagCommandCenter) |
+| I already use Claude Code/Codex/Gemini/etc. and want one identity across them | [Merced AI](https://github.com/AlexMercedCoder/merced-ai) |
 
 WebMCP-capable bots can be pinned to native MagAgent or Loro routes; see
 [WebMCP routing](docs/WEBMCP.md).
@@ -136,8 +150,8 @@ one-shot commands for automation.
 
 ## Standards support
 
-Merced AI `0.4.0` uses `open-agent-profile>=1.0.1,<2` and
-`agentic-graph-spec>=1.0.1,<2`. It claims OAP 1.0 Level 1 as a broker and AGS 1.0 Level 0 as a
+Merced AI uses `open-agent-profile>=1.0.1,<2`, `agentic-graph-spec>=1.0.1,<2`, and
+`agent-approval-interchange>=0.1.0,<0.2`. It claims OAP 1.0 Level 1 as a broker and AGS 1.0 Level 0 as a
 read-only parser/planner. Merced AI does not execute AGS graphs, apply OAP state deltas, or replace
 the selected harness's final policy enforcement. See the [OAP conformance result](docs/oap-conformance.json),
 [AGS conformance result](docs/ags-conformance.json), and [Agentic Graph guide](docs/AGENTIC_GRAPHS.md)
