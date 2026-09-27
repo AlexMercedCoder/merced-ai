@@ -5,9 +5,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +25,7 @@ from merced_ai.models import (
     ProfileProjection,
     ProfileRecord,
     ProjectionAdjustment,
+    PromptDelivery,
     RunRequest,
     RunResult,
 )
@@ -29,12 +34,62 @@ from merced_ai.profiles import assemble_system_prompt
 MAX_CAPTURE_CHARS = 10_000_000
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
+# Conservative command-line budgets. Linux caps one argument at 128 KiB and the whole argv plus
+# environment near 2 MiB; Windows caps the whole command line at 32,767 UTF-16 characters, and
+# npm-style .cmd launchers go through cmd.exe, which allows only 8,191.
+ARGV_LIMIT_POSIX = 100 * 1024
+ARGV_LIMIT_WINDOWS = 24 * 1024
+PROMPT_TOO_LARGE_EXIT = 7
+
 
 class HarnessRunError(RuntimeError):
     def __init__(self, message: str, *, exit_code: int = 1, stderr: str = "") -> None:
         super().__init__(message)
         self.exit_code = exit_code
         self.stderr = stderr
+
+
+@dataclass(frozen=True)
+class HarnessInvocation:
+    """One harness process: its argv, how the prompt travels, and the stdin payload."""
+
+    argv: list[str]
+    prompt_delivery: PromptDelivery
+    stdin: str | None = None
+
+
+def argv_limit() -> int:
+    return ARGV_LIMIT_WINDOWS if sys.platform == "win32" else ARGV_LIMIT_POSIX
+
+
+def argv_size(argv: list[str]) -> int:
+    """Size of the command line as the operating system will measure it."""
+    if sys.platform == "win32":
+        return len(subprocess.list2cmdline(argv))
+    return sum(len(item.encode("utf-8", errors="surrogatepass")) + 1 for item in argv)
+
+
+def check_argv_size(argv: list[str], harness_name: str) -> None:
+    """Refuse a command line that would exceed the platform budget, before spawning."""
+    size, limit = argv_size(argv), argv_limit()
+    if size <= limit:
+        return
+    raise HarnessRunError(
+        f"The prompt is too large to pass to {harness_name} on the command line "
+        f"({size / 1024:.0f} KB; the limit on this platform is {limit // 1024} KB). "
+        f"{harness_name} only accepts this input as a command-line argument. Shorten the "
+        "message or the attached context, or route this bot to a harness that reads prompts "
+        "from stdin (see `merced-ai harness show`).",
+        exit_code=PROMPT_TOO_LARGE_EXIT,
+    )
+
+
+def _write_private(path: Path, content: str) -> Path:
+    """Write a prompt file readable only by the current user inside a private temp dir."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+        handle.write(content)
+    return path
 
 
 class CommandHarnessAdapter:
@@ -113,17 +168,26 @@ class CommandHarnessAdapter:
             adjustments=tuple(adjustments),
         )
 
-    def build_command(self, request: RunRequest) -> list[str]:
+    def build_invocation(self, request: RunRequest, scratch: Path) -> HarnessInvocation:
+        """Build the argv, stdin payload, and private prompt files for one run.
+
+        Prompts go through stdin wherever the harness reads it, or through a file in ``scratch``
+        (a private temporary directory the caller creates and removes). Only harnesses that
+        accept the prompt solely as an argument receive it on the command line, and those are
+        bounded by :func:`check_argv_size`.
+        """
         executable = locate_executable(self.descriptor)
         if executable is None:
             raise HarnessRunError(f"Harness {self.descriptor.id!r} is not installed.", exit_code=3)
         profile = request.profile
         projection = request.projection
         prompt = request.prompt
+        prefixed = _prefixed_prompt(projection.system_prompt, prompt)
         harness_id = self.descriptor.id
         permissions = profile.document.get("spec", {}).get("permissions", {})
         edit_denied = permissions.get("edit") == "deny"
         shell_denied = permissions.get("shell") == "deny"
+        stdin = PromptDelivery.STDIN
 
         if harness_id == "codex":
             sandbox = "read-only" if edit_denied else "workspace-write"
@@ -140,10 +204,12 @@ class CommandHarnessAdapter:
             ]
             if projection.model:
                 command.extend(("--model", projection.model))
-            command.append(_prefixed_prompt(projection.system_prompt, prompt))
-            return command
+            # `codex exec -` reads the whole prompt from stdin.
+            command.append("-")
+            return HarnessInvocation(command, stdin, stdin=prefixed)
         if harness_id == "claude":
             mode = "plan" if edit_denied or shell_denied else "manual"
+            system_file = _write_private(scratch / "system-prompt.md", projection.system_prompt)
             command = [
                 str(executable),
                 "--print",
@@ -151,27 +217,27 @@ class CommandHarnessAdapter:
                 "json",
                 "--permission-mode",
                 mode,
-                "--system-prompt",
-                projection.system_prompt,
+                "--system-prompt-file",
+                str(system_file),
             ]
             if projection.model:
                 command.extend(("--model", projection.model))
-            command.append(prompt)
-            return command
+            # `claude --print` reads the prompt from stdin when no prompt argument is given.
+            return HarnessInvocation(command, stdin, stdin=prompt)
         if harness_id == "gemini":
             command = [str(executable), "--output-format", "json", "--approval-mode", "default"]
             if projection.model:
                 command.extend(("--model", projection.model))
-            command.append(_prefixed_prompt(projection.system_prompt, prompt))
-            return command
+            # Gemini runs headless when stdin is not a terminal and uses stdin as the prompt.
+            return HarnessInvocation(command, stdin, stdin=prefixed)
         if harness_id == "magagent":
             mode = "paranoid" if edit_denied or shell_denied else "balanced"
+            # stdin is the AAIS approval channel, and `magent ask` takes the task only as an
+            # argument, so this route stays on argv and is bounded by the argv guard.
             command = [
                 str(executable),
                 "ask",
-                prompt
-                if _native_profile_visible(profile)
-                else _prefixed_prompt(projection.system_prompt, prompt),
+                prompt if _native_profile_visible(profile) else prefixed,
                 "--project",
                 str(request.workspace),
                 "--permission-mode",
@@ -182,19 +248,18 @@ class CommandHarnessAdapter:
             ]
             if _native_profile_visible(profile):
                 command.extend(("--agent", profile.name))
-            return command
+            return HarnessInvocation(command, PromptDelivery.ARGV)
         if harness_id == "loro":
+            # Same constraint as MagAgent: stdin carries AAIS envelopes.
             command = [
                 str(executable),
                 "run",
-                prompt
-                if _native_profile_visible(profile)
-                else _prefixed_prompt(projection.system_prompt, prompt),
+                prompt if _native_profile_visible(profile) else prefixed,
             ]
             if _native_profile_visible(profile):
                 command.extend(("--agent", profile.name))
             command.append("--approval-stdio")
-            return command
+            return HarnessInvocation(command, PromptDelivery.ARGV)
         if harness_id == "opencode":
             command = [
                 str(executable),
@@ -206,14 +271,16 @@ class CommandHarnessAdapter:
             ]
             if projection.model:
                 command.extend(("--model", _qualified_model(profile, projection.model)))
-            command.append(_prefixed_prompt(projection.system_prompt, prompt))
-            return command
+            # `opencode run` uses piped stdin as the message when no positional is given.
+            return HarnessInvocation(command, stdin, stdin=prefixed)
         if harness_id == "goose":
+            # `--instructions -` reads the request from stdin. The system prompt has no file
+            # variant, so it stays on argv and is covered by the argv guard.
             command = [
                 str(executable),
                 "run",
-                "--text",
-                prompt,
+                "--instructions",
+                "-",
                 "--system",
                 projection.system_prompt,
                 "--quiet",
@@ -228,19 +295,18 @@ class CommandHarnessAdapter:
                 command.extend(("--model", projection.model))
             if edit_denied and shell_denied:
                 command.append("--no-profile")
-            return command
+            return HarnessInvocation(command, stdin, stdin=prompt)
         if harness_id == "dsh":
-            return [
-                str(executable),
-                "--profile",
-                "headless",
-                _prefixed_prompt(projection.system_prompt, prompt),
-            ]
+            # The headless profile reads its task only from the command line.
+            return HarnessInvocation(
+                [str(executable), "--profile", "headless", prefixed], PromptDelivery.ARGV
+            )
         if harness_id == "agy":
-            qualified_prompt = _prefixed_prompt(projection.system_prompt, prompt)
+            # Print mode reads stdin only as stream-json input, which this adapter does not
+            # speak yet, so the prompt stays on argv and is bounded by the argv guard.
             command = [
                 str(executable),
-                f"--print={qualified_prompt}",
+                f"--print={prefixed}",
                 "--output-format",
                 "json",
                 "--disable-slash-commands",
@@ -249,12 +315,15 @@ class CommandHarnessAdapter:
                 command.extend(("--mode", "plan"))
             if projection.model:
                 command.extend(("--model", projection.model))
-            return command
+            return HarnessInvocation(command, PromptDelivery.ARGV)
         if harness_id in {"pi", "prime-agent"}:
             command = [str(executable), "--print", "--mode", "json", "--no-session"]
             if harness_id == "prime-agent":
                 command.extend(("--cwd", str(request.workspace)))
-            command.extend(("--append-system-prompt", projection.system_prompt))
+            # `--append-system-prompt` reads the file when the value is an existing path, and
+            # print mode uses piped stdin as the initial message.
+            system_file = _write_private(scratch / "system-prompt.md", projection.system_prompt)
+            command.extend(("--append-system-prompt", str(system_file)))
             if harness_id == "prime-agent" and (edit_denied or shell_denied):
                 command.append("--no-tools")
             else:
@@ -267,9 +336,9 @@ class CommandHarnessAdapter:
                     command.extend(("--exclude-tools", ",".join(excluded)))
             if projection.model:
                 command.extend(("--model", _qualified_model(profile, projection.model)))
-            command.append(prompt)
-            return command
+            return HarnessInvocation(command, stdin, stdin=prompt)
         if harness_id == "openclaw":
+            message_file = _write_private(scratch / "message.md", prefixed)
             command = [
                 str(executable),
                 "agent",
@@ -277,12 +346,12 @@ class CommandHarnessAdapter:
                 "--agent",
                 "main",
                 "--json",
-                "--message",
-                _prefixed_prompt(projection.system_prompt, prompt),
+                "--message-file",
+                str(message_file),
             ]
             if projection.model:
                 command.extend(("--model", _qualified_model(profile, projection.model)))
-            return command
+            return HarnessInvocation(command, PromptDelivery.FILE)
         if harness_id == "kimi":
             command = [
                 str(executable),
@@ -295,15 +364,14 @@ class CommandHarnessAdapter:
                 command.extend(("--config-file", config_file))
             if projection.model:
                 command.extend(("--model", projection.model))
-            command.extend(("--prompt", _prefixed_prompt(projection.system_prompt, prompt)))
-            return command
+            # Print mode reads the command from stdin when `--prompt` is absent.
+            return HarnessInvocation(command, stdin, stdin=prefixed)
         if harness_id == "anton":
-            return [
-                str(executable),
-                "--folder",
-                str(request.workspace),
-                "--no-update",
-            ]
+            return HarnessInvocation(
+                [str(executable), "--folder", str(request.workspace), "--no-update"],
+                stdin,
+                stdin=_stdin_payload(harness_id, request),
+            )
         raise HarnessRunError(f"Harness {harness_id!r} is not executable in this MVP.", exit_code=4)
 
     def run(self, request: RunRequest) -> RunResult:
@@ -318,7 +386,6 @@ class CommandHarnessAdapter:
         ) = None,
         approval_event_handler: Callable[[dict[str, Any]], None] | None = None,
     ) -> RunResult:
-        command = self.build_command(request)
         started = time.monotonic()
 
         def control(value: dict[str, Any], stopped: threading.Event) -> dict[str, Any] | None:
@@ -343,16 +410,19 @@ class CommandHarnessAdapter:
             )
 
         try:
-            result = run_child(
-                command,
-                workspace=request.workspace,
-                env=_subprocess_env(self.descriptor.id, request),
-                timeout=request.timeout_seconds,
-                cancellation=cancellation,
-                limit=MAX_CAPTURE_CHARS,
-                stdin_payload=_stdin_payload(self.descriptor.id, request),
-                control=control if self.descriptor.id in {"magagent", "loro"} else None,
-            )
+            with tempfile.TemporaryDirectory(prefix="merced-ai-prompt-") as scratch:
+                invocation = self.build_invocation(request, Path(scratch))
+                check_argv_size(invocation.argv, self.descriptor.name)
+                result = run_child(
+                    invocation.argv,
+                    workspace=request.workspace,
+                    env=_subprocess_env(self.descriptor.id, request),
+                    timeout=request.timeout_seconds,
+                    cancellation=cancellation,
+                    limit=MAX_CAPTURE_CHARS,
+                    stdin_payload=invocation.stdin,
+                    control=control if self.descriptor.id in {"magagent", "loro"} else None,
+                )
         except ChildProcessError as exc:
             raise HarnessRunError(
                 f"Harness {self.descriptor.id!r} {exc}.", exit_code=exc.exit_code

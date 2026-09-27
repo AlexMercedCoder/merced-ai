@@ -137,19 +137,26 @@ def harness_show(
         return
     _render_probe_table((probe,))
     console.print(f"[bold]Transport:[/bold] {probe.transport.value if probe.transport else '-'}")
+    delivery = probe.prompt_delivery.value if probe.prompt_delivery else "-"
+    if delivery == "argv":
+        delivery = "command-line argument (size-limited; long prompts are refused)"
+    console.print(f"[bold]Prompt delivery:[/bold] {delivery}")
     console.print(
         "[bold]Merced AI implements:[/bold] "
         + (", ".join(_capability_labels(probe.broker_implements, probe)) or "one-shot runs only")
     )
     advertised = [
-        name
+        _CAPABILITY_NAMES[name]
         for name, enabled in probe.harness_supports.model_dump().items()
-        if enabled and not getattr(probe.broker_implements, name)
+        if enabled and not getattr(probe.broker_implements, name) and name != "webmcp"
     ]
     if advertised:
         console.print(
-            "[bold]Harness advertises, not used by Merced AI yet:[/bold] "
-            + ", ".join(name.replace("_", " ") for name in advertised)
+            "[bold]Harness advertises, not used by Merced AI yet:[/bold] " + ", ".join(advertised)
+        )
+    if probe.harness_supports.webmcp and not probe.broker_implements.webmcp:
+        console.print(
+            "[bold]WebMCP:[/bold] not available until the installed harness reports readiness"
         )
     for warning in probe.warnings:
         console.print(f"[yellow]Warning:[/yellow] {warning}")
@@ -693,6 +700,17 @@ def _display_path(path: Path | None) -> str:
         return "~/" + path.relative_to(Path.home()).as_posix()
     except (ValueError, RuntimeError):
         return str(path)
+
+
+_CAPABILITY_NAMES = {
+    "streaming": "streaming",
+    "resume": "native resume",
+    "approvals": "approvals",
+    "attachments": "attachments",
+    "model_listing": "model listing",
+    "native_oap": "native OAP",
+    "webmcp": "WebMCP",
+}
 
 
 def _capability_labels(capabilities: HarnessCapabilities, probe: HarnessProbe) -> list[str]:

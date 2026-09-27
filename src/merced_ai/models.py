@@ -30,6 +30,16 @@ class TransportKind(StrEnum):
     TEXT_SUBPROCESS = "text_subprocess"
 
 
+class PromptDelivery(StrEnum):
+    """How an adapter hands the user prompt to the harness process."""
+
+    STDIN = "stdin"
+    FILE = "file"
+    # The harness only accepts the prompt as a command-line argument, so the prompt size is
+    # bounded by the operating system's argument limit (see the adapter's argv guard).
+    ARGV = "argv"
+
+
 class HarnessCapabilities(BaseModel):
     """A set of session features.
 
@@ -62,6 +72,7 @@ class HarnessDescriptor(BaseModel):
     version_args: tuple[str, ...] = ("--version",)
     harness_supports: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
     broker_implements: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
+    prompt_delivery: PromptDelivery = PromptDelivery.ARGV
 
     @property
     def capabilities(self) -> HarnessCapabilities:
@@ -79,6 +90,7 @@ class HarnessProbe(BaseModel):
     transport: TransportKind | None = None
     harness_supports: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
     broker_implements: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
+    prompt_delivery: PromptDelivery | None = None
     capabilities_verified: bool = False
     warnings: tuple[str, ...] = ()
     duration_ms: int = 0

@@ -166,6 +166,12 @@ def run_child(
             if not control:
                 process.stdin.close()
         except OSError as exc:
+            # A harness that exits (or closes stdin) before reading the whole prompt is judged
+            # by its exit status and output, not reported as a broker transport failure.
+            if isinstance(exc, BrokenPipeError | ConnectionResetError) or (
+                process.poll() is not None
+            ):
+                return
             error.append(exc)
 
     if stdin_payload is not None:

@@ -299,6 +299,7 @@ function brokerCapabilityLabels(item) {
   if (caps.approvals) labels.push("AAIS approval relay");
   if (caps.attachments) labels.push("Context files inlined");
   if (caps.webmcp) labels.push(item.capabilities_verified ? "WebMCP ready" : "WebMCP unverified");
+  else if (item.harness_supports?.webmcp) labels.push("WebMCP not ready");
   if (caps.streaming) labels.push("Streaming");
   if (caps.resume) labels.push("Native resume");
   if (caps.model_listing) labels.push("Model listing");
@@ -308,13 +309,14 @@ const capabilityNames = { streaming: "streaming", resume: "native resume", appro
 function unusedHarnessFeatures(item) {
   const supports = item.harness_supports || {};
   const broker = item.broker_implements || {};
-  return Object.keys(capabilityNames).filter((name) => supports[name] && !broker[name]).map((name) => capabilityNames[name]);
+  return Object.keys(capabilityNames).filter((name) => name !== "webmcp" && supports[name] && !broker[name]).map((name) => capabilityNames[name]);
 }
 function harnessCard(item) {
   const detecting = item.status === "detecting";
   const version = (item.status === "probe_failed" ? "" : item.version) || (detecting ? "Previous result retained while checking" : "No version reported");
   const unused = unusedHarnessFeatures(item);
-  const tags = [...brokerCapabilityLabels(item), "Reply on completion"].map((label) => `<span>${escapeHtml(label)}</span>`).join("");
+  const delivery = { stdin: "Prompt via stdin", file: "Prompt via private file", argv: "Prompt as argument (size-limited)" }[item.prompt_delivery];
+  const tags = [...brokerCapabilityLabels(item), "Reply on completion", ...(delivery ? [delivery] : [])].map((label) => `<span>${escapeHtml(label)}</span>`).join("");
   return `<article class="management-card"><div><span class="card-kicker">${escapeHtml(detecting ? "DETECTING…" : item.status.replaceAll("_", " "))}</span><h2><span class="status-dot ${ready(item) ? "online" : ""} ${detecting ? "detecting" : ""}"></span> ${escapeHtml(titleCase(item.harness_id))}</h2><p>${escapeHtml(detecting ? "Checking executable and bounded version metadata…" : item.path || "Executable not found")}</p><p class="tag-caption">Merced AI provides</p><div class="tag-row" aria-label="Capabilities Merced AI provides">${tags}</div>${unused.length ? `<p class="unused-features">Harness also offers ${escapeHtml(unused.join(", "))}; Merced AI does not use these yet.</p>` : ""}</div><small>${escapeHtml(version.split("\n")[0])}</small></article>`;
 }
 

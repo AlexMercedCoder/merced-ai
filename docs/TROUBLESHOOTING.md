@@ -60,6 +60,22 @@ standard provider environment variables. Merced supplies plan mode automatically
 Current Merced builds invoke `openclaw agent --local --agent main`. If an older adapter uses
 `agent exec`, upgrade Merced. Confirm the configured default with `openclaw models status`.
 
+## "The prompt is too large to pass to ... on the command line" (exit status 7)
+
+MagAgent, Loro, DSH, and Antigravity accept the prompt only as a command-line argument, so Merced
+AI refuses to build a command line over 100 KB (24 KB on Windows) rather than let the operating
+system reject it. Long conversations replay up to twenty turns, and attached context files can add
+up to 750 KB, so this usually means the context is too large for that harness. Remove attached
+files, start a new conversation, or route the bot to a harness that reads prompts from stdin
+(`merced-ai harness show HARNESS` prints its prompt delivery).
+
+## Gemini says the directory is not trusted
+
+Gemini CLI refuses headless runs in a folder it has not been told to trust. Merced AI does not
+bypass that check. Trust the project once in an interactive `gemini` session, or set
+`GEMINI_CLI_TRUST_WORKSPACE=true` in the environment you start Merced AI from if you accept that
+for every folder.
+
 ## Safe diagnostic capture
 
 Prefer metadata and redacted output:

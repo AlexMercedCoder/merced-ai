@@ -7,7 +7,13 @@ from collections.abc import Iterable
 from merced_ai.harnesses.adapters.command import CommandHarnessAdapter
 from merced_ai.harnesses.adapters.executable import ExecutableProbeAdapter
 from merced_ai.harnesses.base import HarnessAdapter
-from merced_ai.models import HarnessCapabilities, HarnessDescriptor, HarnessProbe, TransportKind
+from merced_ai.models import (
+    HarnessCapabilities,
+    HarnessDescriptor,
+    HarnessProbe,
+    PromptDelivery,
+    TransportKind,
+)
 
 
 class HarnessRegistry:
@@ -89,6 +95,7 @@ def _descriptor(
     harness_supports: HarnessCapabilities = _NATIVE_SESSION,
     broker_implements: HarnessCapabilities = _BROKER_SUBPROCESS,
     version_args: tuple[str, ...] = ("--version",),
+    prompt_delivery: PromptDelivery = PromptDelivery.STDIN,
 ) -> HarnessDescriptor:
     return HarnessDescriptor(
         id=harness_id,
@@ -98,6 +105,7 @@ def _descriptor(
         version_args=version_args,
         harness_supports=harness_supports,
         broker_implements=broker_implements,
+        prompt_delivery=prompt_delivery,
     )
 
 
@@ -115,6 +123,8 @@ _BUILTIN_DESCRIPTORS = (
         "loro",
         harness_supports=_NATIVE_OAP,
         broker_implements=_BROKER_AAIS_NATIVE,
+        # stdin carries the AAIS approval channel, and neither CLI reads a prompt file yet.
+        prompt_delivery=PromptDelivery.ARGV,
     ),
     _descriptor(
         "magagent",
@@ -122,6 +132,8 @@ _BUILTIN_DESCRIPTORS = (
         "magent",
         harness_supports=_NATIVE_OAP,
         broker_implements=_BROKER_AAIS_NATIVE,
+        # stdin carries the AAIS approval channel, and neither CLI reads a prompt file yet.
+        prompt_delivery=PromptDelivery.ARGV,
     ),
     _descriptor(
         "anton",
@@ -136,10 +148,13 @@ _BUILTIN_DESCRIPTORS = (
         "DeepSeek Harness",
         "dsh",
         harness_supports=_NATIVE_SESSION.model_copy(update={"attachments": False}),
+        # The headless profile takes its task only from the command line.
+        prompt_delivery=PromptDelivery.ARGV,
     ),
-    _descriptor("agy", "Antigravity CLI", "agy"),
+    # Print mode reads stdin only as stream-json; plain-text stdin is unconfirmed, so argv stays.
+    _descriptor("agy", "Antigravity CLI", "agy", prompt_delivery=PromptDelivery.ARGV),
     _descriptor("pi", "Pi Coding Agent", "pi"),
     _descriptor("prime-agent", "Prime Agent", "prime-agent"),
-    _descriptor("openclaw", "OpenClaw", "openclaw"),
+    _descriptor("openclaw", "OpenClaw", "openclaw", prompt_delivery=PromptDelivery.FILE),
     _descriptor("kimi", "Kimi Code CLI", "kimi"),
 )

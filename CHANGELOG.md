@@ -4,7 +4,24 @@
 
 Targets 0.8.0.
 
+### Fixed
+
+- Prompts no longer ride on the command line for harnesses that accept another channel. Codex,
+  Claude Code, Gemini CLI, OpenCode, Goose, Pi, Prime Agent, and Kimi read the prompt from stdin;
+  OpenClaw reads it from `--message-file`; Claude Code, Pi, and Prime Agent read the profile system
+  prompt from a private temporary file. Before this change a long conversation plus attached
+  context (up to about 850 KB) was passed as one argument and could fail with `E2BIG` on Linux or a
+  command-line length error on Windows.
+- MagAgent, Loro, DSH, and Antigravity still take the prompt as an argument (MagAgent and Loro use
+  stdin for AAIS approvals). A new guard refuses any command line over 100 KB on POSIX or 24 KB on
+  Windows with a clear message and exit status 7, instead of failing to start the process.
+- A harness that exits without reading all of stdin is judged by its exit status and output, not
+  reported as a broker control-channel failure.
+
 ### Changed
+
+- `harness show`, `harness list --json`, and the web UI Harnesses screen report each harness's
+  prompt delivery (`stdin`, `file`, or `argv`). The UI harness cache schema moved to 3.
 
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the
   harness documents for itself) and `broker_implements` (what Merced AI delivers through its

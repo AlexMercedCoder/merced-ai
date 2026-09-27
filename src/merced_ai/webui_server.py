@@ -62,8 +62,9 @@ except ImportError:  # pragma: no cover
 
 COOKIE_NAME = "merced_ai_ui"
 MAX_MESSAGE_CHARS = 100_000
-# Schema 2 split capabilities into harness_supports and broker_implements.
-HARNESS_CACHE_SCHEMA = 2
+# Schema 2 split capabilities into harness_supports and broker_implements; schema 3 added
+# prompt_delivery.
+HARNESS_CACHE_SCHEMA = 3
 HARNESS_CACHE_MAX_AGE_SECONDS = 300
 
 
@@ -193,6 +194,7 @@ def _detecting_probe(descriptor: Any, previous: dict[str, Any] | None = None) ->
             "harness_supports": descriptor.harness_supports.model_dump(mode="json"),
             "broker_implements": descriptor.broker_implements.model_dump(mode="json"),
             "capabilities": descriptor.broker_implements.model_dump(mode="json"),
+            "prompt_delivery": descriptor.prompt_delivery.value,
             "capabilities_verified": False,
             "warnings": ["Bounded executable detection is running in the background."],
             "duration_ms": 0,

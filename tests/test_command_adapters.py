@@ -10,12 +10,13 @@ from aais import create_request, validate
 
 from merced_ai.harnesses.adapters.command import (
     CommandHarnessAdapter,
+    HarnessInvocation,
     HarnessRunError,
     _normalize_output,
     _stdin_payload,
     _subprocess_env,
 )
-from merced_ai.models import HarnessDescriptor, RunRequest, TransportKind
+from merced_ai.models import HarnessDescriptor, PromptDelivery, RunRequest, TransportKind
 from merced_ai.profiles import create_profile
 
 
@@ -28,6 +29,12 @@ def _adapter(harness_id: str) -> CommandHarnessAdapter:
             transports=(TransportKind.STRUCTURED_SUBPROCESS,),
         )
     )
+
+
+def _build(adapter: CommandHarnessAdapter, request: RunRequest) -> list[str]:
+    scratch = request.workspace / ".scratch"
+    scratch.mkdir(exist_ok=True)
+    return adapter.build_invocation(request, scratch).argv
 
 
 def _request(harness_id: str, workspace: Path) -> RunRequest:
@@ -75,14 +82,28 @@ def test_qualified_adapter_builds_argv_without_shell_text(
         "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
     )
     request = _request(harness_id, workspace)
+    scratch = workspace / ".scratch"
+    scratch.mkdir()
 
-    command = _adapter(harness_id).build_command(request)
+    invocation = _adapter(harness_id).build_invocation(request, scratch)
 
-    assert command[0] == str(executable)
-    invocation = " ".join(command)
-    if harness_id == "anton":
-        invocation += _stdin_payload(harness_id, request) or ""
-    assert "Review README.md" in invocation
+    assert invocation.argv[0] == str(executable)
+    files = "".join(path.read_text(encoding="utf-8") for path in scratch.iterdir())
+    if invocation.prompt_delivery is PromptDelivery.ARGV:
+        assert "Review README.md" in " ".join(invocation.argv)
+        assert invocation.stdin is None
+    elif invocation.prompt_delivery is PromptDelivery.STDIN:
+        assert "Review README.md" in (invocation.stdin or "")
+        assert "Review README.md" not in " ".join(invocation.argv)
+    else:
+        assert "Review README.md" in files
+        assert "Review README.md" not in " ".join(invocation.argv)
+    # The profile reaches the harness natively by name or as instructions on some channel.
+    everything = " ".join(invocation.argv) + (invocation.stdin or "") + files
+    if harness_id in {"magagent", "loro"}:
+        assert invocation.argv[invocation.argv.index("--agent") + 1] == "reviewer"
+    else:
+        assert "Review code and report defects." in everything
 
 
 def test_anton_repl_receives_profile_and_request_as_one_turn(workspace: Path) -> None:
@@ -172,7 +193,13 @@ def test_aais_child_request_is_decided_over_its_stdin(
         encoding="utf-8",
     )
     adapter = _adapter("magagent")
-    monkeypatch.setattr(adapter, "build_command", lambda _request: [sys.executable, str(child)])
+    monkeypatch.setattr(
+        adapter,
+        "build_invocation",
+        lambda _request, _scratch: HarnessInvocation(
+            [sys.executable, str(child)], PromptDelivery.ARGV
+        ),
+    )
     observed: list[dict] = []
 
     def approve(envelope: dict, _cancellation: threading.Event | None) -> dict:
@@ -297,8 +324,10 @@ def test_command_adapter_honors_external_cancellation(workspace, monkeypatch):
     adapter = _adapter("codex")
     monkeypatch.setattr(
         adapter,
-        "build_command",
-        lambda request: [sys.executable, "-c", "import time; time.sleep(60)"],
+        "build_invocation",
+        lambda request, scratch: HarnessInvocation(
+            [sys.executable, "-c", "import time; time.sleep(60)"], PromptDelivery.ARGV
+        ),
     )
     cancellation = threading.Event()
     cancellation.set()
@@ -339,7 +368,7 @@ def test_multi_provider_adapters_qualify_model_id(
     adapter = _adapter(harness_id)
     request.projection = adapter.project_profile(request.profile)
 
-    command = adapter.build_command(request)
+    command = _build(adapter, request)
 
     assert "google/gemini-2.5-flash" in command
 
@@ -360,7 +389,7 @@ def test_goose_maps_provider_and_model_separately(
     adapter = _adapter("goose")
     request.projection = adapter.project_profile(request.profile)
 
-    command = adapter.build_command(request)
+    command = _build(adapter, request)
 
     assert command[command.index("--provider") + 1] == "google"
     assert command[command.index("--model") + 1] == "gemini-2.5-flash"
@@ -375,11 +404,13 @@ def test_openclaw_uses_current_local_agent_interface(
         "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
     )
 
-    command = _adapter("openclaw").build_command(_request("openclaw", workspace))
+    command = _build(_adapter("openclaw"), _request("openclaw", workspace))
 
     assert command[1:6] == ["agent", "--local", "--agent", "main", "--json"]
     assert "exec" not in command
-    assert "--message" in command
+    message_file = Path(command[command.index("--message-file") + 1])
+    assert "Review README.md" in message_file.read_text(encoding="utf-8")
+    assert "--message" not in command
 
 
 def test_agy_passes_prompt_as_flag_value(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -389,7 +420,7 @@ def test_agy_passes_prompt_as_flag_value(workspace: Path, monkeypatch: pytest.Mo
         "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
     )
 
-    command = _adapter("agy").build_command(_request("agy", workspace))
+    command = _build(_adapter("agy"), _request("agy", workspace))
 
     assert any(value.startswith("--print=") for value in command)
     assert command[-1] != "Review README.md"
@@ -406,6 +437,6 @@ def test_kimi_accepts_merced_config_file_override(
         "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
     )
 
-    command = _adapter("kimi").build_command(_request("kimi", workspace))
+    command = _build(_adapter("kimi"), _request("kimi", workspace))
 
     assert command[command.index("--config-file") + 1] == str(config_file)

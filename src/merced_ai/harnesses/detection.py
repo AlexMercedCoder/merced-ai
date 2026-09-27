@@ -87,6 +87,7 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
             status=HarnessStatus.NOT_INSTALLED,
             harness_supports=descriptor.harness_supports,
             broker_implements=descriptor.broker_implements,
+            prompt_delivery=descriptor.prompt_delivery,
             duration_ms=_elapsed_ms(started),
         )
 
@@ -108,6 +109,7 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
             path=executable,
             harness_supports=descriptor.harness_supports,
             broker_implements=descriptor.broker_implements,
+            prompt_delivery=descriptor.prompt_delivery,
             warnings=(f"Version probe failed: {type(exc).__name__}",),
             duration_ms=_elapsed_ms(started),
         )
@@ -121,6 +123,7 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
             version=output,
             harness_supports=descriptor.harness_supports,
             broker_implements=descriptor.broker_implements,
+            prompt_delivery=descriptor.prompt_delivery,
             warnings=(f"Version probe exited with status {completed.returncode}.",),
             duration_ms=_elapsed_ms(started),
         )
@@ -171,6 +174,7 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
         transport=descriptor.transports[0] if descriptor.transports else None,
         harness_supports=descriptor.harness_supports,
         broker_implements=capabilities,
+        prompt_delivery=descriptor.prompt_delivery,
         capabilities_verified=verified,
         warnings=tuple(warnings),
         duration_ms=_elapsed_ms(started),

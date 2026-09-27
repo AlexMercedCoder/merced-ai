@@ -159,22 +159,28 @@ for the pinned revisions and exact boundary.
 
 ## Harness matrix
 
-| Harness | Discovery | Execution | OAP projection |
-| --- | --- | --- | --- |
-| MagAgent | yes | one-shot with AAIS approval relay | native for project-discovered profiles |
-| Loro | yes | one-shot with AAIS approval relay | native for project-discovered profiles |
-| Claude Code | yes | structured print mode | system-prompt projection |
-| Codex | yes | noninteractive exec | delimited prompt compatibility mode |
-| Gemini CLI | yes | structured headless mode | delimited prompt compatibility mode |
-| OpenCode | yes | structured run mode | delimited prompt compatibility mode |
-| Goose | yes | structured run mode | system-prompt projection |
-| Anton | yes | stdin REPL bridge | delimited prompt compatibility mode |
-| DeepSeek Harness (DSH) | yes | headless profile | delimited prompt compatibility mode |
-| Antigravity CLI (AGY) | yes | structured print mode | delimited prompt compatibility mode |
-| Pi Coding Agent | yes | structured print mode | system-prompt projection |
-| Prime Agent | yes | structured print mode | system-prompt projection |
-| OpenClaw | yes | embedded local agent | delimited prompt compatibility mode |
-| Kimi Code CLI | yes | read-only print mode | delimited prompt compatibility mode |
+| Harness | Discovery | Execution | OAP projection | Prompt delivery |
+| --- | --- | --- | --- | --- |
+| MagAgent | yes | one-shot with AAIS approval relay | native for project-discovered profiles | argument (stdin is the AAIS channel) |
+| Loro | yes | one-shot with AAIS approval relay | native for project-discovered profiles | argument (stdin is the AAIS channel) |
+| Claude Code | yes | structured print mode | system-prompt projection | stdin; system prompt via private file |
+| Codex | yes | noninteractive exec | delimited prompt compatibility mode | stdin (`exec -`) |
+| Gemini CLI | yes | structured headless mode | delimited prompt compatibility mode | stdin |
+| OpenCode | yes | structured run mode | delimited prompt compatibility mode | stdin |
+| Goose | yes | structured run mode | system-prompt projection | stdin (`--instructions -`); system prompt as argument |
+| Anton | yes | stdin REPL bridge | delimited prompt compatibility mode | stdin |
+| DeepSeek Harness (DSH) | yes | headless profile | delimited prompt compatibility mode | argument |
+| Antigravity CLI (AGY) | yes | structured print mode | delimited prompt compatibility mode | argument |
+| Pi Coding Agent | yes | structured print mode | system-prompt projection | stdin; system prompt via private file |
+| Prime Agent | yes | structured print mode | system-prompt projection | stdin; system prompt via private file |
+| OpenClaw | yes | embedded local agent | delimited prompt compatibility mode | private file (`--message-file`) |
+| Kimi Code CLI | yes | read-only print mode | delimited prompt compatibility mode | stdin |
+
+Prompts travel over stdin or a private temporary file wherever the harness accepts one, so long
+conversations and attached context are not limited by the operating system's command-line size.
+Harnesses that take the prompt only as an argument are guarded: Merced AI refuses a command line
+over 100 KB (24 KB on Windows) with a clear error instead of failing to start the process. See
+[prompt delivery](docs/COMPATIBILITY.md#prompt-delivery) for the per-harness evidence.
 
 Every adapter runs one noninteractive subprocess per turn: replies appear when the harness
 finishes, and each turn replays a bounded transcript rather than resuming a native session. The
@@ -216,7 +222,8 @@ not replace profile state.
 ## Security posture
 
 - Harness discovery never installs packages or scans the full filesystem.
-- Child commands are passed as argument arrays with `shell=False`.
+- Child commands are passed as argument arrays with `shell=False`. Prompt files live in a
+  per-run private temporary directory (mode `0600` on POSIX) and are removed when the run ends.
 - Plaintext credentials are rejected by the OAP reference validator.
 - Harness policies remain authoritative.
 - Degraded profile injection is clearly reported and delimited.

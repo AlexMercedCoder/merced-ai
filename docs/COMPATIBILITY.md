@@ -44,6 +44,33 @@ completed through Merced AI. Anton initially failed because its isolated uv envi
 newlines became separate turns. The bridge was changed to one atomic prompt and requalified with a
 clean normalized exact-token response and no intermediate tool activity.
 
+## Prompt delivery
+
+Merced AI sends the prompt through stdin or a private temporary file wherever the harness accepts
+one, and keeps it on the command line only when there is no other input. Each mechanism below was
+confirmed from the installed harness's own help output or source on 2026-09-27; the live smoke
+suite (`MERCED_AI_LIVE_SMOKE=1`, see [validation](MVP_VALIDATION.md)) exercises the exact flags.
+
+| Harness | Prompt | Profile or system prompt | Evidence |
+| --- | --- | --- | --- |
+| Codex 0.155 | stdin via `codex exec -` | prefixed into stdin | `codex exec --help`: "If not provided as an argument (or if `-` is used), instructions are read from stdin" |
+| Claude Code 2.1 | stdin with `--print` | `--system-prompt-file` (private file) | `claude --help` names `--system-prompt[-file]`; `--print` with no prompt argument reads stdin |
+| Gemini CLI 0.57 | stdin (headless when stdin is not a terminal) | prefixed into stdin | `gemini --help`: `-p` is "Appended to input on stdin" |
+| OpenCode 1.18 | stdin | prefixed into stdin | piped stdin is accepted as the message by `opencode run` |
+| Goose 1.48 | stdin via `--instructions -` | `--system` argument (no file variant) | `goose run --help`: "Use - for stdin" |
+| Pi 0.85, Prime Agent 0.8 | piped stdin | `--append-system-prompt <file>` | source: `readPipedStdin()` and `resolvePromptInput()` read a path when it exists |
+| OpenClaw 2026.9 | `--message-file` (private file, 4 MiB max) | prefixed into the file | `openclaw agent --help` |
+| Kimi Code CLI 1.49 | stdin in print mode | prefixed into stdin | source: print mode reads stdin when `--prompt` is absent |
+| Anton | stdin REPL turn | prefixed into stdin | existing REPL bridge |
+| MagAgent, Loro | argument | native profile by name, or prefixed | stdin carries AAIS approval envelopes; `magent ask` and `loro run` take the task only as an argument |
+| DSH 0.1.5 | argument | prefixed | the headless profile takes its task from the command line only |
+| Antigravity (AGY) 1.1 | `--print=` argument | prefixed | print mode reads stdin only as `stream-json`; plain-text stdin is not confirmed |
+
+For the argument-only routes, Merced AI measures the full command line before starting the process
+and refuses anything over 100 KB on POSIX or 24 KB on Windows (where `.cmd` launchers go through
+`cmd.exe`). The error names the limit and exits with status 7. Goose's system prompt is also an
+argument, so an unusually long profile is subject to the same guard.
+
 ## DSH provider routing
 
 DSH does not require its default DeepSeek provider. Its bundled `llm-pi-ai` adapter can expose
