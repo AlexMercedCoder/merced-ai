@@ -63,7 +63,7 @@ packages = ["src/merced_ai"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=merced_ai --cov-report=term-missing --cov-fail-under=70"
+addopts = "--cov=merced_ai --cov-report=term-missing --cov-fail-under=75"
 
 [tool.coverage.run]
 branch = true

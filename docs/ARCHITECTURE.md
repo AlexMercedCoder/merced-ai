@@ -43,7 +43,14 @@ routing or subprocess pipeline.
 - `harnesses/adapters/command.py`: the generic runner for any spec: projection, private temp
   files, the argv guard, bounded execution, cancellation, and the AAIS control channel.
 - `testing/contract.py`: the contract-test kit for adapter authors ([plugins](PLUGINS.md)).
-- `application.py`: routing and run preparation.
+- `application.py`: routing, run preparation, and group isolation planning (serialization or
+  worktrees).
+- `turns.py`: transport-neutral execution of one conversation turn (used by the ACP and A2A
+  servers).
+- `harnesses/acp.py`: the ACP client adapter; `acp_server.py`: Merced AI as an ACP agent.
+- `worktrees.py`: per-bot git worktrees, diffs, apply, and cleanup.
+- `inbox.py`: the reviewed OAP state-delta inbox (Level 2 applicator).
+- `evals.py`: cross-harness eval runs, checks, judge, and ranking.
 - `sessions.py`: atomic normalized session persistence, exact mention selection, and deterministic
   group dispatch.
 - `cli.py`: human and JSON automation surfaces.

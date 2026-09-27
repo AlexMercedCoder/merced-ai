@@ -26,7 +26,7 @@ discovers those harnesses, normalizes their noninteractive interfaces, and uses 
 Merced AI is deliberately not another agent loop. The selected harness still owns model access,
 tools, authentication, sandboxing, approvals, and final policy enforcement.
 
-## MVP capabilities
+## Capabilities
 
 - Safe executable and version discovery for 14 harnesses, including Codex, Claude Code, Gemini CLI,
   OpenCode, Goose, Loro, MagAgent, DSH, Pi, Prime Agent, OpenClaw, and Kimi Code CLI.
@@ -39,6 +39,12 @@ tools, authentication, sandboxing, approvals, and final policy enforcement.
 - Durable, atomic project-local conversation sessions with resume support.
 - Machine-readable JSON output for inventory, profiles, bots, dry runs, and results.
 - Bounded subprocess execution without a shell, with timeout and Ctrl+C cancellation.
+- Agent Client Protocol sessions for Claude Code, Gemini CLI, Goose, and OpenCode: streamed
+  replies, relayed permission requests, and native session resume where the agent supports it.
+- Group rooms that serialize write-capable bots, or give each its own git worktree with a
+  compare and apply view.
+- Merced AI as an ACP agent for editors (`merced-ai acp`) and an experimental A2A endpoint.
+- A reviewed inbox for OAP state deltas, a cross-harness eval mode, and an adapter plugin API.
 
 ## Installation
 

@@ -1,13 +1,16 @@
 # MVP validation
 
-Last validated on 2026-08-27. The local automated run used CPython 3.14.5; the supported package
-range is Python 3.11–3.14.
+Last validated on 2026-09-27 (0.8.0 work on the `claude/next-release` branch). The local automated
+run used CPython 3.13.3; the supported package range is Python 3.11–3.14.
 
 ## Automated suite
 
-The 0.3.0 suite completed with 95 passing tests, one environment-gated skip, and 80.69%
-branch-aware coverage. A dedicated Chromium test also runs in CI. CI enforces a 70% minimum and
-is configured for Python 3.11 and 3.14 on Ubuntu plus Python 3.13 on macOS and Windows.
+The 0.8.0 branch suite completed with 264 passing tests and 36 environment-gated skips (opt-in live
+smoke tests, browser tests that run in their own CI step, and a Windows-only process-tree test) at
+79.85% branch-aware coverage; CI enforces 75%. The three browser end-to-end tests pass locally in
+Chromium. CI runs Python 3.11 and 3.14 on Ubuntu plus Python 3.13 on macOS and Windows, with ruff,
+mypy (Ubuntu), the release-metadata check, and the package build. Earlier release evidence (0.3.0:
+95 tests, 80.69%) is kept below for history.
 
 Covered behavior includes:
 

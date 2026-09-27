@@ -172,6 +172,7 @@ Targets 0.8.0.
 
 ### Testing
 
+- The coverage floor is raised from 70% to 75% (the suite is at about 80%).
 - OAP and AGS fixture tests find the sibling `open-agent-profile` and `agentic-graph-spec` clones
   when `OAP_FIXTURE_REPO` or `AGS_FIXTURE_REPO` is unset, and skip with a reason that says how to
   enable them when neither exists. An explicitly configured path that is wrong fails collection.

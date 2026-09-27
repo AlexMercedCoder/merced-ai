@@ -18,7 +18,7 @@ python -m build
 python -m twine check dist/*
 ```
 
-CI must pass on Ubuntu, macOS, and Windows. Coverage must remain at or above 70%.
+CI must pass on Ubuntu, macOS, and Windows. Coverage must remain at or above 75%.
 
 ## 3. Package smoke test
 
