@@ -20,6 +20,10 @@ python -m twine check dist/*
 
 CI must pass on Ubuntu, macOS, and Windows. Coverage must remain at or above 75%.
 
+Merced AI supports `agent-approval-interchange` 0.1 and 0.2. Before a release, also run the
+suite in a clean environment with the newest published 0.2.x installed
+(`pip install 'agent-approval-interchange>=0.2,<0.3'`).
+
 ## 3. Package smoke test
 
 Install the wheel into a clean environment and avoid importing from the checkout:

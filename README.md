@@ -165,7 +165,7 @@ one-shot commands for automation.
 ## Standards support
 
 Merced AI uses `open-agent-profile>=1.0.1,<2`, `agentic-graph-spec>=1.0.1,<2`, and
-`agent-approval-interchange>=0.1.0,<0.2`. It claims OAP 1.0 Level 1 as a broker and AGS 1.0 Level 0 as a
+`agent-approval-interchange>=0.1.0,<0.3`. It claims OAP 1.0 Level 1 as a broker and AGS 1.0 Level 0 as a
 read-only parser/planner. Merced AI does not execute AGS graphs, apply OAP state deltas, or replace
 the selected harness's final policy enforcement. See the [OAP conformance result](docs/oap-conformance.json),
 [AGS conformance result](docs/ags-conformance.json), and [Agentic Graph guide](docs/AGENTIC_GRAPHS.md)

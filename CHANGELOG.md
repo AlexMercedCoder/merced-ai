@@ -116,6 +116,9 @@ Targets 0.8.0.
 
 ### Changed
 
+- The `agent-approval-interchange` requirement is widened to `>=0.1.0,<0.3` so Merced AI installs
+  alongside Loro and MagAgent builds that require AAIS 0.2. The full suite passes against the
+  published 0.1.0 and against the unreleased local 0.2.0 build.
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the
   harness documents for itself) and `broker_implements` (what Merced AI delivers through its
   adapter). Previously every rich harness advertised streaming, resume, approvals, attachments,
