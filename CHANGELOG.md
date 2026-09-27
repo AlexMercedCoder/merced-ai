@@ -101,6 +101,13 @@ Targets 0.8.0.
   time with computed risk. Implements the OAP Level 2 applicator requirements; the claimed level
   stays 1. See [OAP state inbox](docs/INBOX.md).
 
+- Cross-harness eval (`merced-ai eval run/list/show`, **Compare harnesses** in the web UI): one
+  profile and prompt on several harnesses, deterministic checks (contains, not-contains, regex,
+  exact, max length, JSON) scored first, an optional judge harness's 0-10 opinion reported
+  separately, ranked side by side and saved under `.merced-ai/evals/`. Write-capable profiles run
+  one harness at a time. See [Comparing harnesses](docs/EVALS.md).
+- `merced-ai profile create` accepts `--edit` and `--shell` (ask, allow, or deny).
+
 ### Changed
 
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the

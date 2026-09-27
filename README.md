@@ -146,6 +146,9 @@ copyable native-harness handoff command. See the
 The layout is responsive down to a compact mobile collaboration view. See the
 [mobile group-chat screenshot](docs/screenshots/merced-ai-group-mobile.jpg).
 
+Compare harnesses on the same profile with `merced-ai eval run -p PROFILE --prompt "..." -H claude
+-H codex --contains ...` or the **Compare harnesses** page; see [Comparing harnesses](docs/EVALS.md).
+
 Editors and other agents can drive a bot or a room too: `merced-ai acp --bot reviewer` serves it
 as an Agent Client Protocol agent (for example in Zed), and `merced-ai ui` also exposes an
 experimental A2A endpoint. See [Serving Merced AI](docs/SERVING.md).

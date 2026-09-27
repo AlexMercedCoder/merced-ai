@@ -138,6 +138,22 @@ tool environment fails to import (`anton version` raises), not because of an ada
 
 Model calls made: about 17, all one-line prompts (9 through the suite across four runs while fixing the issues above, 8 manual reproductions); the Loro attempts were rejected with HTTP 401.
 
+### ACP and eval results, 2026-09-27 (Linux)
+
+`tests/test_live_smoke.py::test_acp_streams_and_resumes_natively` ran two turns over ACP for each
+verified launcher: Claude Code (`claude-agent-acp` 0.79), Goose 1.48, and OpenCode 1.18 streamed
+`OK` and resumed their own session on the second turn; Gemini CLI 0.57 (API-key auth) streamed
+`OK` but cannot load a session in a new process, so it starts a new session each turn.
+`codex-acp` started sessions on a model this account cannot use (HTTP 400), so Codex stays on its
+subprocess adapter unless opted in.
+
+A live `merced-ai eval run` with a read-only profile, "Reply with OK", Codex, Claude Code, Goose,
+and OpenCode, `--contains OK --max-chars 5`, and Claude Code as judge: all four passed 2/2 checks
+and the judge scored each 10/10.
+
+Additional model calls for 0.8.0 work: about 30, all one-line prompts (ACP probes and two-turn
+resume checks, the eval above with its judge, and reproductions while fixing Gemini's ACP output).
+
 ## Known boundaries
 
 - A version probe verifies executable readiness only, not authentication, provider quota, model

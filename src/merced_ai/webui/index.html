@@ -26,6 +26,7 @@
           <button class="nav-item" data-view="bots"><span class="nav-icon">◇</span> Bots <span class="count" id="bot-count">0</span></button>
           <button class="nav-item" data-view="profiles"><span class="nav-icon">≡</span> Profiles <span class="count" id="profile-count">0</span></button>
           <button class="nav-item" data-view="inbox"><span class="nav-icon">✉</span> Inbox <span class="count" id="inbox-count">0</span></button>
+          <button class="nav-item" data-view="evals"><span class="nav-icon">⚖</span> Compare harnesses</button>
           <button class="nav-item" data-view="harnesses"><span class="nav-icon">⌁</span> Harnesses <span class="count" id="harness-count">0</span></button>
         </nav>
 
@@ -225,6 +226,22 @@
           <button class="secondary-button" value="close">Close</button>
           <button id="compare-apply" class="primary-button" type="button" disabled>Apply to workspace</button>
         </footer>
+      </form>
+    </dialog>
+
+    <dialog id="eval-dialog" class="dialog eval-dialog" aria-labelledby="eval-dialog-title">
+      <form id="eval-form">
+        <header><div><span class="eyebrow">CROSS-HARNESS EVAL</span><h2 id="eval-dialog-title">Compare harnesses</h2></div><button class="icon-button eval-cancel" type="button" aria-label="Close">×</button></header>
+        <div class="dialog-fields eval-fields">
+          <label for="eval-profile">Profile<select id="eval-profile" required></select></label>
+          <label for="eval-judge">Judge harness (optional)<select id="eval-judge"><option value="">No judge</option></select></label>
+          <label for="eval-prompt" class="full-field">Prompt<textarea id="eval-prompt" rows="4" required maxlength="20000" placeholder="The same task every harness receives"></textarea></label>
+          <fieldset class="full-field eval-harnesses"><legend>Harnesses</legend><div id="eval-harness-options" class="eval-harness-options"></div></fieldset>
+          <fieldset class="full-field eval-checks"><legend>Deterministic checks</legend><div id="eval-check-rows"></div><button type="button" id="eval-add-check" class="secondary-button">＋ Add check</button></fieldset>
+          <label for="eval-rubric" class="full-field" id="eval-rubric-field" hidden>Judge rubric<textarea id="eval-rubric" rows="3" maxlength="4000" placeholder="What makes a reply good? The judge answers with a 0-10 score."></textarea></label>
+        </div>
+        <p id="eval-error" class="form-error" role="alert"></p>
+        <footer><button class="secondary-button eval-cancel" type="button">Cancel</button><button id="eval-submit" class="primary-button" type="submit">Run eval</button></footer>
       </form>
     </dialog>
 

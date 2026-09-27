@@ -475,3 +475,43 @@ body[data-theme="light"] .risk-badge.high { color: #b3261e; }
 .muted-inline { color: var(--muted); }
 .inbox-card.status-applied, .inbox-card.status-rejected { opacity: .8; }
 @media (max-width: 720px) { .inbox-card { flex-direction: column; } }
+
+/* Cross-harness eval */
+.eval-dialog { width: min(820px, calc(100vw - 28px)); }
+.eval-fields fieldset { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0; }
+.eval-fields legend { padding: 0 6px; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+.eval-harness-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.eval-harness-options .check-field { display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 13px; color: var(--text); text-transform: none; letter-spacing: normal; }
+.eval-check-row { display: grid; grid-template-columns: 190px 1fr 34px; gap: 8px; margin-bottom: 8px; }
+.eval-check-row select, .eval-check-row input, .eval-fields textarea, .eval-fields select { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; }
+.list-heading { max-width: 940px; margin: 26px auto 8px; color: var(--muted); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+.eval-results { max-width: 940px; width: 100%; margin: 0 auto; padding: 18px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.eval-results > header h2 { margin: 6px 0; font-size: 17px; }
+.eval-results > header p { margin: 0; color: var(--muted); font-size: 12px; }
+.eval-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
+.eval-column { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.eval-column > header { display: flex; align-items: baseline; gap: 8px; }
+.eval-column h3 { margin: 0; flex: 1; font-size: 15px; }
+.eval-column small { color: var(--muted); font-size: 12px; }
+.eval-column .rank { color: var(--accent); font-weight: 800; }
+.eval-scores { display: flex; flex-wrap: wrap; gap: 6px; }
+.eval-scores .score { padding: 3px 8px; border: 1px solid var(--line); border-radius: 99px; font-size: 12px; }
+.eval-scores .score.full { border-color: var(--accent); color: var(--accent); }
+.eval-checks-list { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.eval-checks-list .pass span:first-child { color: #6fcf7a; }
+.eval-checks-list .fail { color: var(--text); }
+.eval-checks-list .fail span:first-child { color: #ff8a80; }
+body[data-theme="light"] .eval-checks-list .pass span:first-child { color: #1f7a2e; }
+body[data-theme="light"] .eval-checks-list .fail span:first-child { color: #b3261e; }
+.judge-reason { margin: 0; color: var(--muted); font-size: 12px; }
+.eval-output { max-height: 320px; overflow: auto; padding: 8px 10px; border-radius: 9px; background: var(--surface); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.eval-output p { margin: 0 0 8px; }
+.eval-error { margin: 0; color: #ff8a80; font-size: 12px; overflow-wrap: anywhere; }
+body[data-theme="light"] .eval-error { color: #b3261e; }
+.eval-running .tag-row span.running { border-color: var(--violet); color: var(--violet); animation: detection-pulse 1s ease-in-out infinite alternate; }
+.eval-running .tag-row span.ok { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 720px) {
+  .eval-check-row { grid-template-columns: 1fr 34px; }
+  .eval-check-row .eval-check-value { grid-column: 1 / 2; }
+  .eval-results { padding: 14px; }
+}

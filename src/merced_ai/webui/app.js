@@ -337,6 +337,7 @@ function renderManagement() {
     bots: ["BOT BINDINGS", "Bots", "Bind portable OAP profiles to preferred and fallback harnesses."],
     profiles: ["OPEN AGENT PROFILE", "Profiles", "Create and validate portable identities, models, and permission requests."],
     harnesses: ["LOCAL RUNTIMES", "Harnesses", "Inspect detection, versions, capabilities, and readiness."],
+    evals: ["CROSS-HARNESS EVAL", "Compare harnesses", "Send the same profile and prompt to several harnesses and score the replies: deterministic checks first, and an optional judge harness's 0-10 opinion shown separately."],
     inbox: ["OAP STATE REVIEW", "Inbox", "Learned state that sessions proposed for a profile. Nothing is applied until you approve it, and changes to a profile's rules are decided one by one."],
   }[view];
   if (!copy) return;
@@ -344,9 +345,11 @@ function renderManagement() {
   $("#management-action").hidden = false;
   $("#generate-profile").hidden = view !== "profiles";
   $("#management-action").disabled = view === "harnesses" && state.harnessDetection.refreshing;
-  $("#management-action").textContent = view === "profiles" ? "Create profile" : view === "bots" ? "Create bot" : view === "inbox" ? "Remember something" : state.harnessDetection.refreshing ? "Detecting…" : "Refresh detection";
+  $("#management-action").textContent = view === "profiles" ? "Create profile" : view === "bots" ? "Create bot" : view === "inbox" ? "Remember something" : view === "evals" ? "New eval" : state.harnessDetection.refreshing ? "Detecting…" : "Refresh detection";
   if (view === "inbox") {
     renderInbox();
+  } else if (view === "evals") {
+    renderEvals();
   } else if (view === "profiles") {
     $("#management-list").innerHTML = state.data.profiles.map((item) => `<article class="management-card"><div><span class="card-kicker">REVISION ${item.revision} · ${escapeHtml(item.source)}</span><h2>${escapeHtml(titleCase(item.name))}</h2><p>${escapeHtml(item.description)}</p><div class="tag-row"><span>${escapeHtml(item.model?.provider || "harness model")}</span><span>${escapeHtml(item.model?.id || "default")}</span><span>edit: ${escapeHtml(item.permissions?.edit || "inherit")}</span><span>shell: ${escapeHtml(item.permissions?.shell || "inherit")}</span></div>${item.warnings?.length ? `<div class="profile-warnings" role="status"><strong>Profile adjustments</strong>${item.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}</div><div class="card-actions"><button class="secondary-button edit-profile" data-profile="${escapeHtml(item.name)}" ${item.editable ? "" : "disabled"}>${item.editable ? "Edit" : "Read only"}</button>${item.editable ? `<button class="secondary-button danger-button delete-profile" data-profile="${escapeHtml(item.name)}">Delete</button>` : ""}</div></article>`).join("") || emptyState("No profiles", "Create an OAP profile before making a bot.");
   } else if (view === "bots") {
@@ -827,6 +830,120 @@ async function discardCompare() {
   } catch (error) { $("#compare-error").textContent = error.message; }
 }
 
+// ---- Cross-harness eval ----
+const CHECK_TYPES = [
+  { value: "contains", label: "Contains" },
+  { value: "not_contains", label: "Does not contain" },
+  { value: "regex", label: "Matches regex" },
+  { value: "exact", label: "Equals exactly" },
+  { value: "max_chars", label: "At most N characters" },
+  { value: "json", label: "Is valid JSON" },
+];
+const evalState = { job: null, record: null, history: null, poll: 0 };
+
+function checkRow(type = "contains", value = "") {
+  return `<div class="eval-check-row"><select class="eval-check-type" aria-label="Check type">${CHECK_TYPES.map((item) => `<option value="${item.value}"${selected(item.value, type)}>${item.label}</option>`).join("")}</select><input class="eval-check-value" aria-label="Check value" value="${escapeHtml(value)}" placeholder="Value" /><button type="button" class="icon-button eval-remove-check" aria-label="Remove check">×</button></div>`;
+}
+
+function openEvalDialog() {
+  const readyHarnesses = state.data.harnesses.filter(ready);
+  if (!state.data.profiles.length) { toast("Create a profile first"); return; }
+  $("#eval-profile").innerHTML = state.data.profiles.map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(titleCase(item.name))}</option>`).join("");
+  $("#eval-judge").innerHTML = '<option value="">No judge</option>' + readyHarnesses.map((item) => `<option value="${escapeHtml(item.harness_id)}">${escapeHtml(titleCase(item.harness_id))}</option>`).join("");
+  $("#eval-harness-options").innerHTML = readyHarnesses.length
+    ? readyHarnesses.map((item, index) => `<label class="check-field eval-harness"><input type="checkbox" value="${escapeHtml(item.harness_id)}" ${index < 2 ? "checked" : ""} /><span><strong>${escapeHtml(titleCase(item.harness_id))}</strong><small>${escapeHtml((item.version || "").split("\n")[0])}</small></span></label>`).join("")
+    : '<div class="empty-mini">No ready harnesses. Refresh detection on the Harnesses page.</div>';
+  $("#eval-check-rows").innerHTML = checkRow();
+  $("#eval-rubric-field").hidden = true;
+  $("#eval-error").textContent = "";
+  $("#eval-dialog").showModal();
+  $("#eval-prompt").focus();
+}
+
+function evalSpecFromForm() {
+  const checks = $$(".eval-check-row").map((row) => {
+    const type = row.querySelector(".eval-check-type").value;
+    const raw = row.querySelector(".eval-check-value").value.trim();
+    if (type === "json") return { type };
+    if (!raw) return null;
+    return { type, value: type === "max_chars" ? Number(raw) : raw };
+  }).filter(Boolean);
+  const judge = $("#eval-judge").value;
+  return {
+    profile: $("#eval-profile").value,
+    prompt: $("#eval-prompt").value.trim(),
+    harnesses: $$("#eval-harness-options input:checked").map((input) => input.value),
+    checks,
+    judge: judge ? { harness: judge, rubric: $("#eval-rubric").value.trim() } : null,
+  };
+}
+
+async function submitEval(event) {
+  event.preventDefault();
+  const spec = evalSpecFromForm();
+  if (!spec.harnesses.length) { $("#eval-error").textContent = "Choose at least one harness."; return; }
+  if (spec.judge && !spec.judge.rubric) { $("#eval-error").textContent = "Describe what the judge should grade."; return; }
+  try {
+    evalState.job = await (await api("/api/evals", { method: "POST", body: JSON.stringify(spec) })).json();
+    evalState.record = null;
+    $("#eval-dialog").close();
+    showView("evals");
+    pollEvalJob();
+  } catch (error) { $("#eval-error").textContent = error.message; }
+}
+
+async function pollEvalJob() {
+  const poll = ++evalState.poll;
+  while (evalState.job?.status === "running" && poll === evalState.poll) {
+    renderEvals();
+    await pause(1000);
+    try { evalState.job = await (await api(`/api/evals/jobs/${encodeURIComponent(evalState.job.id)}`)).json(); }
+    catch (error) { evalState.job = { ...evalState.job, status: "failed", error: error.message }; }
+  }
+  if (evalState.job?.record) { evalState.record = evalState.job.record; evalState.history = null; toast("Eval finished"); }
+  renderEvals();
+}
+
+function evalResultsCard(record) {
+  const byHarness = Object.fromEntries(record.results.map((item) => [item.harness, item]));
+  const order = [...record.ranking, ...record.spec.harnesses.filter((item) => !record.ranking.includes(item))];
+  const columns = order.map((harness, index) => {
+    const item = byHarness[harness];
+    const passed = item.checks.filter((check) => check.passed).length;
+    const scoreLine = item.checks.length ? `<span class="score ${passed === item.checks.length ? "full" : ""}">${passed}/${item.checks.length} checks</span>` : "";
+    return `<section class="eval-column status-${escapeHtml(item.status)}" aria-label="${escapeHtml(titleCase(harness))} result"><header><span class="rank">${item.status === "ok" ? `#${index + 1}` : "—"}</span><h3>${escapeHtml(titleCase(harness))}</h3><small>${(item.duration_ms / 1000).toFixed(1)}s</small></header>${item.status !== "ok" ? `<p class="eval-error">${escapeHtml(item.status)}: ${escapeHtml(item.error || "")}</p>` : `<div class="eval-scores">${scoreLine}${item.judge_score !== null ? `<span class="score">judge ${item.judge_score.toFixed(1)}/10</span>` : ""}</div><ul class="eval-checks-list">${item.checks.map((check) => `<li class="${check.passed ? "pass" : "fail"}"><span aria-hidden="true">${check.passed ? "✓" : "✗"}</span><span class="sr-only">${check.passed ? "Passed" : "Failed"}:</span> ${escapeHtml(check.label)}</li>`).join("")}</ul>${item.judge_reason ? `<p class="judge-reason">${escapeHtml(item.judge_reason)}</p>` : ""}<div class="eval-output">${markdown(item.output)}</div>`}</section>`;
+  }).join("");
+  return `<article class="eval-results"><header><div><span class="card-kicker">${escapeHtml(record.id)}</span><h2>${escapeHtml(record.spec.prompt.slice(0, 140))}</h2><p>Profile ${escapeHtml(record.spec.profile)} · ${record.results.length} harness${record.results.length === 1 ? "" : "es"} · ${(record.duration_ms / 1000).toFixed(1)}s${record.sequential ? " · ran one at a time because the profile can edit or run commands" : ""}</p></div></header><div class="eval-grid">${columns}</div></article>`;
+}
+
+async function showEvalRecord(id) {
+  try { evalState.record = await (await api(`/api/evals/${encodeURIComponent(id)}`)).json(); evalState.job = null; renderEvals(); $("#management-view").scrollTo({ top: 0, behavior: "smooth" }); }
+  catch (error) { toast(error.message); }
+}
+
+async function renderEvals() {
+  const list = $("#management-list");
+  const parts = [];
+  if (evalState.job?.status === "running") {
+    parts.push(`<article class="management-card eval-running" role="status" aria-live="polite"><div><span class="card-kicker">RUNNING</span><h2>Comparing ${Object.keys(evalState.job.harnesses).length} harnesses</h2><div class="tag-row">${Object.entries(evalState.job.harnesses).map(([harness, status]) => `<span class="${status === "running" ? "running" : status}">${escapeHtml(titleCase(harness))}: ${escapeHtml(status)}</span>`).join("")}</div></div></article>`);
+  } else if (evalState.job?.status === "failed") {
+    parts.push(`<div class="profile-warnings" role="alert"><strong>The eval failed</strong><span>${escapeHtml(evalState.job.error || "")}</span></div>`);
+  }
+  if (evalState.record) parts.push(evalResultsCard(evalState.record));
+  if (evalState.history === null) {
+    try { evalState.history = (await (await api("/api/evals")).json()).evals; }
+    catch (error) { parts.push(`<div class="profile-warnings" role="alert"><strong>Could not load earlier evals</strong><span>${escapeHtml(error.message)}</span></div>`); evalState.history = []; }
+  }
+  if (state.view !== "evals") return;
+  const history = evalState.history || [];
+  if (history.length) {
+    parts.push(`<h3 class="list-heading">Earlier evals</h3>` + history.map((record) => `<article class="management-card"><div><span class="card-kicker">${escapeHtml(new Date(record.created_at).toLocaleString([], { dateStyle: "short", timeStyle: "short" }))}</span><h2>${escapeHtml(record.spec.prompt.slice(0, 100))}</h2><p>${escapeHtml(record.spec.profile)} · ${escapeHtml(record.spec.harnesses.join(", "))}${record.ranking.length ? ` · best: ${escapeHtml(titleCase(record.ranking[0]))}` : ""}</p></div><div class="card-actions"><button class="secondary-button" data-eval-open="${escapeHtml(record.id)}">View results</button></div></article>`).join(""));
+  } else if (!evalState.record && evalState.job?.status !== "running") {
+    parts.push(emptyState("No evals yet", "Choose New eval to send one prompt to several harnesses with the same profile and compare the replies side by side."));
+  }
+  list.innerHTML = parts.join("");
+}
+
 // ---- OAP state inbox ----
 function inboxValue(value) {
   if (value === undefined) return "";
@@ -1105,6 +1222,12 @@ function bindEvents() {
   $("#mention-menu").addEventListener("click", (event) => { const button = event.target.closest("[data-mention]"); if (button) insertMention(button.dataset.mention); });
   $("#cancel-run").addEventListener("click", cancelRun);
   $("#compare-changes").addEventListener("click", openCompare);
+  $("#eval-form").addEventListener("submit", submitEval);
+  $$(".eval-cancel").forEach((button) => button.addEventListener("click", () => $("#eval-dialog").close()));
+  $("#eval-add-check").addEventListener("click", () => $("#eval-check-rows").insertAdjacentHTML("beforeend", checkRow()));
+  $("#eval-check-rows").addEventListener("click", (event) => { const remove = event.target.closest(".eval-remove-check"); if (remove) remove.closest(".eval-check-row").remove(); });
+  $("#eval-check-rows").addEventListener("change", (event) => { const type = event.target.closest(".eval-check-type"); if (type) { const input = type.closest(".eval-check-row").querySelector(".eval-check-value"); input.hidden = type.value === "json"; input.type = type.value === "max_chars" ? "number" : "text"; } });
+  $("#eval-judge").addEventListener("change", (event) => { $("#eval-rubric-field").hidden = !event.target.value; });
   $("#write-notice-compare").addEventListener("click", openCompare);
   $("#compare-bots").addEventListener("click", (event) => { const button = event.target.closest("[data-compare-bot]"); if (button) selectCompareBot(button.dataset.compareBot); });
   $("#compare-apply").addEventListener("click", applyCompare);
@@ -1149,12 +1272,15 @@ function bindEvents() {
   });
   $("#management-action").addEventListener("click", () => {
     if (state.view === "inbox") openRememberEditor();
+    else if (state.view === "evals") openEvalDialog();
     else if (state.view === "profiles") openProfileEditor();
     else if (state.view === "bots") openBotEditor();
     else refreshHarnesses({ announce: true }).catch((error) => toast(error.message));
   });
   $("#generate-profile").addEventListener("click", openProfileGenerator);
   $("#management-list").addEventListener("click", async (event) => {
+    const evalOpen = event.target.closest("[data-eval-open]");
+    if (evalOpen) { await showEvalRecord(evalOpen.dataset.evalOpen); return; }
     const inboxAction = event.target.closest("[data-inbox-action]");
     if (inboxAction) { await inboxDecision(inboxAction.dataset); return; }
     const editProfile = event.target.closest(".edit-profile"); const deleteProfile = event.target.closest(".delete-profile");

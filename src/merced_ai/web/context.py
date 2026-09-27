@@ -30,6 +30,8 @@ class WebContext:
     cancellations: dict[str, threading.Event] = field(default_factory=dict)
     # A2A tasks served by this process (kept in memory; the conversation itself is durable).
     a2a_tasks: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # Background cross-harness eval jobs started from the web UI.
+    eval_jobs: dict[str, dict[str, Any]] = field(default_factory=dict)
     cancellation_lock: threading.Lock = field(default_factory=threading.Lock)
 
     def register_cancellation(self, run_id: str) -> threading.Event:
