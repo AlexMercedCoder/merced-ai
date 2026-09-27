@@ -1,0 +1,12 @@
+                                                                                                    
+ Usage: merced-ai inbox list [OPTIONS]                                                              
+                                                                                                    
+ List state deltas waiting for review (and past decisions).                                         
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --status             <str>   Only pending, conflict, applied, or rejected items.                 │
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

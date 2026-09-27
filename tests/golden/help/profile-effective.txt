@@ -1,0 +1,15 @@
+                                                                                                    
+ Usage: merced-ai profile effective [OPTIONS] {reference}                                           
+                                                                                                    
+ Preview how a profile projects onto one harness without running it.                                
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    reference      <str>  [required]                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ *  --harness            <str>   [required]                                                       │
+│    --workspace  -C      <path>  Project directory to use. Defaults to the current directory.     │
+│    --json                       Print machine-readable JSON instead of formatted output.         │
+│    --help                       Show this message and exit.                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

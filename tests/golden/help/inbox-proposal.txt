@@ -1,0 +1,16 @@
+                                                                                                    
+ Usage: merced-ai inbox proposal [OPTIONS] {item_id} {index}                                        
+                                                                                                    
+ Decide one proposal to change the profile's metadata or spec (never automatic).                    
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    item_id      <str>  Inbox item ID. [required]                                               │
+│ *    index        <int>  Proposal number from `inbox show`. [required]                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --approve        --decline            Apply or decline this one proposal. [default: decline]     │
+│ --workspace  -C               <path>  Project directory to use. Defaults to the current          │
+│                                       directory.                                                 │
+│ --help                                Show this message and exit.                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

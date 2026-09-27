@@ -1,0 +1,13 @@
+                                                                                                    
+ Usage: merced-ai inbox add [OPTIONS] {path}                                                        
+                                                                                                    
+ Import a delta into the inbox after validating it. Nothing is applied yet.                         
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    path      <path>  AgentStateDelta YAML/JSON, or a proposal JSON. [required]                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

@@ -1,0 +1,14 @@
+                                                                                                    
+ Usage: merced-ai inbox show [OPTIONS] {item_id}                                                    
+                                                                                                    
+ Show one delta's operations, proposals, and history.                                               
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    item_id      <str>  Inbox item ID from `inbox list`. [required]                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

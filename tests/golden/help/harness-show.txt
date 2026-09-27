@@ -1,0 +1,13 @@
+                                                                                                    
+ Usage: merced-ai harness show [OPTIONS] {harness_id}                                               
+                                                                                                    
+ Show the current probe result for one harness.                                                     
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    harness_id      <str>  Harness identifier from `harness list`. [required]                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON instead of formatted output.                         │
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

@@ -1,0 +1,11 @@
+                                                                                                    
+ Usage: merced-ai status [OPTIONS]                                                                  
+                                                                                                    
+ Summarize profiles, bots, sessions, and installed harnesses.                                       
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

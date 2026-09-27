@@ -1,0 +1,14 @@
+                                                                                                    
+ Usage: merced-ai session show [OPTIONS] {session_id}                                               
+                                                                                                    
+ Show a stored conversation.                                                                        
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    session_id      <str>  [required]                                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

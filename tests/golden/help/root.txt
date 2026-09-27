@@ -1,0 +1,29 @@
+                                                                                                    
+ Usage: merced-ai [OPTIONS] COMMAND [ARGS]...                                                       
+                                                                                                    
+ Create OAP-backed bots that run through existing AI agent harnesses.                               
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --version                     Show version.                                                      │
+│ --install-completion          Install completion for the current shell.                          │
+│ --show-completion             Show completion for the current shell, to copy it or customize the │
+│                               installation.                                                      │
+│ --help                        Show this message and exit.                                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────╮
+│ init     Create project-local Merced AI and OAP directories.                                     │
+│ status   Summarize profiles, bots, sessions, and installed harnesses.                            │
+│ doctor   Summarize local harness availability without changing configuration.                    │
+│ ui       Start the optional loopback-first local web UI.                                         │
+│ acp      Serve a bot or a room as an Agent Client Protocol agent on stdin/stdout.                │
+│ ask      Run one prompt through a bot's selected harness.                                        │
+│ chat     Chat with a bot; enter /exit or /quit to finish.                                        │
+│ harness  Discover and inspect installed agent harnesses.                                         │
+│ profile  Create, validate, and inspect Open Agent Profiles.                                      │
+│ bot      Bind portable profiles to local harness preferences.                                    │
+│ session  Inspect durable local conversation sessions.                                            │
+│ group    Collaborate with multiple OAP bots in one conversation.                                 │
+│ inbox    Review OAP state deltas (learned state proposed by harness sessions) before applying.   │
+│ eval     Run one profile and prompt on several harnesses and compare them.                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

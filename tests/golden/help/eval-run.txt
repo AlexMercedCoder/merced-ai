@@ -1,0 +1,25 @@
+                                                                                                    
+ Usage: merced-ai eval run [OPTIONS]                                                                
+                                                                                                    
+ Send one prompt through several harnesses with the same profile and score the replies.             
+                                                                                                    
+ Example: merced-ai eval run -p reviewer --prompt "Say OK" -H claude -H codex --contains OK         
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --profile       -p      <str>   Profile name.                                                    │
+│ --prompt                <str>   The task to send.                                                │
+│ --harness       -H      <str>   Harness to compare (repeat).                                     │
+│ --contains              <str>   Reply must contain this.                                         │
+│ --not-contains          <str>   Reply must not contain this.                                     │
+│ --regex                 <str>   Reply must match this pattern.                                   │
+│ --exact                 <str>   Reply must equal this.                                           │
+│ --max-chars             <int>   Reply must be at most this long.                                 │
+│ --json-reply                    Reply must be valid JSON.                                        │
+│ --judge                 <str>   Harness that scores each reply 0-10.                             │
+│ --rubric                <str>   What the judge grades.                                           │
+│ --file          -f      <path>  YAML or JSON eval spec instead of flags.                         │
+│ --workspace     -C      <path>  Project directory to use. Defaults to the current directory.     │
+│ --json                          Print machine-readable JSON instead of formatted output.         │
+│ --help                          Show this message and exit.                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

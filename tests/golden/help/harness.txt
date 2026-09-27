@@ -1,0 +1,13 @@
+                                                                                                    
+ Usage: merced-ai harness [OPTIONS] COMMAND [ARGS]...                                               
+                                                                                                    
+ Discover and inspect installed agent harnesses.                                                    
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────╮
+│ list  List known harnesses and run safe local version probes.                                    │
+│ show  Show the current probe result for one harness.                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

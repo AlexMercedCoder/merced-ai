@@ -1,0 +1,14 @@
+                                                                                                    
+ Usage: merced-ai inbox reject [OPTIONS] {item_id}                                                  
+                                                                                                    
+ Reject a delta and its proposals; the profile is not changed.                                      
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    item_id      <str>  Inbox item ID. [required]                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --reason             <str>   Why, for the record.                                                │
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

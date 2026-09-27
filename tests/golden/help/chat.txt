@@ -1,0 +1,15 @@
+                                                                                                    
+ Usage: merced-ai chat [OPTIONS] {bot_name}                                                         
+                                                                                                    
+ Chat with a bot; enter /exit or /quit to finish.                                                   
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    bot_name      <str>  [required]                                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace       -C      <path>  Project directory to use. Defaults to the current directory.   │
+│ --harness                 <str>                                                                  │
+│ --resume-session          <str>                                                                  │
+│ --help                            Show this message and exit.                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

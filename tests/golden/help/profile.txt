@@ -1,0 +1,17 @@
+                                                                                                    
+ Usage: merced-ai profile [OPTIONS] COMMAND [ARGS]...                                               
+                                                                                                    
+ Create, validate, and inspect Open Agent Profiles.                                                 
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────╮
+│ list       List valid profiles visible in the workspace.                                         │
+│ validate   Validate one OAP profile with the reference implementation.                           │
+│ show       Show a discovered profile by name or path.                                            │
+│ create     Create a minimal valid project-local OAP profile.                                     │
+│ generate   Generate and validate a portable OAP profile through an installed harness.            │
+│ effective  Preview how a profile projects onto one harness without running it.                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

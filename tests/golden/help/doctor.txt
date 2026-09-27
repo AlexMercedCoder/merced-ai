@@ -1,0 +1,9 @@
+                                                                                                    
+ Usage: merced-ai doctor [OPTIONS]                                                                  
+                                                                                                    
+ Summarize local harness availability without changing configuration.                               
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

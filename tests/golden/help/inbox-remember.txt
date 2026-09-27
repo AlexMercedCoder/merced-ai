@@ -1,0 +1,17 @@
+                                                                                                    
+ Usage: merced-ai inbox remember [OPTIONS] {profile} {text}                                         
+                                                                                                    
+ Propose a state entry from your own statement; it still waits in the inbox for approval.           
+                                                                                                    
+ Example: merced-ai inbox remember reviewer "Use pytest, not unittest" --kind preference            
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    profile      <str>  Profile name. [required]                                                │
+│ *    text         <str>  What the profile should remember. [required]                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --kind               <str>   fact, preference, or thread [default: fact]                         │
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

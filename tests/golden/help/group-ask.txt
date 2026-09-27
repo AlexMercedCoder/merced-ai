@@ -1,0 +1,28 @@
+                                                                                                    
+ Usage: merced-ai group ask [OPTIONS] {bot_names}...                                                
+                                                                                                    
+ Send one message to a new group conversation.                                                      
+                                                                                                    
+ Example: merced-ai group ask reviewer builder -p "Assess this change" --json                       
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    bot_names      <str>  Two or more bot names. [required]                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ *  --prompt                   -p      <str>   Message sent to the group. [required]              │
+│    --workspace                -C      <path>  Project directory to use. Defaults to the current  │
+│                                               directory.                                         │
+│    --mode                             <str>   mentions, all, or round_robin [default: all]       │
+│    --allow-concurrent-writes                  Let write-capable bots that share a workspace run  │
+│                                               at the same time. By default their turns run one   │
+│                                               at a time so they cannot edit the same files       │
+│                                               concurrently.                                      │
+│    --worktrees                                Give each write-capable bot its own git worktree   │
+│                                               and branch so they can work at the same time       │
+│                                               without touching your files; review with `group    │
+│                                               diff` and apply with `group apply`.                │
+│    --json                                     Print machine-readable JSON instead of formatted   │
+│                                               output.                                            │
+│    --help                                     Show this message and exit.                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

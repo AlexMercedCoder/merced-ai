@@ -1,0 +1,14 @@
+                                                                                                    
+ Usage: merced-ai bot [OPTIONS] COMMAND [ARGS]...                                                   
+                                                                                                    
+ Bind portable profiles to local harness preferences.                                               
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────╮
+│ list    List project and user bot bindings.                                                      │
+│ create  Create a bot binding from an OAP profile and harness preference.                         │
+│ show    Show one bot binding.                                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

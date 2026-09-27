@@ -1,0 +1,16 @@
+                                                                                                    
+ Usage: merced-ai group apply [OPTIONS] {session_id} {bot}                                          
+                                                                                                    
+ Apply one bot's worktree changes to your workspace, only if they apply cleanly.                    
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    session_id      <str>  Conversation ID from `session list`. [required]                      │
+│ *    bot             <str>  The bot whose changes to apply. [required]                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --yes        -y              Apply without asking.                                               │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

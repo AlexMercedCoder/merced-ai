@@ -1,0 +1,500 @@
+ask:
+  duration_ms: int
+  exit_code: int
+  harness_id: str
+  native_session_id: str
+  output: str
+  raw: NoneType
+  session_id: str
+ask --dry-run:
+  bot:
+    api_version: str
+    harness:
+      fallbacks: []
+      preferred: str
+      requires_webmcp: bool
+    kind: str
+    name: str
+    path: str
+    profile: str
+    session:
+      resume: bool
+    source: str
+    workspace: str
+  profile:
+    description: str
+    name: str
+    path: str
+    profile_digest: str
+    revision: int
+    source: str
+    spec_digest: str
+    warnings:
+    - str
+  projection:
+    adjustments:
+    - action: str
+      field: str
+      reason: str
+    harness_id: str
+    model: NoneType
+    provisional: bool
+    support_level: str
+    system_prompt: str
+bot list:
+- api_version: str
+  harness:
+    fallbacks: []
+    preferred: str
+    requires_webmcp: bool
+  kind: str
+  name: str
+  path: str
+  profile: str
+  session:
+    resume: bool
+  source: str
+  workspace: str
+bot show:
+  api_version: str
+  harness:
+    fallbacks: []
+    preferred: str
+    requires_webmcp: bool
+  kind: str
+  name: str
+  path: str
+  profile: str
+  session:
+    resume: bool
+  source: str
+  workspace: str
+eval list:
+- created_at: str
+  duration_ms: int
+  id: str
+  profile_digest: str
+  profile_revision: int
+  ranking:
+  - str
+  results:
+  - check_score: float
+    checks:
+    - label: str
+      passed: bool
+      type: str
+    duration_ms: int
+    error: NoneType
+    harness: str
+    judge_reason: NoneType
+    judge_score: NoneType
+    output: str
+    status: str
+  sequential: bool
+  spec:
+    checks:
+    - case_sensitive: bool
+      type: str
+      value: str
+    harnesses:
+    - str
+    judge: NoneType
+    profile: str
+    prompt: str
+    timeout_seconds: int
+eval run:
+  created_at: str
+  duration_ms: int
+  id: str
+  profile_digest: str
+  profile_revision: int
+  ranking:
+  - str
+  results:
+  - check_score: float
+    checks:
+    - label: str
+      passed: bool
+      type: str
+    duration_ms: int
+    error: NoneType
+    harness: str
+    judge_reason: NoneType
+    judge_score: NoneType
+    output: str
+    status: str
+  sequential: bool
+  spec:
+    checks:
+    - case_sensitive: bool
+      type: str
+      value: str
+    harnesses:
+    - str
+    judge: NoneType
+    profile: str
+    prompt: str
+    timeout_seconds: int
+eval show:
+  created_at: str
+  duration_ms: int
+  id: str
+  profile_digest: str
+  profile_revision: int
+  ranking:
+  - str
+  results:
+  - check_score: float
+    checks:
+    - label: str
+      passed: bool
+      type: str
+    duration_ms: int
+    error: NoneType
+    harness: str
+    judge_reason: NoneType
+    judge_score: NoneType
+    output: str
+    status: str
+  sequential: bool
+  spec:
+    checks:
+    - case_sensitive: bool
+      type: str
+      value: str
+    harnesses:
+    - str
+    judge: NoneType
+    profile: str
+    prompt: str
+    timeout_seconds: int
+group ask:
+  responses:
+  - bot_name: str
+    duration_ms: int
+    exit_code: int
+    harness_id: str
+    native_session_id: str
+    output: str
+    raw: NoneType
+  session_id: str
+  worktrees: {}
+  write_serialization:
+    bots: []
+    serialized: bool
+group diff: []
+harness list:
+- broker_implements:
+    approvals: bool
+    attachments: bool
+    model_listing: bool
+    native_oap: bool
+    resume: bool
+    streaming: bool
+    webmcp: bool
+  capabilities:
+    approvals: bool
+    attachments: bool
+    model_listing: bool
+    native_oap: bool
+    resume: bool
+    streaming: bool
+    webmcp: bool
+  capabilities_verified: bool
+  duration_ms: int
+  harness_id: str
+  harness_supports:
+    approvals: bool
+    attachments: bool
+    model_listing: bool
+    native_oap: bool
+    resume: bool
+    streaming: bool
+    webmcp: bool
+  path: str
+  prompt_delivery: str
+  status: str
+  transport: str
+  version: str
+  warnings: []
+harness show:
+  broker_implements:
+    approvals: bool
+    attachments: bool
+    model_listing: bool
+    native_oap: bool
+    resume: bool
+    streaming: bool
+    webmcp: bool
+  capabilities:
+    approvals: bool
+    attachments: bool
+    model_listing: bool
+    native_oap: bool
+    resume: bool
+    streaming: bool
+    webmcp: bool
+  capabilities_verified: bool
+  duration_ms: int
+  harness_id: str
+  harness_supports:
+    approvals: bool
+    attachments: bool
+    model_listing: bool
+    native_oap: bool
+    resume: bool
+    streaming: bool
+    webmcp: bool
+  path: str
+  prompt_delivery: str
+  status: str
+  transport: str
+  version: str
+  warnings: []
+inbox approve:
+  applied:
+    approved_by: str
+    rebased: bool
+    revision: int
+    warnings: []
+  created_at: str
+  delta:
+    kind: str
+    oap: str
+    operations:
+    - op: str
+      path: str
+      reason: str
+      value:
+      - id: str
+        text: str
+    session:
+      harness: str
+      id: str
+    summary: str
+    target:
+      name: str
+      revision: int
+  history:
+  - at: str
+    by: str
+    event: str
+  id: str
+  profile: str
+  profile_path: str
+  profile_revision_at_intake: int
+  proposals: []
+  source: str
+  status: str
+  updated_at: str
+  validation_warnings: []
+inbox list:
+- created_at: str
+  delta:
+    kind: str
+    oap: str
+    operations:
+    - op: str
+      path: str
+      reason: str
+      value:
+      - id: str
+        text: str
+    session:
+      harness: str
+      id: str
+    summary: str
+    target:
+      name: str
+      revision: int
+  history:
+  - at: str
+    by: str
+    event: str
+  id: str
+  profile: str
+  profile_path: str
+  profile_revision_at_intake: int
+  proposals: []
+  source: str
+  status: str
+  updated_at: str
+  validation_warnings: []
+inbox show:
+  created_at: str
+  delta:
+    kind: str
+    oap: str
+    operations:
+    - op: str
+      path: str
+      reason: str
+      value:
+      - id: str
+        text: str
+    session:
+      harness: str
+      id: str
+    summary: str
+    target:
+      name: str
+      revision: int
+  history:
+  - at: str
+    by: str
+    event: str
+  id: str
+  profile: str
+  profile_path: str
+  profile_revision_at_intake: int
+  proposals: []
+  source: str
+  status: str
+  updated_at: str
+  validation_warnings: []
+profile effective:
+  adjustments:
+  - action: str
+    field: str
+    reason: str
+  harness_id: str
+  model: NoneType
+  provisional: bool
+  support_level: str
+  system_prompt: str
+profile list:
+- description: str
+  name: str
+  path: str
+  profile_digest: str
+  revision: int
+  source: str
+  spec_digest: str
+  warnings:
+  - str
+profile show:
+  description: str
+  document:
+    kind: str
+    metadata:
+      description: str
+      name: str
+      revision: int
+      trust: str
+    oap: str
+    spec:
+      permissions:
+        edit: str
+        shell: str
+      role:
+        instructions: str
+  name: str
+  path: str
+  profile_digest: str
+  revision: int
+  source: str
+  spec_digest: str
+  warnings:
+  - str
+profile validate:
+  description: str
+  name: str
+  path: str
+  profile_digest: str
+  revision: int
+  source: str
+  spec_digest: str
+  warnings:
+  - str
+session list:
+- bot_name: str
+  created_at: str
+  derived_from: NoneType
+  harness_id: str
+  id: str
+  isolation: str
+  kind: str
+  mode: str
+  participants:
+  - bot_name: str
+    harness_id: str
+    profile_digest: str
+    profile_name: str
+    profile_revision: int
+    spec_digest: str
+  profile_digest: str
+  profile_name: str
+  profile_revision: int
+  spec_digest: str
+  storage_revision: int
+  title: str
+  turns:
+  - bot_name: NoneType
+    content: str
+    harness_id: NoneType
+    id: str
+    native_session_id: NoneType
+    profile_digest: NoneType
+    profile_revision: NoneType
+    role: str
+    spec_digest: NoneType
+  - bot_name: str
+    content: str
+    harness_id: str
+    id: str
+    native_session_id: str
+    profile_digest: str
+    profile_revision: int
+    role: str
+    spec_digest: str
+  updated_at: str
+  workspace: str
+session show:
+  bot_name: str
+  created_at: str
+  derived_from: NoneType
+  harness_id: str
+  id: str
+  isolation: str
+  kind: str
+  mode: str
+  participants:
+  - bot_name: str
+    harness_id: str
+    profile_digest: str
+    profile_name: str
+    profile_revision: int
+    spec_digest: str
+  profile_digest: str
+  profile_name: str
+  profile_revision: int
+  spec_digest: str
+  storage_revision: int
+  title: str
+  turns:
+  - bot_name: NoneType
+    content: str
+    harness_id: NoneType
+    id: str
+    native_session_id: NoneType
+    profile_digest: NoneType
+    profile_revision: NoneType
+    role: str
+    spec_digest: NoneType
+  - bot_name: str
+    content: str
+    harness_id: str
+    id: str
+    native_session_id: str
+    profile_digest: str
+    profile_revision: int
+    role: str
+    spec_digest: str
+  updated_at: str
+  workspace: str
+status:
+  bots: int
+  installed_harnesses: int
+  profiles: int
+  sessions: int
+  workspace: str

@@ -1,0 +1,16 @@
+                                                                                                    
+ Usage: merced-ai group [OPTIONS] COMMAND [ARGS]...                                                 
+                                                                                                    
+ Collaborate with multiple OAP bots in one conversation.                                            
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────╮
+│ ask      Send one message to a new group conversation.                                           │
+│ chat     Chat with a group; use @bot, /all, /round-robin, /exit, or /quit.                       │
+│ diff     Compare what each bot changed in its worktree.                                          │
+│ apply    Apply one bot's worktree changes to your workspace, only if they apply cleanly.         │
+│ cleanup  Delete this conversation's bot worktrees and branches (unapplied changes are lost).     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

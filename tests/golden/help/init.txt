@@ -1,0 +1,10 @@
+                                                                                                    
+ Usage: merced-ai init [OPTIONS]                                                                    
+                                                                                                    
+ Create project-local Merced AI and OAP directories.                                                
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

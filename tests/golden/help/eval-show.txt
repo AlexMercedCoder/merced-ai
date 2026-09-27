@@ -1,0 +1,14 @@
+                                                                                                    
+ Usage: merced-ai eval show [OPTIONS] {eval_id}                                                     
+                                                                                                    
+ Show one eval's replies, checks, and scores.                                                       
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    eval_id      <str>  Eval ID from `eval list`. [required]                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

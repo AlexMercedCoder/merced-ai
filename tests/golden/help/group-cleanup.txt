@@ -1,0 +1,14 @@
+                                                                                                    
+ Usage: merced-ai group cleanup [OPTIONS] {session_id}                                              
+                                                                                                    
+ Delete this conversation's bot worktrees and branches (unapplied changes are lost).                
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    session_id      <str>  Conversation ID from `session list`. [required]                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --yes        -y              Remove without asking.                                              │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

@@ -1,0 +1,20 @@
+                                                                                                    
+ Usage: merced-ai acp [OPTIONS]                                                                     
+                                                                                                    
+ Serve a bot or a room as an Agent Client Protocol agent on stdin/stdout.                           
+                                                                                                    
+ Point an ACP client (for example Zed) at this command. Stdout carries only JSON-RPC;               
+ diagnostics go to stderr.                                                                          
+                                                                                                    
+ Example: merced-ai acp --bot reviewer -C ~/code/project                                            
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ *  --bot        -b      <str>   Bot to serve; repeat for a group room (2 to 12). [required]      │
+│    --workspace  -C      <path>  Project directory to use. Defaults to the current directory.     │
+│    --mode               <str>   Room dispatch: mentions, all, or round_robin [default: all]      │
+│    --worktrees                  Give each write-capable bot its own git worktree and branch so   │
+│                                 they can work at the same time without touching your files;      │
+│                                 review with `group diff` and apply with `group apply`.           │
+│    --help                       Show this message and exit.                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

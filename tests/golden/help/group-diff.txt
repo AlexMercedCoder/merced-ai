@@ -1,0 +1,17 @@
+                                                                                                    
+ Usage: merced-ai group diff [OPTIONS] {session_id} [bot]                                           
+                                                                                                    
+ Compare what each bot changed in its worktree.                                                     
+                                                                                                    
+ Example: merced-ai group diff session-1234... builder                                              
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    session_id      <str>  Conversation ID from `session list`. [required]                      │
+│      bot             <str>  Show one bot's full patch.                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

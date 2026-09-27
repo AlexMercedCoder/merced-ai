@@ -1,0 +1,13 @@
+                                                                                                    
+ Usage: merced-ai profile validate [OPTIONS] {path}                                                 
+                                                                                                    
+ Validate one OAP profile with the reference implementation.                                        
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    path      <path>  [required]                                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON instead of formatted output.                         │
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

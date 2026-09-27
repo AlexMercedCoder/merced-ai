@@ -1,0 +1,24 @@
+                                                                                                    
+ Usage: merced-ai group chat [OPTIONS] {bot_names}...                                               
+                                                                                                    
+ Chat with a group; use @bot, /all, /round-robin, /exit, or /quit.                                  
+                                                                                                    
+ Example: merced-ai group chat reviewer builder tester --mode all                                   
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    bot_names      <str>  Two or more bot names. [required]                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace                -C      <path>  Project directory to use. Defaults to the current     │
+│                                            directory.                                            │
+│ --mode                             <str>   mentions, all, or round_robin [default: mentions]     │
+│ --allow-concurrent-writes                  Let write-capable bots that share a workspace run at  │
+│                                            the same time. By default their turns run one at a    │
+│                                            time so they cannot edit the same files concurrently. │
+│ --worktrees                                Give each write-capable bot its own git worktree and  │
+│                                            branch so they can work at the same time without      │
+│                                            touching your files; review with `group diff` and     │
+│                                            apply with `group apply`.                             │
+│ --help                                     Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

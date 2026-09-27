@@ -1,0 +1,11 @@
+                                                                                                    
+ Usage: merced-ai profile list [OPTIONS]                                                            
+                                                                                                    
+ List valid profiles visible in the workspace.                                                      
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

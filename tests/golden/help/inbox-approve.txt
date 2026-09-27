@@ -1,0 +1,16 @@
+                                                                                                    
+ Usage: merced-ai inbox approve [OPTIONS] {item_id}                                                 
+                                                                                                    
+ Apply a delta's state operations. Proposals are decided separately with `inbox proposal`.          
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    item_id      <str>  Inbox item ID. [required]                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --rebase                     Re-target an id-addressed delta at the current revision.            │
+│ --yes        -y              Apply without asking.                                               │
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

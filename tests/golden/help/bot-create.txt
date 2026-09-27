@@ -1,0 +1,21 @@
+                                                                                                    
+ Usage: merced-ai bot create [OPTIONS] {name}                                                       
+                                                                                                    
+ Create a bot binding from an OAP profile and harness preference.                                   
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    name      <str>  [required]                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ *  --profile                                      <str>   [required]                             │
+│ *  --harness                                      <str>   [required]                             │
+│    --fallback                                     <str>                                          │
+│    --workspace        -C                          <path>  Project directory to use. Defaults to  │
+│                                                           the current directory.                 │
+│    --user                                                 Create a user-global binding.          │
+│    --requires-webmcp      --no-requires-webmcp            Route this bot only through harnesses  │
+│                                                           with native WebMCP support.            │
+│                                                           [default: no-requires-webmcp]          │
+│    --help                                                 Show this message and exit.            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

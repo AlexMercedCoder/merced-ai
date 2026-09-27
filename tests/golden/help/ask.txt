@@ -1,0 +1,18 @@
+                                                                                                    
+ Usage: merced-ai ask [OPTIONS] {bot_name} {prompt}                                                 
+                                                                                                    
+ Run one prompt through a bot's selected harness.                                                   
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    bot_name      <str>  [required]                                                             │
+│ *    prompt        <str>  [required]                                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --harness            <str>                                                                       │
+│ --dry-run                                                                                        │
+│ --explain                                                                                        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

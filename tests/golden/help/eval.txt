@@ -1,0 +1,14 @@
+                                                                                                    
+ Usage: merced-ai eval [OPTIONS] COMMAND [ARGS]...                                                  
+                                                                                                    
+ Run one profile and prompt on several harnesses and compare them.                                  
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────╮
+│ run   Send one prompt through several harnesses with the same profile and score the replies.     │
+│ list  List earlier evals, newest first.                                                          │
+│ show  Show one eval's replies, checks, and scores.                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

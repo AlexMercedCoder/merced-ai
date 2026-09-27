@@ -1,0 +1,19 @@
+                                                                                                    
+ Usage: merced-ai profile create [OPTIONS] {name}                                                   
+                                                                                                    
+ Create a minimal valid project-local OAP profile.                                                  
+                                                                                                    
+ Example: merced-ai profile create reviewer -d "Reviews" -i "Review." --edit deny --shell deny      
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    name      <str>  [required]                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ *  --description   -d      <str>   One-line summary. [required]                                  │
+│ *  --instructions  -i      <str>   What the bot should do. [required]                            │
+│    --edit                  <str>   Request edit permission: ask, allow, or deny.                 │
+│    --shell                 <str>   Request shell permission: ask, allow, or deny.                │
+│    --workspace     -C      <path>  Project directory to use. Defaults to the current directory.  │
+│    --help                          Show this message and exit.                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

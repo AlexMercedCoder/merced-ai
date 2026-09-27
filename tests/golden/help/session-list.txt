@@ -1,0 +1,11 @@
+                                                                                                    
+ Usage: merced-ai session list [OPTIONS]                                                            
+                                                                                                    
+ List durable project sessions.                                                                     
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --json                       Print machine-readable JSON instead of formatted output.            │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

@@ -1,0 +1,14 @@
+                                                                                                    
+ Usage: merced-ai session [OPTIONS] COMMAND [ARGS]...                                               
+                                                                                                    
+ Inspect durable local conversation sessions.                                                       
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────╮
+│ list    List durable project sessions.                                                           │
+│ show    Show a stored conversation.                                                              │
+│ resume  Resume a stored conversation using its pinned bot and harness.                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

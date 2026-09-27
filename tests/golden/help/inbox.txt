@@ -1,0 +1,20 @@
+                                                                                                    
+ Usage: merced-ai inbox [OPTIONS] COMMAND [ARGS]...                                                 
+                                                                                                    
+ Review OAP state deltas (learned state proposed by harness sessions) before applying.              
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────╮
+│ list      List state deltas waiting for review (and past decisions).                             │
+│ show      Show one delta's operations, proposals, and history.                                   │
+│ add       Import a delta into the inbox after validating it. Nothing is applied yet.             │
+│ remember  Propose a state entry from your own statement; it still waits in the inbox for         │
+│           approval.                                                                              │
+│ approve   Apply a delta's state operations. Proposals are decided separately with `inbox         │
+│           proposal`.                                                                             │
+│ reject    Reject a delta and its proposals; the profile is not changed.                          │
+│ proposal  Decide one proposal to change the profile's metadata or spec (never automatic).        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

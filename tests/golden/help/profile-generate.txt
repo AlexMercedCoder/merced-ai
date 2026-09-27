@@ -1,0 +1,18 @@
+                                                                                                    
+ Usage: merced-ai profile generate [OPTIONS] {prompt}                                               
+                                                                                                    
+ Generate and validate a portable OAP profile through an installed harness.                         
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    prompt      <str>  Describe the specialist to create. [required]                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --name               <str>                                                                       │
+│ --harness            <str>                                                                       │
+│ --scope              <str>   [default: project]                                                  │
+│ --dry-run                                                                                        │
+│ --yes                                                                                            │
+│ --workspace  -C      <path>  Project directory to use. Defaults to the current directory.        │
+│ --help                       Show this message and exit.                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

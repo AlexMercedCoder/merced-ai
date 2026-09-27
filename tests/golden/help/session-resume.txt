@@ -1,0 +1,17 @@
+                                                                                                    
+ Usage: merced-ai session resume [OPTIONS] {session_id}                                             
+                                                                                                    
+ Resume a stored conversation using its pinned bot and harness.                                     
+                                                                                                    
+╭─ Arguments ──────────────────────────────────────────────────────────────────────────────────────╮
+│ *    session_id      <str>  [required]                                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace                -C      <path>  Project directory to use. Defaults to the current     │
+│                                            directory.                                            │
+│ --allow-concurrent-writes                  Let write-capable bots that share a workspace run at  │
+│                                            the same time. By default their turns run one at a    │
+│                                            time so they cannot edit the same files concurrently. │
+│ --help                                     Show this message and exit.                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

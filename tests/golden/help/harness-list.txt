@@ -1,0 +1,10 @@
+                                                                                                    
+ Usage: merced-ai harness list [OPTIONS]                                                            
+                                                                                                    
+ List known harnesses and run safe local version probes.                                            
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --json          Print machine-readable JSON instead of formatted output.                         │
+│ --help          Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+

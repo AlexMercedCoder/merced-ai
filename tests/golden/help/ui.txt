@@ -1,0 +1,14 @@
+                                                                                                    
+ Usage: merced-ai ui [OPTIONS]                                                                      
+                                                                                                    
+ Start the optional loopback-first local web UI.                                                    
+                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────╮
+│ --workspace  -C      <path>                        Project directory to use. Defaults to the     │
+│                                                    current directory.                            │
+│ --host               <str>                         [default: 127.0.0.1]                          │
+│ --port               <int range> [1024<=x<=65535]  [default: 8765]                               │
+│ --no-open                                                                                        │
+│ --help                                             Show this message and exit.                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+
