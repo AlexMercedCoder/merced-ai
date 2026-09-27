@@ -101,6 +101,43 @@ reports `merced-ai 0.3.0` and the CLI smoke path succeeds with the OAP and AGS 1
 resolved from the built artifact. Final hosted release evidence must still come from the tagged
 commit and supported-platform CI matrix.
 
+## Live harness smoke suite (opt-in)
+
+`tests/test_live_smoke.py` runs only with `MERCED_AI_LIVE_SMOKE=1`. It has two parts:
+
+- **Flag check (no model call):** builds each adapter's exact argv and checks every flag appears in
+  the installed harness's own `--help` (or subcommand help).
+- **Answer check (one tiny call per harness):** sends "Reply with OK" through the real adapter with
+  edit and shell denied, and requires the reply to be exactly `OK` (so an echoed prompt fails).
+
+```bash
+MERCED_AI_LIVE_SMOKE=1 MERCED_AI_LIVE_SMOKE_HARNESSES=claude,codex \
+  MERCED_AI_LIVE_SMOKE_REPORT=/tmp/merced-smoke.jsonl python -m pytest --no-cov tests/test_live_smoke.py
+```
+
+Loro and MagAgent run only with `MERCED_AI_LIVE_SMOKE_NOUS=1`, against Nous Portal
+`deepseek/deepseek-v4-flash` in a throwaway `HOME` (and, for MagAgent, a throwaway user).
+`MERCED_AI_LIVE_SMOKE_GEMINI_API_KEY=1` runs Gemini with a throwaway `HOME` so it uses
+`GEMINI_API_KEY`. The user's real harness configuration is never read or changed by those runs.
+The report file redacts anything that looks like a key.
+
+### Results, 2026-09-27 (Linux)
+
+Flag check: all 13 working installed harnesses passed; Anton was skipped because its installed
+tool environment fails to import (`anton version` raises), not because of an adapter flag.
+
+| Harness | Version | Prompt delivery | Result |
+| --- | --- | --- | --- |
+| Claude Code | 2.1.282 | stdin + system-prompt file | `OK` |
+| Codex | 0.155.0 | stdin (`exec -`) | `OK` |
+| Gemini CLI | 0.57.0 | stdin | `OK` with API-key auth. The machine's cached Google login fails with "client no longer supported for Gemini Code Assist for individuals", an account issue outside Merced AI. |
+| Goose | 1.48.0 | stdin (`--instructions -`) | `OK` after a fix: the reply had been the echoed user message |
+| OpenCode | 1.18.31 | stdin | `OK` after a fix: the reply had been empty |
+| MagAgent | 1.3.0 (repo build) | argument | `OK` via Nous after a fix: the reply had been empty; the globally installed 1.1.2 needs `magent user create` first |
+| Loro | 0.21.0 (repo build) and 0.19.2 | argument | Not passing. Merced AI delivered the run, but `loro run` reported `provider_error` (HTTP 401 with an OpenAI-style "Incorrect API key" message) while `loro providers smoke` with the same config and key returned `ok`. This is a Loro issue; Merced AI now reports it as a failed run instead of returning the summary as the reply. |
+
+Model calls made: about 17, all one-line prompts (9 through the suite across four runs while fixing the issues above, 8 manual reproductions); the Loro attempts were rejected with HTTP 401.
+
 ## Known boundaries
 
 - A version probe verifies executable readiness only, not authentication, provider quota, model

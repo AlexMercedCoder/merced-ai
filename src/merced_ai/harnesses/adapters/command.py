@@ -444,6 +444,12 @@ class CommandHarnessAdapter:
                 stderr=result.stderr,
             )
         output, raw, native_session_id = _normalize_output(self.descriptor.id, result.stdout)
+        if raw and raw.get("stop_reason") == "provider_error":
+            raise HarnessRunError(
+                f"Harness {self.descriptor.id!r} failed: {output[:500] or 'provider error'}",
+                exit_code=1,
+                stderr=result.stderr,
+            )
         embedded_error = _find_error(raw) if raw else None
         if not output and embedded_error:
             raise HarnessRunError(
@@ -476,6 +482,8 @@ def _normalize_output(
     harness_id: str, stdout: str
 ) -> tuple[str, dict[str, Any] | None, str | None]:
     text = stdout.strip()
+    if harness_id == "loro":
+        return _normalize_loro(text)
     if harness_id == "anton":
         clean = ANSI_ESCAPE_RE.sub("", text)
         responses = re.findall(r"(?:^|\n)anton>\s*(.*?)(?=\n(?:you>|anton>)|\Z)", clean, re.DOTALL)
@@ -492,15 +500,23 @@ def _normalize_output(
         "prime-agent",
         "openclaw",
     }:
+        streamed = False
         try:
             payload = json.loads(text)
         except json.JSONDecodeError:
             payload = _parse_json_lines(text)
+            streamed = payload is not None
+            if payload is None:
+                payload = _parse_trailing_object(text)
             if payload is None:
                 return text, None, None
-        if "events" in payload:
-            output = _find_assistant_text(payload)
-        else:
+        if not isinstance(payload, dict):
+            return text, None, None
+        # An explicit top-level answer wins. Otherwise use the assistant's turn: transcripts
+        # (Goose "messages", JSONL event streams) also contain the user's own message, which
+        # must never come back as the reply.
+        output = _top_level_text(payload) or _find_assistant_text(payload)
+        if output is None and not streamed:
             output = _find_text(payload)
         output = output or ""
         session_id = _find_string(payload, ("session_id", "sessionId"))
@@ -508,14 +524,54 @@ def _normalize_output(
     return text, None, None
 
 
+LORO_SUMMARY_RE = re.compile(r"^Loro \w+ mode completed\.", re.MULTILINE)
+LORO_RUN_TRAILER_RE = re.compile(r"\n+Run [0-9a-fA-F-]{36} \(export:[^\n]*\)\s*$")
+
+
+def _normalize_loro(text: str) -> tuple[str, dict[str, Any] | None, str | None]:
+    """Return the model's reply from `loro run`'s plain-text summary.
+
+    `loro run` prints a run summary (provider, stop reason, steps, prompt, tools) that ends with
+    "Model response: ...". Only the response is the bot's answer; the stop reason is kept so a
+    provider error is reported as a failure instead of as the reply.
+    """
+    if not LORO_SUMMARY_RE.search(text) or "\nModel response: " not in text:
+        return text, None, None
+    response = text.rsplit("\nModel response: ", 1)[1]
+    response = LORO_RUN_TRAILER_RE.sub("", response).strip()
+    raw: dict[str, Any] = {}
+    if match := re.search(r"^Stop reason: (\S+)", text, re.MULTILINE):
+        raw["stop_reason"] = match.group(1)
+    if match := re.search(r"^Provider: (.+)$", text, re.MULTILINE):
+        raw["provider"] = match.group(1).strip()
+    if match := LORO_RUN_TRAILER_RE.search(text):
+        raw["run_id"] = match.group(0).split()[1]
+    return response, raw, None
+
+
 def _parse_json_lines(text: str) -> dict[str, Any] | None:
     values: list[Any] = []
     for line in text.splitlines():
         try:
-            values.append(json.loads(line))
+            value = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if isinstance(value, dict):
+            values.append(value)
     return {"events": values} if values else None
+
+
+def _parse_trailing_object(text: str) -> dict[str, Any] | None:
+    """Parse one pretty-printed JSON object that follows status lines (MagAgent prints a
+    "Loaded N skills" line before its --json document)."""
+    for match in re.finditer(r"^\{", text, re.MULTILINE):
+        try:
+            value, end = json.JSONDecoder().raw_decode(text, match.start())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict) and not text[end:].strip():
+            return value
+    return None
 
 
 def _stdin_payload(harness_id: str, request: RunRequest) -> str | None:
@@ -551,6 +607,14 @@ def _qualified_model(profile: ProfileRecord, model: str) -> str:
     return f"{provider}/{model}" if provider and "/" not in model else model
 
 
+def _top_level_text(value: dict[str, Any]) -> str | None:
+    for key in ("result", "response", "output", "answer"):
+        candidate = value.get(key)
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate.strip()
+    return None
+
+
 def _find_text(value: Any) -> str | None:
     if isinstance(value, dict):
         for key in ("result", "response", "output", "answer", "content", "text"):
@@ -571,9 +635,30 @@ def _find_text(value: Any) -> str | None:
 
 def _find_assistant_text(value: Any) -> str | None:
     candidates: list[str] = []
+    # OpenCode `run --format json` streams parts: {"type": "text", "part": {"type": "text", ...}}.
+    part_texts: dict[str, list[str]] = {}
+    part_order: list[str] = []
 
     def visit(item: Any) -> None:
         if isinstance(item, dict):
+            part = item.get("part")
+            if (
+                item.get("type") == "text"
+                and isinstance(part, dict)
+                and part.get("type") == "text"
+                and isinstance(part.get("text"), str)
+                and part["text"].strip()
+            ):
+                message_id = str(part.get("messageID") or "")
+                if message_id not in part_texts:
+                    part_texts[message_id] = []
+                    part_order.append(message_id)
+                part_texts[message_id].append(part["text"].strip())
+                return
+            if item.get("type") == "assistant_message" and isinstance(item.get("content"), str):
+                # MagAgent --events records.
+                if item["content"].strip():
+                    candidates.append(item["content"].strip())
             if item.get("role") == "assistant":
                 content = item.get("content")
                 if isinstance(content, str) and content.strip():
@@ -591,6 +676,8 @@ def _find_assistant_text(value: Any) -> str | None:
                 visit(child)
 
     visit(value)
+    if part_order:
+        return "\n\n".join(part_texts[part_order[-1]])
     return candidates[-1] if candidates else None
 
 

@@ -440,3 +440,114 @@ def test_kimi_accepts_merced_config_file_override(
     command = _build(_adapter("kimi"), _request("kimi", workspace))
 
     assert command[command.index("--config-file") + 1] == str(config_file)
+
+
+def test_goose_transcript_returns_the_assistant_reply_not_the_prompt() -> None:
+    # Shape observed from `goose run --output-format json` 1.48 in the M-5 live smoke run.
+    stdout = json.dumps(
+        {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "Reply with OK"}]},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "The user wants OK."},
+                        {"type": "text", "text": "OK"},
+                    ],
+                },
+            ],
+            "metadata": {"status": "completed"},
+        }
+    )
+
+    output, raw, _ = _normalize_output("goose", stdout)
+
+    assert output == "OK"
+    assert raw is not None
+
+
+def test_opencode_json_parts_return_the_final_message_text() -> None:
+    # Shape observed from `opencode run --format json` 1.18 in the M-5 live smoke run.
+    events = [
+        {"type": "step_start", "part": {"type": "step-start", "messageID": "m1"}},
+        {"type": "text", "part": {"type": "text", "messageID": "m1", "text": "Looking."}},
+        {"type": "tool_use", "part": {"type": "tool", "messageID": "m1"}},
+        {"type": "text", "part": {"type": "text", "messageID": "m2", "text": "First part."}},
+        {"type": "text", "part": {"type": "text", "messageID": "m2", "text": "OK"}},
+        {"type": "step_finish", "part": {"type": "step-finish", "messageID": "m2"}},
+    ]
+    stdout = "\n".join(json.dumps(item) for item in events)
+
+    output, raw, _ = _normalize_output("opencode", stdout)
+
+    assert output == "First part.\n\nOK"
+    assert raw is not None and len(raw["events"]) == len(events)
+
+
+def test_json_document_after_status_lines_is_parsed() -> None:
+    # MagAgent 1.3 prints a status line before its pretty-printed --json document.
+    stdout = "Loaded 3 skills\n" + json.dumps(
+        {"ok": True, "response": "OK", "session_id": "s-1"}, indent=2
+    )
+
+    output, raw, session_id = _normalize_output("magagent", stdout)
+
+    assert output == "OK"
+    assert raw is not None and raw["ok"] is True
+    assert session_id == "s-1"
+
+
+LORO_SUMMARY = (
+    "Loro run mode completed.\n\nProvider: nous / deepseek/deepseek-v4-flash\n\n"
+    "Stop reason: {stop}\nSteps: 1\n\nPrompt: Reply with OK\n\nModel response: {response}\n\n"
+    "Run d2005c43-3414-4806-a619-6cc5d4aadb94 (export: loro run export "
+    "d2005c43-3414-4806-a619-6cc5d4aadb94 --out run.zip)\n"
+)
+
+
+def test_loro_summary_returns_only_the_model_response() -> None:
+    output, raw, _ = _normalize_output(
+        "loro", LORO_SUMMARY.format(stop="completed", response="OK\nsecond line")
+    )
+
+    assert output == "OK\nsecond line"
+    assert raw == {
+        "stop_reason": "completed",
+        "provider": "nous / deepseek/deepseek-v4-flash",
+        "run_id": "d2005c43-3414-4806-a619-6cc5d4aadb94",
+    }
+
+
+def test_loro_provider_error_is_a_failed_run(workspace, monkeypatch) -> None:
+    from merced_ai.harnesses.process import ChildResult
+
+    executable = workspace / "loro"
+    executable.touch()
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.locate_executable", lambda _descriptor: executable
+    )
+    summary = LORO_SUMMARY.format(
+        stop="provider_error", response="Provider error: nous returned HTTP 401"
+    )
+    monkeypatch.setattr(
+        "merced_ai.harnesses.adapters.command.run_child",
+        lambda *_args, **_kwargs: ChildResult(summary, "", 0, False),
+    )
+
+    with pytest.raises(HarnessRunError, match="HTTP 401"):
+        _adapter("loro").run(_request("loro", workspace))
+
+
+def test_magagent_events_document_returns_the_response() -> None:
+    stdout = "Loaded 3 skills\n" + json.dumps(
+        {
+            "ok": True,
+            "events": [
+                {"type": "user_message", "content": "Reply with OK"},
+                {"type": "assistant_message", "content": "OK"},
+            ],
+        },
+        indent=2,
+    )
+
+    assert _normalize_output("magagent", stdout)[0] == "OK"

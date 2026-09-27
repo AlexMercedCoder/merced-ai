@@ -1,7 +1,9 @@
 # Harness compatibility
 
 This matrix separates executable discovery, adapter contract tests, and authenticated live runs.
-It was last updated on 2026-08-27.
+It was last updated on 2026-08-27. The 2026-09-27 smoke results for the stdin prompt delivery
+added in 0.8.0 are in [validation](MVP_VALIDATION.md#results-2026-09-27-linux); they supersede the
+live column below for Claude Code, Codex, Gemini CLI, Goose, OpenCode, MagAgent, and Loro.
 
 | Harness | Adapter | Contract-tested | Installed here | Live-qualified |
 | --- | --- | --- | --- | --- |
@@ -48,8 +50,10 @@ clean normalized exact-token response and no intermediate tool activity.
 
 Merced AI sends the prompt through stdin or a private temporary file wherever the harness accepts
 one, and keeps it on the command line only when there is no other input. Each mechanism below was
-confirmed from the installed harness's own help output or source on 2026-09-27; the live smoke
-suite (`MERCED_AI_LIVE_SMOKE=1`, see [validation](MVP_VALIDATION.md)) exercises the exact flags.
+confirmed from the installed harness's own help output or source on 2026-09-27. The live smoke
+suite (`MERCED_AI_LIVE_SMOKE=1`, see [validation](MVP_VALIDATION.md)) then ran the exact flags
+end to end for Claude Code, Codex, Gemini CLI, Goose, OpenCode, and MagAgent; the Pi, Prime Agent,
+OpenClaw, Kimi, DSH, and AGY mechanisms are confirmed from help or source only.
 
 | Harness | Prompt | Profile or system prompt | Evidence |
 | --- | --- | --- | --- |

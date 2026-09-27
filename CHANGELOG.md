@@ -27,6 +27,13 @@ Targets 0.8.0.
   (inline `style` attributes) and now apply through the CSSOM. Management cards stack on phones
   instead of squeezing their text into a narrow column, and small secondary text meets a higher
   contrast ratio in both themes.
+- Output normalization found by the live smoke suite: Goose returned the user's own message as
+  the reply (its JSON transcript lists the user turn first); OpenCode 1.18 returned an empty reply
+  (it streams `text` parts rather than role-tagged messages); MagAgent 1.3 returned an empty reply
+  (it prints a status line before its JSON and tags turns as `assistant_message` events). Explicit
+  top-level answers (`result`, `response`) now win, then the assistant's own turn; a user turn is
+  never returned. `loro run` summaries now yield only the "Model response" text, and a Loro
+  `provider_error` stop is reported as a failed run instead of as the reply.
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
 
@@ -39,6 +46,10 @@ Targets 0.8.0.
   `group chat`, and `session resume`, or the **Run at the same time** toggle in the web UI. See
   [Shared-workspace writes](docs/GROUP_CHAT.md#shared-workspace-writes).
 - Every `--workspace/-C` and `--json` option now has help text.
+- An opt-in live smoke suite (`MERCED_AI_LIVE_SMOKE=1`, `tests/test_live_smoke.py`) checks that
+  every adapter flag appears in the installed harness's help and sends one "Reply with OK" turn
+  through each selected harness. Loro and MagAgent run against Nous Portal in a throwaway `HOME`.
+  Results for 2026-09-27 are in [validation](docs/MVP_VALIDATION.md).
 - A Windows CI test cancels a run whose child has spawned a grandchild and checks that the
   grandchild is gone (`taskkill /T`). It is skipped on other platforms with a reason; the POSIX
   process-group case keeps its own test.

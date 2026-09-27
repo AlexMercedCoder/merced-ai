@@ -33,7 +33,8 @@ An adapter change should include:
 - explicit workspace, timeout, cancellation, and output behavior;
 - honest OAP field projection and degradation reporting;
 - controlled contract tests for success, failure, and malformed output;
-- a disposable no-tool live qualification when the harness is available; and
+- a disposable no-tool live qualification when the harness is available (the opt-in
+  `MERCED_AI_LIVE_SMOKE=1` suite in `tests/test_live_smoke.py`); and
 - compatibility and troubleshooting documentation.
 
 Do not add provider secrets, personal paths, harness state, generated sessions, or live logs to the
