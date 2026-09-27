@@ -8,6 +8,8 @@ Use this index as the release documentation entry point.
   variables.
 - [Harness compatibility](COMPATIBILITY.md): adapter behavior and live qualification status.
 - [Harness adapter plugins](PLUGINS.md): the adapter API, entry points, and the contract-test kit.
+- [Serving Merced AI](SERVING.md): run a bot or room as an ACP agent for editors, or through the
+  experimental A2A endpoint.
 - [Executable detection](DETECTION.md): discovery order, operating-system coverage, overrides, and
   known limits.
 - [Architecture](ARCHITECTURE.md): component boundaries, execution flow, data ownership, and

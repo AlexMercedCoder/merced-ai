@@ -229,6 +229,44 @@ def ui(
         _fail(str(exc), 2)
 
 
+@app.command("acp")
+def acp_serve(
+    bot: Annotated[
+        list[str],
+        typer.Option("--bot", "-b", help="Bot to serve; repeat for a group room (2 to 12)."),
+    ],
+    workspace: Annotated[
+        Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
+    ] = DEFAULT_WORKSPACE,
+    mode: Annotated[str, typer.Option(help="Room dispatch: mentions, all, or round_robin")] = "all",
+    worktrees: Annotated[bool, typer.Option("--worktrees", help=WORKTREES_HELP)] = False,
+) -> None:
+    """Serve a bot or a room as an Agent Client Protocol agent on stdin/stdout.
+
+    Point an ACP client (for example Zed) at this command. Stdout carries only JSON-RPC;
+    diagnostics go to stderr.
+
+    Example: merced-ai acp --bot reviewer -C ~/code/project
+    """
+    from merced_ai.acp_server import MercedAcpAgent
+
+    if mode not in {"mentions", "all", "round_robin"}:
+        _fail("mode must be mentions, all, or round_robin", 2)
+    try:
+        agent = MercedAcpAgent(
+            workspace,
+            tuple(bot),
+            mode=mode,
+            isolation="worktree" if worktrees else "shared",
+        )
+    except ValueError as exc:
+        _fail(str(exc), 2)
+    error_console.print(
+        f"Merced AI ACP agent serving {', '.join(bot)} in {workspace.resolve()} (stdio)."
+    )
+    agent.serve()
+
+
 @profile_app.command("list")
 def profile_list(
     workspace: Annotated[

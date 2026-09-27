@@ -84,6 +84,15 @@ Targets 0.8.0.
   worktrees**. Non-git workspaces fall back to taking turns. See
   [Worktree isolation](docs/GROUP_CHAT.md#worktree-isolation).
 
+- `merced-ai acp --bot NAME [--bot NAME ...]` serves a bot or a room as an ACP agent over stdio
+  (for editors such as Zed): sessions are durable Merced AI conversations with `session/load`,
+  ACP harness replies stream through, running a write-capable bot needs the client user's consent
+  once per session, and harness permission requests are forwarded as `session/request_permission`.
+- Experimental A2A endpoint on the UI server: agent card at `/.well-known/agent-card.json` and
+  JSON-RPC `message/send`, `tasks/get`, `tasks/cancel` at `/a2a`, behind the same loopback
+  binding and token (`Authorization: Bearer`). Write-capable bots need `metadata.approved`;
+  streaming and push notifications are not implemented. See [Serving](docs/SERVING.md).
+
 ### Changed
 
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the

@@ -146,6 +146,10 @@ copyable native-harness handoff command. See the
 The layout is responsive down to a compact mobile collaboration view. See the
 [mobile group-chat screenshot](docs/screenshots/merced-ai-group-mobile.jpg).
 
+Editors and other agents can drive a bot or a room too: `merced-ai acp --bot reviewer` serves it
+as an Agent Client Protocol agent (for example in Zed), and `merced-ai ui` also exposes an
+experimental A2A endpoint. See [Serving Merced AI](docs/SERVING.md).
+
 Use `-C PATH` on project-aware commands to select another workspace. Use `--json` on read and
 one-shot commands for automation.
 

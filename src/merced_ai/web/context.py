@@ -6,7 +6,7 @@ import secrets
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 from urllib.parse import urlsplit
 
 from fastapi import Depends, HTTPException, Request
@@ -28,6 +28,8 @@ class WebContext:
     supervisor: RunSupervisor
     probes: HarnessProbeCache
     cancellations: dict[str, threading.Event] = field(default_factory=dict)
+    # A2A tasks served by this process (kept in memory; the conversation itself is durable).
+    a2a_tasks: dict[str, dict[str, Any]] = field(default_factory=dict)
     cancellation_lock: threading.Lock = field(default_factory=threading.Lock)
 
     def register_cancellation(self, run_id: str) -> threading.Event:
@@ -53,7 +55,12 @@ def get_context(request: Request) -> WebContext:
 def authorize(request: Request, *, mutation: bool = False) -> WebContext:
     """Require the session cookie (or header) and, for mutations, a same-origin request."""
     context = get_context(request)
-    supplied = request.cookies.get(COOKIE_NAME) or request.headers.get("x-merced-ai-token")
+    bearer = request.headers.get("authorization", "")
+    supplied = (
+        request.cookies.get(COOKIE_NAME)
+        or request.headers.get("x-merced-ai-token")
+        or (bearer[7:].strip() if bearer.lower().startswith("bearer ") else None)
+    )
     if context.access_token and not secrets.compare_digest(supplied or "", context.access_token):
         raise HTTPException(status_code=401, detail="Invalid local UI token")
     if mutation:
