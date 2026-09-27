@@ -54,6 +54,15 @@ Targets 0.8.0.
   grandchild is gone (`taskkill /T`). It is skipped on other platforms with a reason; the POSIX
   process-group case keeps its own test.
 
+- Harness adapter plugin API (version 1): an adapter is a `HarnessSpec` (descriptor, a build
+  function, projection style, output format). Installed packages add adapters through the
+  `merced_ai.harnesses` entry-point group; broken or conflicting plugins are skipped and reported
+  by `harness list` and `doctor`, and `harness show` names the package that provided an adapter.
+  `merced_ai.testing.contract.check_harness_spec` is a contract-test kit for adapter authors. All
+  fourteen built-in adapters now use this API (the per-harness `if`/`elif` chain is gone) and pass
+  the kit. `MERCED_AI_DISABLE_PLUGINS=1` loads only built-ins. See
+  [Harness adapter plugins](docs/PLUGINS.md).
+
 ### Changed
 
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the

@@ -1,0 +1,157 @@
+"""Public adapter plugin API (version 1).
+
+A harness adapter is described by a :class:`HarnessSpec`: a descriptor, a function that builds
+one noninteractive invocation, how the profile is projected, and how stdout becomes a reply.
+Merced AI's generic subprocess runner does the rest: executable discovery, private temp files,
+the argv size guard, bounded capture, cancellation, the AAIS approval channel, and error
+reporting. All built-in adapters are specs (see ``merced_ai.harnesses.builtin``).
+
+Third-party adapters are installed packages that declare an entry point in the
+``merced_ai.harnesses`` group. The entry point may load a ``HarnessSpec``, a zero-argument
+callable returning one, or a complete adapter object implementing
+:class:`~merced_ai.harnesses.base.HarnessAdapter`::
+
+    [project.entry-points."merced_ai.harnesses"]
+    myharness = "my_package.merced:SPEC"
+
+Validate a plugin with ``merced_ai.testing.contract.check_harness_spec``.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal
+
+from merced_ai.harnesses.output import NormalizedOutput
+from merced_ai.models import HarnessDescriptor, ProfileRecord, PromptDelivery, RunRequest
+
+ADAPTER_API_VERSION = 1
+ENTRY_POINT_GROUP = "merced_ai.harnesses"
+
+# How the OAP profile reaches the harness:
+# - "native": the harness loads the project profile by name when it is discoverable, otherwise
+#   it falls back to "prefixed".
+# - "system_prompt": the profile goes through a system-prompt flag or file.
+# - "prefixed": the profile is delimited context at the top of the prompt.
+ProjectionStyle = Literal["native", "system_prompt", "prefixed"]
+
+
+@dataclass(frozen=True)
+class HarnessInvocation:
+    """One harness process: its argv, how the prompt travels, and the stdin payload."""
+
+    argv: list[str]
+    prompt_delivery: PromptDelivery
+    stdin: str | None = None
+
+
+def write_private(path: Path, content: str) -> Path:
+    """Write a file readable only by the current user (mode 0600 on POSIX)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="") as handle:
+        handle.write(content)
+    return path
+
+
+def prefixed_prompt(system_prompt: str, prompt: str) -> str:
+    return (
+        f"{system_prompt}\n\n"
+        "The surrounding harness instructions and permission policy remain authoritative.\n\n"
+        f"User request:\n{prompt}"
+    )
+
+
+def native_profile_visible(profile: ProfileRecord) -> bool:
+    """True when the profile lives where MagAgent and Loro discover project profiles."""
+    parent = profile.path.parent
+    return profile.source == "project" and (
+        parent.name == ".agents" or (parent.name == "agents" and parent.parent.name == ".magent")
+    )
+
+
+def profile_provider(profile: ProfileRecord) -> str | None:
+    provider = profile.document.get("spec", {}).get("model", {}).get("provider")
+    return provider if isinstance(provider, str) and provider else None
+
+
+def qualified_model(profile: ProfileRecord, model: str) -> str:
+    """``provider/model`` for multi-provider harnesses, unless the ID is already qualified."""
+    provider = profile_provider(profile)
+    return f"{provider}/{model}" if provider and "/" not in model else model
+
+
+@dataclass(frozen=True)
+class InvocationContext:
+    """Everything a spec's ``build`` function needs to construct one invocation."""
+
+    request: RunRequest
+    executable: Path
+    scratch: Path
+
+    @property
+    def profile(self) -> ProfileRecord:
+        return self.request.profile
+
+    @property
+    def prompt(self) -> str:
+        return self.request.prompt
+
+    @property
+    def system_prompt(self) -> str:
+        return self.request.projection.system_prompt
+
+    @property
+    def prefixed_prompt(self) -> str:
+        """The profile as delimited context followed by the user request."""
+        return prefixed_prompt(self.system_prompt, self.prompt)
+
+    @property
+    def model(self) -> str | None:
+        return self.request.projection.model
+
+    @property
+    def workspace(self) -> Path:
+        return self.request.workspace
+
+    @property
+    def native_profile(self) -> bool:
+        return native_profile_visible(self.profile)
+
+    def permission(self, name: str) -> str | None:
+        value = self.profile.document.get("spec", {}).get("permissions", {}).get(name)
+        return value if isinstance(value, str) else None
+
+    @property
+    def edit_denied(self) -> bool:
+        return self.permission("edit") == "deny"
+
+    @property
+    def shell_denied(self) -> bool:
+        return self.permission("shell") == "deny"
+
+    def private_file(self, name: str, content: str) -> Path:
+        """A 0600 file in this run's private temp directory, removed after the run."""
+        return write_private(self.scratch / name, content)
+
+
+@dataclass(frozen=True)
+class HarnessSpec:
+    """Declarative definition of a subprocess harness adapter."""
+
+    descriptor: HarnessDescriptor
+    build: Callable[[InvocationContext], HarnessInvocation]
+    projection: ProjectionStyle = "prefixed"
+    # Providers whose model IDs the harness accepts; None means it accepts any provider.
+    compatible_providers: frozenset[str] | None = None
+    # "json", "text", or a function from stdout to (reply, payload, native session ID).
+    output: Literal["json", "text"] | Callable[[str], NormalizedOutput] = "text"
+    # Extra environment variables for the child process.
+    env: Callable[[InvocationContext], dict[str, str]] | None = None
+    # The harness speaks AAIS 1.0 envelopes on stdout/stdin (stdin is then not a prompt channel).
+    aais_control: bool = False
+    api_version: int = ADAPTER_API_VERSION
+    # Where the adapter came from: "builtin" or the distribution that provided the entry point.
+    origin: str = field(default="builtin", compare=False)

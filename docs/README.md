@@ -7,6 +7,7 @@ Use this index as the release documentation entry point.
 - [Configuration](CONFIGURATION.md): profiles, bots, storage, provider routing, and environment
   variables.
 - [Harness compatibility](COMPATIBILITY.md): adapter behavior and live qualification status.
+- [Harness adapter plugins](PLUGINS.md): the adapter API, entry points, and the contract-test kit.
 - [Executable detection](DETECTION.md): discovery order, operating-system coverage, overrides, and
   known limits.
 - [Architecture](ARCHITECTURE.md): component boundaries, execution flow, data ownership, and

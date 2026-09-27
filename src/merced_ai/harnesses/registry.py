@@ -1,4 +1,4 @@
-"""Adapter registry and built-in harness metadata."""
+"""Adapter registry: built-in harness specs plus adapters installed as entry-point plugins."""
 
 from __future__ import annotations
 
@@ -6,18 +6,16 @@ import os
 import threading
 import time
 from collections.abc import Iterable
+from dataclasses import replace
+from importlib import metadata
 from pathlib import Path
+from typing import Any
 
 from merced_ai.harnesses.adapters.command import CommandHarnessAdapter
-from merced_ai.harnesses.adapters.executable import ExecutableProbeAdapter
+from merced_ai.harnesses.api import ADAPTER_API_VERSION, ENTRY_POINT_GROUP, HarnessSpec
 from merced_ai.harnesses.base import HarnessAdapter
-from merced_ai.models import (
-    HarnessCapabilities,
-    HarnessDescriptor,
-    HarnessProbe,
-    PromptDelivery,
-    TransportKind,
-)
+from merced_ai.harnesses.builtin import BUILTIN_SPECS
+from merced_ai.models import HarnessDescriptor, HarnessProbe
 
 DEFAULT_PROBE_TTL_SECONDS = 30.0
 
@@ -35,6 +33,8 @@ class HarnessRegistry:
         self._adapters: dict[str, HarnessAdapter] = {}
         self._probe_cache: dict[tuple[str, str], tuple[float, HarnessProbe]] = {}
         self._probe_lock = threading.Lock()
+        # Plugins that failed to load, as (entry point name, reason); shown by `harness list`.
+        self.plugin_errors: list[tuple[str, str]] = []
         for adapter in adapters:
             self.register(adapter)
 
@@ -87,120 +87,43 @@ class HarnessRegistry:
         return tuple(adapter.probe() for adapter in self._adapters.values())
 
 
+def adapter_from_plugin(value: Any, origin: str) -> HarnessAdapter:
+    """Accept a HarnessSpec, a zero-argument factory returning one, or a full adapter object."""
+    if (
+        callable(value)
+        and not isinstance(value, HarnessSpec)
+        and not isinstance(value, HarnessAdapter)
+    ):
+        value = value()
+    if isinstance(value, HarnessSpec):
+        if value.api_version != ADAPTER_API_VERSION:
+            raise ValueError(
+                f"adapter API version {value.api_version} is not supported "
+                f"(this Merced AI implements version {ADAPTER_API_VERSION})"
+            )
+        return CommandHarnessAdapter(replace(value, origin=origin))
+    if isinstance(value, HarnessAdapter):
+        return value
+    raise TypeError("entry point must provide a HarnessSpec or a HarnessAdapter")
+
+
+def load_plugins(registry: HarnessRegistry) -> None:
+    """Register adapters from the ``merced_ai.harnesses`` entry-point group.
+
+    A plugin cannot replace a built-in or an earlier plugin, and a plugin that fails to load is
+    recorded in ``registry.plugin_errors`` instead of breaking the CLI.
+    """
+    if os.environ.get("MERCED_AI_DISABLE_PLUGINS") == "1":
+        return
+    for entry in metadata.entry_points(group=ENTRY_POINT_GROUP):
+        origin = entry.dist.name if entry.dist is not None else entry.value
+        try:
+            registry.register(adapter_from_plugin(entry.load(), origin))
+        except Exception as error:  # A broken plugin must not take the broker down.
+            registry.plugin_errors.append((entry.name, f"{type(error).__name__}: {error}"))
+
+
 def default_registry() -> HarnessRegistry:
-    runnable = {
-        "codex",
-        "claude",
-        "gemini",
-        "opencode",
-        "goose",
-        "loro",
-        "magagent",
-        "anton",
-        "dsh",
-        "agy",
-        "pi",
-        "prime-agent",
-        "openclaw",
-        "kimi",
-    }
-    return HarnessRegistry(
-        CommandHarnessAdapter(item) if item.id in runnable else ExecutableProbeAdapter(item)
-        for item in _BUILTIN_DESCRIPTORS
-    )
-
-
-# What the harnesses document for their own interactive or protocol surfaces. Merced AI records
-# these for reference only; it does not use them yet.
-_NATIVE_SESSION = HarnessCapabilities(
-    streaming=True,
-    resume=True,
-    approvals=True,
-    attachments=True,
-    model_listing=True,
-)
-
-# What Merced AI delivers end to end through a noninteractive subprocess adapter: output arrives
-# when the run completes, each turn starts a fresh harness process with a bounded transcript, and
-# selected workspace files are inlined into the prompt as context.
-_BROKER_SUBPROCESS = HarnessCapabilities(attachments=True)
-
-# MagAgent and Loro additionally relay AAIS approvals over stdio, receive project OAP profiles
-# natively, and can satisfy WebMCP routing once their readiness report is verified.
-_BROKER_AAIS_NATIVE = _BROKER_SUBPROCESS.model_copy(
-    update={"approvals": True, "native_oap": True, "webmcp": True}
-)
-
-
-def _descriptor(
-    harness_id: str,
-    name: str,
-    executable: str,
-    *,
-    transports: tuple[TransportKind, ...] = (TransportKind.STRUCTURED_SUBPROCESS,),
-    harness_supports: HarnessCapabilities = _NATIVE_SESSION,
-    broker_implements: HarnessCapabilities = _BROKER_SUBPROCESS,
-    version_args: tuple[str, ...] = ("--version",),
-    prompt_delivery: PromptDelivery = PromptDelivery.STDIN,
-) -> HarnessDescriptor:
-    return HarnessDescriptor(
-        id=harness_id,
-        name=name,
-        executable_names=(executable,),
-        transports=transports,
-        version_args=version_args,
-        harness_supports=harness_supports,
-        broker_implements=broker_implements,
-        prompt_delivery=prompt_delivery,
-    )
-
-
-_NATIVE_OAP = _NATIVE_SESSION.model_copy(update={"native_oap": True, "webmcp": True})
-
-_BUILTIN_DESCRIPTORS = (
-    _descriptor("codex", "Codex", "codex"),
-    _descriptor("claude", "Claude Code", "claude"),
-    _descriptor("gemini", "Gemini CLI", "gemini"),
-    _descriptor("opencode", "OpenCode", "opencode"),
-    _descriptor("goose", "Goose", "goose"),
-    _descriptor(
-        "loro",
-        "Loro",
-        "loro",
-        harness_supports=_NATIVE_OAP,
-        broker_implements=_BROKER_AAIS_NATIVE,
-        # stdin carries the AAIS approval channel, and neither CLI reads a prompt file yet.
-        prompt_delivery=PromptDelivery.ARGV,
-    ),
-    _descriptor(
-        "magagent",
-        "MagAgent",
-        "magent",
-        harness_supports=_NATIVE_OAP,
-        broker_implements=_BROKER_AAIS_NATIVE,
-        # stdin carries the AAIS approval channel, and neither CLI reads a prompt file yet.
-        prompt_delivery=PromptDelivery.ARGV,
-    ),
-    _descriptor(
-        "anton",
-        "Anton",
-        "anton",
-        transports=(TransportKind.TEXT_SUBPROCESS,),
-        version_args=("version",),
-        harness_supports=_NATIVE_SESSION.model_copy(update={"model_listing": False}),
-    ),
-    _descriptor(
-        "dsh",
-        "DeepSeek Harness",
-        "dsh",
-        harness_supports=_NATIVE_SESSION.model_copy(update={"attachments": False}),
-        # The headless profile takes its task only from the command line.
-        prompt_delivery=PromptDelivery.ARGV,
-    ),
-    # Print mode reads stdin only as stream-json; plain-text stdin is unconfirmed, so argv stays.
-    _descriptor("agy", "Antigravity CLI", "agy", prompt_delivery=PromptDelivery.ARGV),
-    _descriptor("pi", "Pi Coding Agent", "pi"),
-    _descriptor("prime-agent", "Prime Agent", "prime-agent"),
-    _descriptor("openclaw", "OpenClaw", "openclaw", prompt_delivery=PromptDelivery.FILE),
-    _descriptor("kimi", "Kimi Code CLI", "kimi"),
-)
+    registry = HarnessRegistry(CommandHarnessAdapter(spec) for spec in BUILTIN_SPECS)
+    load_plugins(registry)
+    return registry

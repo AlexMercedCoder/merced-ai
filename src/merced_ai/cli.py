@@ -130,11 +130,13 @@ def harness_list(
     json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """List known harnesses and run safe local version probes."""
-    probes = default_registry().probe_all()
+    registry = default_registry()
+    probes = registry.probe_all()
     if json_output:
         typer.echo(json.dumps([probe.model_dump(mode="json") for probe in probes], indent=2))
         return
     _render_probe_table(probes)
+    _print_plugin_errors(registry)
 
 
 @harness_app.command("show")
@@ -144,13 +146,20 @@ def harness_show(
 ) -> None:
     """Show the current probe result for one harness."""
     try:
-        probe = default_registry().get(harness_id).probe()
+        adapter = default_registry().get(harness_id)
     except KeyError as exc:
         raise typer.BadParameter(str(exc), param_hint="harness_id") from exc
+    probe = adapter.probe()
     if json_output:
         typer.echo(json.dumps(probe.model_dump(mode="json"), indent=2))
         return
     _render_probe_table((probe,))
+    spec = getattr(adapter, "spec", None)
+    origin = getattr(spec, "origin", "builtin")
+    console.print(
+        "[bold]Adapter:[/bold] "
+        + ("built-in" if origin == "builtin" else f"plugin from {origin} (entry point)")
+    )
     console.print(f"[bold]Transport:[/bold] {probe.transport.value if probe.transport else '-'}")
     delivery = probe.prompt_delivery.value if probe.prompt_delivery else "-"
     if delivery == "argv":
@@ -180,7 +189,9 @@ def harness_show(
 @app.command("doctor")
 def doctor() -> None:
     """Summarize local harness availability without changing configuration."""
-    probes = default_registry().probe_all()
+    registry = default_registry()
+    probes = registry.probe_all()
+    _print_plugin_errors(registry)
     installed = [probe for probe in probes if probe.path is not None]
     failed = [probe for probe in probes if probe.status.value == "probe_failed"]
     console.print(f"Detected [bold]{len(installed)}[/bold] of {len(probes)} known harnesses.")
@@ -810,6 +821,14 @@ def session_resume(
         _group_chat_loop(record, workspace, allow_concurrent_writes=allow_concurrent_writes)
     else:
         _chat_loop(record.bot_name, workspace, resume_session=session_id)
+
+
+def _print_plugin_errors(registry: HarnessRegistry) -> None:
+    for name, reason in registry.plugin_errors:
+        error_console.print(
+            f"[yellow]Warning:[/yellow] harness plugin {name!r} was not loaded: {reason}. "
+            "Upgrade or uninstall the package that provides it."
+        )
 
 
 def _render_probe_table(probes: tuple[HarnessProbe, ...]) -> None:

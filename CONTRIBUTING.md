@@ -25,7 +25,10 @@ python -m build
 
 ## Adapter contributions
 
-An adapter change should include:
+Adapters are `HarnessSpec`s on the public plugin API; see [docs/PLUGINS.md](docs/PLUGINS.md). A new
+built-in goes in `src/merced_ai/harnesses/builtin.py` and must pass
+`merced_ai.testing.contract.check_harness_spec` (every built-in is checked in
+`tests/test_adapter_plugins.py`). An adapter change should include:
 
 - authoritative CLI/version research;
 - bounded executable discovery without filesystem-wide scanning;

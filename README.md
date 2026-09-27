@@ -193,6 +193,9 @@ Merced AI can supersede harness policy. Projection labels describe Merced AI's b
 certification of a selected harness's effective runtime. Native handoff remains bounded by that
 harness's own policy and diagnostics.
 
+Other harnesses can be added as installed plugins without changing Merced AI; see
+[Harness adapter plugins](docs/PLUGINS.md).
+
 GLM is treated as a model-family route, not a separate harness. Use it through a supported host
 such as Claude Code, OpenCode, Goose, Pi, or Prime Agent. Kimi models can likewise be selected in
 multi-provider harnesses, while the dedicated Kimi Code CLI has its own adapter. See

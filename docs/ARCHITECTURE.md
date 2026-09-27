@@ -35,10 +35,14 @@ routing or subprocess pipeline.
 - `graphs.py`: AGS validation, RFC 8785 graph identity, dependency ordering, reachability, bounded
   work/cost summaries, and unsupported-feature reporting; it never executes graph nodes.
 - `bots.py`: project/user bot bindings and harness preference resolution.
-- `harnesses/registry.py`: fixed supported-harness metadata and adapter registration.
+- `harnesses/api.py`: the public adapter plugin API (`HarnessSpec`, `InvocationContext`).
+- `harnesses/builtin.py`: the fourteen built-in adapters, written as specs on that API.
+- `harnesses/registry.py`: registers the built-ins plus entry-point plugins, and caches probes.
+- `harnesses/output.py`: shared output normalization (JSON, JSON Lines, text, REPL, Loro).
 - `harnesses/detection.py`: bounded executable resolution and version probing.
-- `harnesses/adapters/command.py`: provider-aware profile projection, argv construction, execution,
-  cancellation, and output normalization.
+- `harnesses/adapters/command.py`: the generic runner for any spec: projection, private temp
+  files, the argv guard, bounded execution, cancellation, and the AAIS control channel.
+- `testing/contract.py`: the contract-test kit for adapter authors ([plugins](PLUGINS.md)).
 - `application.py`: routing and run preparation.
 - `sessions.py`: atomic normalized session persistence, exact mention selection, and deterministic
   group dispatch.
