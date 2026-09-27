@@ -1,10 +1,26 @@
 # Changelog
 
-## 0.7.0 — Unreleased
+## Unreleased
+
+Targets 0.8.0.
+
+### Documentation
+
+- README opens with the project's one-line role and a shared "Which tool do I want?" table that
+  points to Loro, MagAgent, Mag Command Center, and Merced AI.
+- Fixed version drift: the README standards section no longer names 0.4.0, the conformance results
+  name 0.7.0, the 0.7.0 changelog entry carries its release date, and the documentation index links
+  the 0.7.0 release notes.
+
+## 0.7.0 — 2026-09-12
 
 See [release notes](docs/RELEASE_NOTES_0.7.0.md).
 
-## Unreleased
+- Transactional conversation appends with stable turn IDs and explicit stale-save conflicts.
+- Broker-owned runs with bounded replay, reconnect by run ID, and interrupted-run recovery.
+- Process-group cancellation on POSIX, tree termination on Windows, and bounded output capture.
+- Profile spec-digest checks before group and resumed dispatch.
+- Durable approval presenter with idempotent decisions and orphaned-request recovery.
 
 ## 0.6.0 — 2026-09-06
 

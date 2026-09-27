@@ -19,6 +19,8 @@ Use this index as the release documentation entry point.
 - [MVP validation](MVP_VALIDATION.md): automated, packaging, and live-test evidence.
 - [Release process](RELEASING.md): maintainer checklist from versioning through post-release
   verification.
+- [0.7.0 release notes](RELEASE_NOTES_0.7.0.md): transactional sessions, broker-owned runs with
+  reconnect, process-tree cancellation, and durable approval recovery.
 - [0.6.0 release notes](RELEASE_NOTES_0.6.0.md): capability-aware WebMCP routing through MagAgent
   and Loro.
 - [0.5.1 release notes](RELEASE_NOTES_0.5.1.md): AAIS runtime permission presentation for MagAgent
