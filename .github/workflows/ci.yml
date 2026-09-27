@@ -45,6 +45,8 @@ jobs:
       - run: python -m ruff check src tests scripts
       # Advisory on branches and pull requests; strict (exit 1) on v* tag builds.
       - run: python scripts/check_release_metadata.py
+      - if: matrix.os == 'ubuntu-latest'
+        run: python -m mypy
       - run: node --check src/merced_ai/webui/app.js
       - run: python -m pytest -q
         env:

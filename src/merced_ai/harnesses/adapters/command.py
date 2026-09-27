@@ -258,7 +258,7 @@ class CommandHarnessAdapter:
             if harness_id == "prime-agent" and (edit_denied or shell_denied):
                 command.append("--no-tools")
             else:
-                excluded = []
+                excluded: list[str] = []
                 if edit_denied:
                     excluded.extend(("edit", "write"))
                 if shell_denied:

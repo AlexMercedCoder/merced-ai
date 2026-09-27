@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -15,6 +16,10 @@ from pathlib import Path
 from typing import Any
 
 MAX_FRAME_BYTES = 1_000_000
+if sys.platform == "win32":  # pragma: no cover - Windows CI
+    _NEW_PROCESS_GROUP = subprocess.CREATE_NEW_PROCESS_GROUP
+else:
+    _NEW_PROCESS_GROUP = 0
 
 
 class ChildProcessError(RuntimeError):
@@ -103,7 +108,7 @@ def run_child(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         start_new_session=os.name != "nt",
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0,
+        creationflags=_NEW_PROCESS_GROUP,
     )
 
     def handle_line(line: bytes) -> None:

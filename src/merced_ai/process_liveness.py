@@ -1,12 +1,13 @@
 """Non-destructive process liveness checks for recovery ownership."""
 
 import os
+import sys
 
 
 def process_alive(pid: int | None) -> bool:
     if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
         return False
-    if os.name == "nt":
+    if sys.platform == "win32":
         # os.kill(pid, 0) terminates a Windows process. Query its wait state instead.
         import ctypes
         from ctypes import wintypes

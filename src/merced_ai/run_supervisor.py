@@ -8,6 +8,7 @@ import threading
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from merced_ai.storage import atomic_write
 
@@ -44,7 +45,13 @@ class RunSupervisor:
         run = LiveRun(cancellation)
         self.live[run_id] = run
         path = self._path(run_id)
-        state = {"run_id": run_id, "sequence": 0, "complete": False, "events": []}
+        events: list[dict[str, Any]] = []
+        state: dict[str, Any] = {
+            "run_id": run_id,
+            "sequence": 0,
+            "complete": False,
+            "events": events,
+        }
         atomic_write(path, json.dumps(state))
 
         async def execute() -> None:

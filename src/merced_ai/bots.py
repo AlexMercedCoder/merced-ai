@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 
@@ -29,7 +30,7 @@ def create_bot(
         raise BotError("bot name must match ^[a-z][a-z0-9-]{0,62}$")
     resolved_profile = resolve_profile(profile, workspace)
     stored_profile = str(resolved_profile.path) if Path(profile).expanduser().is_file() else profile
-    source = "user" if user else "project"
+    source: Literal["user", "project"] = "user" if user else "project"
     root = (ensure_user_layout() if user else ensure_project_layout(workspace)) / "bots"
     path = root / f"{name}.bot.yaml"
     if path.exists():
@@ -72,12 +73,9 @@ def update_bot(
     *,
     requires_webmcp: bool = False,
 ) -> BotBinding:
-    current = resolve_bot(name, workspace)
-    project_root = (ensure_project_layout(workspace) / "bots").resolve()
-    if current.source != "project" or current.path.parent.resolve() != project_root:
-        raise BotError("only project-local bot bindings can be edited")
-    previous = current.path.read_text(encoding="utf-8")
-    current.path.unlink()
+    path = _project_binding_path(name, workspace, "edited")
+    previous = path.read_text(encoding="utf-8")
+    path.unlink()
     try:
         return create_bot(
             name,
@@ -88,16 +86,24 @@ def update_bot(
             requires_webmcp=requires_webmcp,
         )
     except Exception:
-        _atomic_write(current.path, previous)
+        _atomic_write(path, previous)
         raise
 
 
 def delete_bot(name: str, workspace: Path) -> None:
+    _project_binding_path(name, workspace, "deleted").unlink()
+
+
+def _project_binding_path(name: str, workspace: Path, action: str) -> Path:
     current = resolve_bot(name, workspace)
     project_root = (ensure_project_layout(workspace) / "bots").resolve()
-    if current.source != "project" or current.path.parent.resolve() != project_root:
-        raise BotError("only project-local bot bindings can be deleted")
-    current.path.unlink()
+    if (
+        current.source != "project"
+        or current.path is None
+        or current.path.parent.resolve() != project_root
+    ):
+        raise BotError(f"only project-local bot bindings can be {action}")
+    return current.path
 
 
 def discover_bots(workspace: Path) -> tuple[BotBinding, ...]:

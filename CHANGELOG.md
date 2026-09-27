@@ -19,6 +19,15 @@ Targets 0.8.0.
   and the release-notes link agree. CI runs it on every push: advisory on branches, strict on `v*`
   tag builds (the workflow now also triggers on tags).
 
+### Type checking
+
+- mypy now runs in CI (Ubuntu) over `src/merced_ai` with a lenient baseline
+  (`check_untyped_defs`, `no_implicit_optional`, `warn_unused_ignores`). The only module still
+  excluded is `merced_ai.webui_server`; `tests/test_typing_ratchet.py` fails if the exclusion list
+  grows. Fixing the baseline tightened a few real edges: bot edit/delete now reject a binding with
+  no file path instead of failing on `None`, and platform-specific locking, liveness, and
+  process-group code is gated on `sys.platform` so it type-checks per OS.
+
 ### Testing
 
 - OAP and AGS fixture tests find the sibling `open-agent-profile` and `agentic-graph-spec` clones

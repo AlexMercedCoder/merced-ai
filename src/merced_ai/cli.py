@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal, NoReturn, cast
 
 import typer
 import yaml
@@ -370,7 +370,7 @@ def ask(
     except (BotError, ProfileError, RoutingError) as exc:
         _fail(str(exc), 2)
     if dry_run:
-        payload = {
+        payload: dict[str, Any] = {
             "bot": prepared.bot.model_dump(mode="json"),
             "profile": prepared.profile.model_dump(mode="json", exclude={"document"}),
             "projection": prepared.projection.model_dump(mode="json"),
@@ -391,9 +391,9 @@ def ask(
         _fail(str(exc), exc.exit_code if 0 < exc.exit_code < 126 else 5)
     store.append(session, "assistant", result.output, profile=prepared.profile)
     if json_output:
-        payload = result.model_dump(mode="json")
-        payload["session_id"] = session.id
-        typer.echo(json.dumps(payload, indent=2))
+        result_payload = result.model_dump(mode="json")
+        result_payload["session_id"] = session.id
+        typer.echo(json.dumps(result_payload, indent=2))
     else:
         console.print(Markdown(result.output))
         console.print(f"[dim]{result.harness_id} · {result.duration_ms} ms · {session.id}[/dim]")
@@ -517,7 +517,8 @@ def _create_group_session(bot_names: tuple[str, ...], workspace: Path, mode: str
     try:
         prepared = prepare_group(bot_names, workspace)
         return SessionStore(workspace).create_group(
-            tuple(participant_from_run(item) for item in prepared), mode=mode
+            tuple(participant_from_run(item) for item in prepared),
+            mode=cast(Literal["mentions", "all", "round_robin"], mode),
         )
     except (ValueError, BotError, ProfileError, RoutingError) as exc:
         _fail(str(exc), 2)
@@ -687,6 +688,6 @@ def _bot_action(action: Any) -> Any:
         _fail(str(exc), 2)
 
 
-def _fail(message: str, code: int) -> Any:
+def _fail(message: str, code: int) -> NoReturn:
     error_console.print(f"[red]Error:[/red] {message}")
     raise typer.Exit(code=code)

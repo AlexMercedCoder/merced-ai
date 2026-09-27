@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import tempfile
 import time
 from collections.abc import Iterator
@@ -20,7 +21,7 @@ def file_lock(path: Path, timeout: float = 30) -> Iterator[None]:
     deadline = time.monotonic() + timeout
     locked = False
     try:
-        if os.name == "nt":  # pragma: no cover - Windows CI
+        if sys.platform == "win32":  # pragma: no cover - Windows CI
             import msvcrt
 
             if os.fstat(fd).st_size == 0:
@@ -29,7 +30,7 @@ def file_lock(path: Path, timeout: float = 30) -> Iterator[None]:
             import fcntl
         while not locked:
             try:
-                if os.name == "nt":  # pragma: no cover
+                if sys.platform == "win32":  # pragma: no cover
                     os.lseek(fd, 0, os.SEEK_SET)
                     msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
                 else:
@@ -44,7 +45,7 @@ def file_lock(path: Path, timeout: float = 30) -> Iterator[None]:
         yield
     finally:
         if locked:
-            if os.name == "nt":  # pragma: no cover
+            if sys.platform == "win32":  # pragma: no cover
                 os.lseek(fd, 0, os.SEEK_SET)
                 msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
             else:

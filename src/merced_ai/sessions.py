@@ -112,7 +112,7 @@ class SessionStore:
     def append(
         self,
         session: SessionRecord,
-        role: str,
+        role: Literal["user", "assistant"],
         content: str,
         *,
         bot_name: str | None = None,

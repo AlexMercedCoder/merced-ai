@@ -18,6 +18,7 @@ Keep changes focused and preserve unrelated worktree modifications. Before submi
 ```bash
 python -m ruff format --check .
 python -m ruff check .
+python -m mypy
 python -m pytest -q
 python -m build
 ```

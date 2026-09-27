@@ -12,6 +12,7 @@
 ```bash
 python -m ruff format --check .
 python -m ruff check .
+python -m mypy
 python -m pytest -q
 python -m build
 python -m twine check dist/*

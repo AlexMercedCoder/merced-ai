@@ -110,8 +110,7 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
             duration_ms=_elapsed_ms(started),
         )
 
-    output = (completed.stdout or completed.stderr).strip()
-    output = output[:MAX_VERSION_LENGTH] or None
+    output: str | None = (completed.stdout or completed.stderr).strip()[:MAX_VERSION_LENGTH] or None
     if completed.returncode != 0:
         return HarnessProbe(
             harness_id=descriptor.id,

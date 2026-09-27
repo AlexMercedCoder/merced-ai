@@ -123,14 +123,15 @@ def create_profile(
     path = root / f"{name}.agent.yaml"
     if path.exists():
         raise ProfileError(f"profile file already exists: {path}")
-    document = {
+    spec: dict[str, Any] = {"role": {"instructions": instructions.rstrip() + "\n"}}
+    document: dict[str, Any] = {
         "oap": "1.0",
         "kind": "AgentProfile",
         "metadata": {"name": name, "description": description.strip(), "revision": 1},
-        "spec": {"role": {"instructions": instructions.rstrip() + "\n"}},
+        "spec": spec,
     }
     if model_provider or model_id:
-        document["spec"]["model"] = {
+        spec["model"] = {
             key: value for key, value in (("provider", model_provider), ("id", model_id)) if value
         }
     permissions = {
@@ -139,7 +140,7 @@ def create_profile(
         if value
     }
     if permissions:
-        document["spec"]["permissions"] = permissions
+        spec["permissions"] = permissions
     return _validated_atomic_write(
         path, yaml.safe_dump(document, sort_keys=False, allow_unicode=True), source
     )

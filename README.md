@@ -228,6 +228,7 @@ architecture, validation, and release guides.
 ```bash
 ruff format --check .
 ruff check .
+mypy
 pytest
 python -m build
 ```
