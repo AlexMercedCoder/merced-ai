@@ -268,7 +268,7 @@ async def test_web_run_streams_relays_approval_and_resumes_natively(
     create_bot("helper", "helper", "gemini", (), workspace)
 
     transport = httpx.ASGITransport(app=create_web_app(workspace, "token"))
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
         await client.post("/api/auth", json={"token": "token"})
         session = (await client.post("/api/sessions", json={"bot_name": "helper"})).json()
         path = f"/api/sessions/{session['id']}/messages"

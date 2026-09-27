@@ -39,6 +39,9 @@ from merced_ai.sessions import SessionStore
 from merced_ai.turns import execute_turn, plan_turn
 
 PROTOCOL_VERSION = 1
+MAX_PROMPT_CHARS = 1_000_000
+MAX_LINE_CHARS = 8 * 1024 * 1024
+MAX_CONCURRENT_REQUESTS = 16
 PARSE_ERROR, INVALID_PARAMS, METHOD_NOT_FOUND, INTERNAL_ERROR = -32700, -32602, -32601, -32603
 DECISION_OPTIONS = {
     ("approve", "once"): ("allow_once", "Allow once"),
@@ -46,6 +49,13 @@ DECISION_OPTIONS = {
     ("approve", "persistent"): ("allow_always", "Always allow"),
     ("deny", "once"): ("reject_once", "Deny"),
 }
+
+
+def _one_line(text: str, limit: int = 300) -> str:
+    """Harness-supplied text for a permission title: one line, no control characters, bounded."""
+    cleaned = "".join(ch if ch.isprintable() else " " for ch in str(text))
+    cleaned = " ".join(cleaned.split())
+    return cleaned if len(cleaned) <= limit else cleaned[: limit - 1] + "…"
 
 
 class RpcError(Exception):
@@ -84,6 +94,7 @@ class MercedAcpAgent:
         self._cancellations: dict[str, threading.Event] = {}
         self._consented: set[str] = set()
         self._workers: list[threading.Thread] = []
+        self._slots = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
 
     # ---- transport -----------------------------------------------------------------------
 
@@ -111,7 +122,21 @@ class MercedAcpAgent:
 
     def serve(self) -> None:
         """Read messages until the client closes stdin."""
-        for line in self.reader:
+        while True:
+            line = self.reader.readline(MAX_LINE_CHARS + 1)
+            if not line:
+                break
+            if len(line) > MAX_LINE_CHARS:
+                while line and not line.endswith("\n"):
+                    line = self.reader.readline(MAX_LINE_CHARS)
+                self._send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": INVALID_PARAMS, "message": "message is too large"},
+                    }
+                )
+                continue
             if not line.strip():
                 continue
             try:
@@ -125,12 +150,31 @@ class MercedAcpAgent:
                     }
                 )
                 continue
-            if "method" not in message:
-                with self._arrived:
-                    self._pending[int(message.get("id", -1))] = message
-                    self._arrived.notify_all()
+            if not isinstance(message, dict):
                 continue
-            worker = threading.Thread(target=self._dispatch, args=(message,), daemon=True)
+            if "method" not in message:
+                if isinstance(message.get("id"), int):
+                    with self._arrived:
+                        self._pending[message["id"]] = message
+                        self._arrived.notify_all()
+                continue
+            if "id" not in message:
+                self._dispatch(message)  # Notifications (session/cancel) are cheap; run inline.
+                continue
+            if not self._slots.acquire(blocking=False):
+                self._send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": message["id"],
+                        "error": {
+                            "code": INTERNAL_ERROR,
+                            "message": "too many concurrent requests",
+                        },
+                    }
+                )
+                continue
+            worker = threading.Thread(target=self._dispatch_slot, args=(message,), daemon=True)
+            self._workers = [item for item in self._workers if item.is_alive()]
             self._workers.append(worker)
             worker.start()
         for event in self._cancellations.values():
@@ -138,9 +182,16 @@ class MercedAcpAgent:
         for worker in self._workers:
             worker.join(timeout=10)
 
+    def _dispatch_slot(self, message: dict[str, Any]) -> None:
+        try:
+            self._dispatch(message)
+        finally:
+            self._slots.release()
+
     def _dispatch(self, message: dict[str, Any]) -> None:
         method = str(message["method"])
-        params = message.get("params") or {}
+        params = message.get("params")
+        params = params if isinstance(params, dict) else {}
         handler: Callable[[dict[str, Any]], dict[str, Any] | None] | None = {
             "initialize": self.initialize,
             "authenticate": lambda _params: {},
@@ -289,7 +340,8 @@ class MercedAcpAgent:
                 kind, label = DECISION_OPTIONS[key]
                 option_id = f"{choice['decision']}-{choice['scope']}"
                 options.append(
-                    {"optionId": option_id, "name": choice.get("label") or label, "kind": kind}
+                    # Our label, never the harness's: it could call an "always allow" "Deny".
+                    {"optionId": option_id, "name": label, "kind": kind}
                 )
                 by_option[option_id] = key
             reply = self.request_client(
@@ -298,7 +350,9 @@ class MercedAcpAgent:
                     "sessionId": session_id,
                     "toolCall": {
                         "toolCallId": request["id"],
-                        "title": f"{request['origin']['harness']}: {request['action']['summary']}",
+                        "title": _one_line(
+                            f"{request['origin']['harness']}: {request['action']['summary']}"
+                        ),
                         "kind": "other",
                         "status": "pending",
                         "rawInput": request["action"].get("arguments", {}),
@@ -323,12 +377,17 @@ class MercedAcpAgent:
 
     def prompt(self, params: dict[str, Any]) -> dict[str, Any]:
         session_id = str(params.get("sessionId", ""))
+        blocks = params.get("prompt")
+        text = _prompt_text(blocks if isinstance(blocks, list) else [])
+        if len(text) > MAX_PROMPT_CHARS:
+            raise RpcError(
+                INVALID_PARAMS, f"the prompt is too large (max {MAX_PROMPT_CHARS} chars)"
+            )
         store = SessionStore(self.workspace)
         try:
             session = store.load(session_id)
         except ValueError as error:
             raise RpcError(INVALID_PARAMS, str(error)) from error
-        text = _prompt_text(params.get("prompt") or [])
         if not text.strip():
             raise RpcError(INVALID_PARAMS, "the prompt has no text")
         cancellation = threading.Event()

@@ -42,4 +42,5 @@ Use this index as the release documentation entry point.
   evidence.
 
 Project-level documents: [PRD](../PRD.md), [security policy](../SECURITY.md),
-[contributing guide](../CONTRIBUTING.md), and [changelog](../CHANGELOG.md).
+[threat model](THREAT_MODEL.md), [contributing guide](../CONTRIBUTING.md), and
+[changelog](../CHANGELOG.md).

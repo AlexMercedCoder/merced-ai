@@ -63,6 +63,15 @@ def handle_prompt(message):
     params = message["params"]
     sid = params["sessionId"]
     text = "".join(block.get("text", "") for block in params["prompt"])
+    if "JUNK" in text:
+        # Malformed traffic a hostile or buggy agent might send; the client must survive it.
+        send({"jsonrpc": "2.0", "id": "not-a-number", "result": {}})
+        send({"jsonrpc": "2.0", "method": "session/update", "params": ["not", "an", "object"]})
+        update(sid, {"sessionUpdate": "plan", "entries": {"not": "a list"}})
+        update(sid, {"sessionUpdate": "tool_call", "toolCallId": 5, "title": None})
+        sys.stdout.write("not json at all\n")
+    if "FLOOD" in text:
+        chunk(sid, "x" * 200_000)
     if "CRASH" in text:
         sys.stderr.write("fatal: the fake agent crashed on purpose\n")
         sys.stderr.flush()

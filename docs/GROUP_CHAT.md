@@ -101,7 +101,9 @@ In the web UI, tick **Give each write-capable bot its own git worktree** when cr
 - Apply: `merced-ai group apply SESSION BOT` (asks first; `--yes` to skip) or **Apply to
   workspace**. The patch must apply cleanly to your files as they are now; otherwise nothing is
   written and the message says which file conflicts, so you can commit or stash your edits or
-  merge the bot's branch yourself.
+  merge the bot's branch yourself. Symbolic links a bot added are listed with their targets; a
+  link that points outside the repository (an absolute path, or `..` past the top) is marked and
+  the apply is refused, so review that branch and apply it by hand if you trust it.
 - Discard: `merced-ai group cleanup SESSION` or **Discard all worktrees** removes the worktrees and
   branches. Deleting the conversation in the web UI does the same.
 - A workspace that is not in a git repository cannot be isolated; the room says so and falls back

@@ -50,6 +50,39 @@ Targets 0.8.0.
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
 
+### Security
+
+A security self-review of everything new in 0.8.0 (see [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md);
+written by the same authors, not an independent audit) found and fixed these. Each has a
+regression test in `tests/test_security_review.py` that fails without the fix.
+
+- Worktree rooms: `group cleanup` trusted the path in the on-disk worktree index and could delete
+  a directory outside the worktree root. The same index could send a bot, or `git add -A`, into
+  another repository. Entries outside the root are now ignored, and only Merced AI's own branch is
+  deleted.
+- Worktree rooms: `group apply` recreated symbolic links pointing outside the repository (for
+  example `keys -> ~/.ssh`) in your workspace. Such links are now refused; the CLI and the Compare
+  changes view list every symlink with its target and mark the unsafe ones.
+- Plugins: under `python -m merced_ai`, a `*.dist-info` folder in the current directory could
+  register a harness plugin whose code then ran. Distributions in the working directory are now
+  ignored and reported, and the working directory is removed from `sys.path`.
+- Web UI and A2A: the server now answers only loopback `Host` names (421 otherwise), which blocks
+  DNS rebinding; the token was already required. Request bodies are capped at 16 MB (413), chunked
+  bodies are refused (411), A2A message text is capped at 100,000 characters, and the in-memory A2A
+  task and eval-job lists are bounded.
+- Approvals: option names in the ACP server's `session/request_permission` and the buttons in the
+  web UI approval dialog came from the harness's own labels, so a harness could label "always
+  allow" as "Deny". Names now come from the decision and scope; the ACP title is a single bounded
+  line; the web dialog starts with focus on Deny.
+- OAP inbox: YAML alias bombs, deltas nested deeper than 64 levels, and files over 1 MB are refused
+  instead of exhausting memory or raising `RecursionError`; a torn item file no longer breaks the
+  listing; a proposal's risk is recomputed on every read, so editing a stored item cannot make a
+  permissions change look low-risk.
+- ACP client: malformed agent messages no longer kill the reader thread (which hung the turn), and
+  line length, reply size (marked `truncated`), tool calls, and concurrent agent requests are
+  bounded. ACP server: prompt size, line length, and concurrent requests are bounded.
+- Run journal: a line with a wrongly typed `sequence` or `sse` no longer crashes replay.
+
 ### Added
 
 - Group turns now run write-capable bots that share a workspace one at a time, in participant
@@ -171,6 +204,9 @@ Targets 0.8.0.
   `MERCED_AI_PROBE_TTL_SECONDS=0` to probe every turn.
 
 ### Internal structure
+
+- The ACP client's JSON-RPC connection moved from `harnesses/acp.py` to `harnesses/acp_rpc.py`
+  (still importable from `harnesses.acp`), keeping both modules under 600 lines.
 
 - The 1,800-line `cli.py` is now the `merced_ai.cli` package, one module per command family,
   none over 400 lines. Golden tests captured before the split pin every `--help` screen and every

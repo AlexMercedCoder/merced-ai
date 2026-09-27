@@ -101,12 +101,18 @@ def read_journal(path: Path) -> dict[str, Any]:
                 record = json.loads(line)
             except json.JSONDecodeError:
                 continue  # A torn final line after a crash.
+            if not isinstance(record, dict):
+                continue
             kind = record.get("kind")
             if kind == "header":
                 run_id = str(record.get("run_id", run_id))
             elif kind == "event":
-                sequence = int(record["sequence"])
-                events.append({"sequence": sequence, "sse": record["sse"]})
+                # Replay only well-formed events that move forward; anything else is skipped.
+                number, sse = record.get("sequence"), record.get("sse")
+                if not isinstance(number, int) or not isinstance(sse, str) or number <= sequence:
+                    continue
+                sequence = number
+                events.append({"sequence": sequence, "sse": sse})
             elif kind == "complete":
                 complete = True
     total = sum(len(item["sse"].encode()) for item in events)

@@ -47,7 +47,8 @@ routing or subprocess pipeline.
   worktrees).
 - `turns.py`: transport-neutral execution of one conversation turn (used by the ACP and A2A
   servers).
-- `harnesses/acp.py`: the ACP client adapter; `acp_server.py`: Merced AI as an ACP agent.
+- `harnesses/acp.py`: the ACP client adapter, over the JSON-RPC connection in `harnesses/acp_rpc.py`;
+  `acp_server.py`: Merced AI as an ACP agent.
 - `worktrees.py`: per-bot git worktrees, diffs, apply, and cleanup.
 - `inbox.py`: the reviewed OAP state-delta inbox (Level 2 applicator).
 - `evals.py`: cross-harness eval runs, checks, judge, and ranking.

@@ -30,6 +30,7 @@ from merced_ai.storage import atomic_write, file_lock
 MAX_PATCH_BYTES = 800_000
 GIT_TIMEOUT_SECONDS = 60
 SAFE_NAME = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
+SYMLINK_MODE = "120000"
 
 
 class WorktreeError(RuntimeError):
@@ -144,12 +145,17 @@ class WorktreeManager:
     def _save(self, index: dict[str, dict[str, str]]) -> None:
         atomic_write(self.index_path, json.dumps(index, indent=2, sort_keys=True))
 
+    def _trusted(self, item: dict[str, str] | None) -> bool:
+        # The index is a file on disk; an entry that points outside this room's root is ignored
+        # rather than used as a place to run a bot, stage files, or delete.
+        return item is not None and self._inside_root(Path(item.get("path", "")))
+
     def worktrees(self) -> list[Worktree]:
-        return [Worktree.from_dict(item) for item in self._load().values()]
+        return [Worktree.from_dict(item) for item in self._load().values() if self._trusted(item)]
 
     def get(self, bot_name: str) -> Worktree | None:
         item = self._load().get(bot_name)
-        return Worktree.from_dict(item) if item else None
+        return Worktree.from_dict(item) if item and self._trusted(item) else None
 
     def branch_name(self, bot_name: str) -> str:
         return f"merced/{self.session_id.removeprefix('session-')[:12]}/{bot_name}"
@@ -161,7 +167,7 @@ class WorktreeManager:
         with file_lock(self.index_path):
             index = self._load()
             existing = index.get(bot_name)
-            if existing and (Path(existing["path"]) / ".git").exists():
+            if existing and self._trusted(existing) and (Path(existing["path"]) / ".git").exists():
                 return Worktree.from_dict(existing)
             base = _git(self.repository, "rev-parse", "HEAD").strip()
             path = self.root / bot_name
@@ -188,6 +194,7 @@ class WorktreeManager:
         # Stage everything (including new files) in the bot's own index so one diff covers it.
         _git(worktree.path, "add", "-A")
         numstat = _git(worktree.path, "diff", "--cached", "--numstat", worktree.base)
+        links = _symlinks(worktree)
         files = []
         for line in numstat.splitlines():
             added, removed, name = (line.split("\t", 2) + ["", ""])[:3]
@@ -197,6 +204,8 @@ class WorktreeManager:
                     "insertions": int(added) if added.isdigit() else 0,
                     "deletions": int(removed) if removed.isdigit() else 0,
                     "binary": added == "-",
+                    "symlink": links.get(name),
+                    "unsafe": name in links and _escapes(name, links[name]),
                 }
             )
         patch = _git(worktree.path, "diff", "--cached", "--binary", worktree.base)
@@ -224,6 +233,20 @@ class WorktreeManager:
         patch = _git(worktree.path, "diff", "--cached", "--binary", worktree.base)
         if not patch.strip():
             return {"applied": False, "files": [], "message": f"{bot_name} made no changes."}
+        unsafe = sorted(
+            f"{name} -> {target}"
+            for name, target in _symlinks(worktree).items()
+            if _escapes(name, target)
+        )
+        if unsafe:
+            # git apply would recreate these links in the real workspace, where a later read or
+            # write through them reaches files outside the project.
+            raise WorktreeError(
+                f"{bot_name}'s changes add symbolic links that point outside the repository ("
+                + ", ".join(unsafe)
+                + f"). Nothing was applied; review branch {worktree.branch} and apply by hand "
+                "if you trust them."
+            )
         check = subprocess.run(
             ["git", "apply", "--check", "-"],
             cwd=self.repository,
@@ -255,11 +278,22 @@ class WorktreeManager:
             item = index.pop(bot_name, None)
             if item is None:
                 return
-            _git(self.repository, "worktree", "remove", "--force", item["path"], check=False)
-            _git(self.repository, "branch", "-D", item["branch"], check=False)
-            if Path(item["path"]).exists():
-                shutil.rmtree(item["path"], ignore_errors=True)
+            path = Path(item["path"])
+            # The index is a file on disk; never trust it to name what gets deleted.
+            if self._inside_root(path):
+                _git(self.repository, "worktree", "remove", "--force", str(path), check=False)
+                if path.exists():
+                    shutil.rmtree(path, ignore_errors=True)
+            if item.get("branch") == self.branch_name(bot_name):
+                _git(self.repository, "branch", "-D", item["branch"], check=False)
             self._save(index)
+
+    def _inside_root(self, path: Path) -> bool:
+        try:
+            resolved = path.resolve()
+            return resolved != self.root.resolve() and resolved.is_relative_to(self.root.resolve())
+        except OSError:
+            return False
 
     def remove_all(self) -> list[str]:
         removed = [item.bot_name for item in self.worktrees()]
@@ -268,3 +302,23 @@ class WorktreeManager:
         _git(self.repository, "worktree", "prune", check=False)
         shutil.rmtree(self.root, ignore_errors=True)
         return removed
+
+
+def _symlinks(worktree: Worktree) -> dict[str, str]:
+    """Symbolic links the bot's staged changes add or retarget, as repo path -> link target."""
+    raw = _git(worktree.path, "diff", "--cached", "--raw", "-z", "--no-renames", worktree.base)
+    fields = raw.split("\0")
+    links: dict[str, str] = {}
+    for header, name in zip(fields[0::2], fields[1::2], strict=False):
+        parts = header.lstrip(":").split()
+        if len(parts) >= 4 and parts[1] == SYMLINK_MODE and name:
+            links[name] = _git(worktree.path, "cat-file", "blob", parts[3])
+    return links
+
+
+def _escapes(name: str, target: str) -> bool:
+    """Whether a link at repo path ``name`` pointing at ``target`` leaves the repository."""
+    if not target or target.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", target):
+        return True
+    joined = os.path.normpath(os.path.join(os.path.dirname(name), target))
+    return joined == ".." or joined.startswith(("../", "..\\"))

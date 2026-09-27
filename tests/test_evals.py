@@ -197,7 +197,7 @@ async def test_web_eval_job_runs_in_background(workspace: Path) -> None:
     transport = httpx.ASGITransport(app=create_web_app(workspace, "token"))
     headers = {"x-merced-ai-token": "token"}
     async with httpx.AsyncClient(
-        transport=transport, base_url="http://test", headers=headers
+        transport=transport, base_url="http://127.0.0.1", headers=headers
     ) as client:
         started = await client.post(
             "/api/evals",

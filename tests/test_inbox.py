@@ -283,7 +283,7 @@ async def test_web_inbox_endpoints(workspace: Path) -> None:
     path = _profile(workspace)
     transport = httpx.ASGITransport(app=create_web_app(workspace, "token"))
     async with httpx.AsyncClient(
-        transport=transport, base_url="http://test", headers={"x-merced-ai-token": "token"}
+        transport=transport, base_url="http://127.0.0.1", headers={"x-merced-ai-token": "token"}
     ) as client:
         uploaded = (await client.post("/api/inbox", json={"document": _delta()})).json()
         bootstrap = (await client.get("/api/bootstrap")).json()

@@ -144,7 +144,7 @@ async def test_web_group_serializes_writers_unless_allowed(
 
     monkeypatch.setattr(CommandHarnessAdapter, "run_cancellable", fake_run)
     transport = httpx.ASGITransport(app=create_web_app(workspace, "token"))
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
         await client.post("/api/auth", json={"token": "token"})
         bootstrap = (await client.get("/api/bootstrap")).json()
         flags = {bot["name"]: bot["write_capable"] for bot in bootstrap["bots"]}

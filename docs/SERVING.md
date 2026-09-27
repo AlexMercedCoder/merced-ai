@@ -57,7 +57,11 @@ loopback address and token as the UI:
 - Bots that may edit files or run commands need `metadata.approved: true`; without it the task
   comes back `input-required` with an explanation. Harness permission requests appear in the web
   UI approval dialog, where a person decides.
-- `tasks/get` and `tasks/cancel` work for tasks served by the running process.
+- `tasks/get` and `tasks/cancel` work for tasks served by the running process. The process keeps
+  the latest 200 tasks; older ones answer "task not found".
+- Limits: requests must use a loopback host name (`127.0.0.1`, `localhost`, or `[::1]`; other
+  `Host` headers get 421, which blocks DNS rebinding), bodies are capped at 16 MB and must carry a
+  `Content-Length` (chunked bodies get 411), and message text is capped at 100,000 characters.
 - `message/stream`, resubscribe, and push notifications are not implemented and return the A2A
   "unsupported operation" error; the agent card says `streaming: false`.
 

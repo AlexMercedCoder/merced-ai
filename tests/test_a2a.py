@@ -74,12 +74,12 @@ def _send(text: str, **metadata: object) -> dict:
 async def test_agent_card_requires_the_token_and_lists_bots(workspace: Path) -> None:
     _bots(workspace)
     transport = httpx.ASGITransport(app=create_web_app(workspace, "token"))
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
         denied = await client.get("/.well-known/agent-card.json")
         card = (await client.get("/.well-known/agent-card.json", headers=AUTH)).json()
 
     assert denied.status_code == 401
-    assert card["url"] == "http://test/a2a"
+    assert card["url"] == "http://127.0.0.1/a2a"
     assert {skill["id"] for skill in card["skills"]} == {"reviewer", "builder"}
     assert card["capabilities"] == {"streaming": False, "pushNotifications": False}
 
@@ -89,7 +89,7 @@ async def test_message_send_runs_a_bot_and_continues_the_context(workspace: Path
     _bots(workspace)
     transport = httpx.ASGITransport(app=create_web_app(workspace, "token"))
     async with httpx.AsyncClient(
-        transport=transport, base_url="http://test", headers=AUTH
+        transport=transport, base_url="http://127.0.0.1", headers=AUTH
     ) as client:
         first = (await client.post("/a2a", json=_send("Hello", bot="reviewer"))).json()["result"]
         follow = _send("Again")
@@ -122,7 +122,7 @@ async def test_write_capable_bots_need_explicit_approval(workspace: Path) -> Non
     _bots(workspace)
     transport = httpx.ASGITransport(app=create_web_app(workspace, "token"))
     async with httpx.AsyncClient(
-        transport=transport, base_url="http://test", headers=AUTH
+        transport=transport, base_url="http://127.0.0.1", headers=AUTH
     ) as client:
         held = (await client.post("/a2a", json=_send("Build it", bot="builder"))).json()["result"]
         room = (

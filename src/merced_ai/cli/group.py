@@ -10,6 +10,7 @@ from typing import Annotated, Literal, cast
 
 import typer
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.table import Table
 
 from merced_ai.application import (
@@ -354,7 +355,12 @@ def group_apply(
         if not yes and not json_output:
             console.print(f"{bot} changed {len(diff.files)} file(s):")
             for item in diff.files:
-                console.print(f"  {item['path']} (+{item['insertions']} -{item['deletions']})")
+                line = f"  {escape(item['path'])} (+{item['insertions']} -{item['deletions']})"
+                if item.get("symlink") is not None:
+                    line += f" symlink -> {escape(item['symlink'])}"
+                if item.get("unsafe"):
+                    line += " [red](points outside the repository; apply will refuse)[/red]"
+                console.print(line)
             if not typer.confirm("Apply these changes to your workspace?", default=False):
                 console.print("Nothing was applied.")
                 raise typer.Exit(1)

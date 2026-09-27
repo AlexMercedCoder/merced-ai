@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from merced_ai.aais_presenter import AAISPresenter
@@ -27,6 +27,11 @@ from merced_ai.workspace_context import RunStore
 
 STATIC_ROOT = Path(__file__).resolve().parent.parent / "webui"
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+# Host header names accepted on requests. Only literal loopback names: a bare single-label name
+# could resolve through a DNS search domain, which is exactly what DNS rebinding needs.
+ALLOWED_HOSTS = frozenset(LOOPBACK_HOSTS)
+# Uploads are at most 10 MB (about 14 MB of base64); nothing else needs more.
+MAX_BODY_BYTES = 16 * 1024 * 1024
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
     "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
@@ -71,6 +76,16 @@ def create_web_app(
     async def security_headers(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
+        # DNS rebinding: a page on attacker.example can resolve its name to 127.0.0.1, and its
+        # requests then carry that Host. Only loopback names are served.
+        host = (request.headers.get("host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        if host not in ALLOWED_HOSTS:
+            return PlainTextResponse("Merced AI only answers to loopback host names.", 421)
+        declared = request.headers.get("content-length")
+        if declared is not None and (not declared.isdigit() or int(declared) > MAX_BODY_BYTES):
+            return PlainTextResponse("Request body is too large.", 413)
+        if request.headers.get("transfer-encoding", "").lower() == "chunked":
+            return PlainTextResponse("Send a Content-Length; chunked bodies are refused.", 411)
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
         response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY

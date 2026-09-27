@@ -229,7 +229,7 @@ async def test_web_worktree_room_streams_notice_and_serves_compare_and_apply(
 
     monkeypatch.setattr(CommandHarnessAdapter, "run_cancellable", fake_run)
     transport = httpx.ASGITransport(app=create_web_app(repo, "token"))
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
         await client.post("/api/auth", json={"token": "token"})
         session = (
             await client.post(

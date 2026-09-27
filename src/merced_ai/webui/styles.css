@@ -307,6 +307,10 @@ body[data-theme="light"] .message-speaker { color: hsl(var(--bot-hue) 60% 32%); 
 .form-error { min-height: 17px; margin: 0; padding: 0 20px; color: #ffac88; font-size: 10px; }
 .approval-dialog { width: min(480px, calc(100vw - 28px)); }
 .approval-dialog form > p { padding: 0 20px; color: var(--muted); line-height: 1.55; }
+#aais-dialog > section > header { padding: 18px 20px; border-bottom: 1px solid var(--line); }
+#aais-dialog > section > p { margin: 12px 20px; color: var(--muted); line-height: 1.55; overflow-wrap: anywhere; }
+#aais-dialog > section > pre { margin: 0 20px; max-height: 320px; overflow: auto; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--code-bg); color: var(--text); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+#aais-dialog > section > footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); }
 .approval-participants { display: grid; gap: 6px; padding: 0 20px; }
 .approval-participants div { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: 9px; }
 .group-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px; }
@@ -437,6 +441,9 @@ body[data-theme="light"] .message-speaker { color: hsl(var(--bot-hue) 60% 32%); 
 .diff-file { color: var(--muted); font-weight: 700; }
 body[data-theme="light"] .diff-add { color: #1f7a2e; }
 body[data-theme="light"] .diff-del { color: #b3261e; }
+.diff-link { color: var(--muted); overflow-wrap: anywhere; }
+.diff-unsafe { color: #ff8a80; font-weight: 700; }
+body[data-theme="light"] .diff-unsafe { color: #b3261e; }
 .dialog footer .footer-spacer { flex: 1; }
 @media (max-width: 720px) {
   .compare-body { grid-template-columns: 1fr; max-height: calc(100vh - 230px); overflow: auto; }

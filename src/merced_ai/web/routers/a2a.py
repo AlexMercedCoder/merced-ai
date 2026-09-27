@@ -34,6 +34,9 @@ from merced_ai.web.context import ReadContext, WebContext, WriteContext
 router = APIRouter()
 A2A_PROTOCOL_VERSION = "0.3.0"
 INVALID_PARAMS, METHOD_NOT_FOUND, TASK_NOT_FOUND, UNSUPPORTED = -32602, -32601, -32001, -32004
+MAX_TEXT_CHARS = 100_000
+# Tasks are kept in memory for tasks/get and tasks/cancel; the oldest are forgotten first.
+MAX_TASKS = 200
 
 
 def _now() -> str:
@@ -138,6 +141,10 @@ async def _message_send(
     text = _text(message)
     if message.get("role") != "user" or not text.strip():
         return _error(request_id, INVALID_PARAMS, "message must be a user message with text parts")
+    if len(text) > MAX_TEXT_CHARS:
+        return _error(
+            request_id, INVALID_PARAMS, f"message text is too long (max {MAX_TEXT_CHARS})"
+        )
     metadata = {**(params.get("metadata") or {}), **(message.get("metadata") or {})}
     workspace = context.workspace
     store = SessionStore(workspace)
@@ -178,6 +185,8 @@ async def _message_send(
         "artifacts": [],
     }
     context.a2a_tasks[task_id] = task
+    while len(context.a2a_tasks) > MAX_TASKS:
+        context.a2a_tasks.pop(next(iter(context.a2a_tasks)))
     writers = [item.bot.name for item in plan.prepared if is_write_capable(item.profile)]
     if writers and metadata.get("approved") is not True:
         task["status"] = {

@@ -116,8 +116,16 @@ def load_plugins(registry: HarnessRegistry) -> None:
     """
     if os.environ.get("MERCED_AI_DISABLE_PLUGINS") == "1":
         return
+    cwd = Path.cwd().resolve()
     for entry in metadata.entry_points(group=ENTRY_POINT_GROUP):
         origin = entry.dist.name if entry.dist is not None else entry.value
+        if _from_working_directory(entry, cwd):
+            # `python -m merced_ai` puts the current directory on sys.path, so a project could
+            # otherwise ship a *.dist-info that registers code to run inside the broker.
+            registry.plugin_errors.append(
+                (entry.name, f"{origin} is installed in the working directory {cwd}; ignored")
+            )
+            continue
         try:
             registry.register(adapter_from_plugin(entry.load(), origin))
         except Exception as error:  # A broken plugin must not take the broker down.
@@ -129,6 +137,16 @@ def builtin_adapter(spec: HarnessSpec) -> HarnessAdapter:
     if acp_enabled(harness_id):
         return AcpHarnessAdapter(spec, ACP_LAUNCHES[harness_id][0])
     return CommandHarnessAdapter(spec)
+
+
+def _from_working_directory(entry: Any, cwd: Path) -> bool:
+    location = getattr(entry.dist, "_path", None)
+    if location is None:
+        return False
+    try:
+        return Path(location).resolve().parent == cwd
+    except OSError:
+        return True
 
 
 def default_registry() -> HarnessRegistry:

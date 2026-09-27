@@ -52,7 +52,7 @@ async def authenticated_client(
     workspace: Path,
 ) -> AsyncIterator[tuple[httpx.AsyncClient, httpx.Response]]:
     transport = httpx.ASGITransport(app=create_web_app(workspace, "secret-token"))
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
         response = await client.post("/api/auth", json={"token": "secret-token"})
         yield client, response
 
@@ -105,7 +105,7 @@ async def test_webui_context_upload_history_and_handoff(
 @pytest.mark.anyio
 async def test_webui_exchanges_token_for_secure_local_cookie_and_headers(workspace: Path) -> None:
     transport = httpx.ASGITransport(app=create_web_app(workspace, "secret-token"))
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
         index = await client.get("/")
         rejected = await client.get("/api/bootstrap")
         bad_auth = await client.post("/api/auth", json={"token": "wrong"})
@@ -148,7 +148,7 @@ async def test_webui_bootstrap_is_immediate_and_harness_detection_is_progressive
 
     monkeypatch.setattr(CommandHarnessAdapter, "probe", controlled_probe)
     transport = httpx.ASGITransport(app=create_web_app(workspace, "secret-token"))
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1") as client:
         await client.post("/api/auth", json={"token": "secret-token"})
         before = time.monotonic()
         bootstrap = await client.get("/api/bootstrap")
@@ -183,7 +183,7 @@ async def test_webui_bootstrap_is_immediate_and_harness_detection_is_progressive
 
     cached_transport = httpx.ASGITransport(app=create_web_app(workspace, "secret-token"))
     async with httpx.AsyncClient(
-        transport=cached_transport, base_url="http://test"
+        transport=cached_transport, base_url="http://127.0.0.1"
     ) as cached_client:
         await cached_client.post("/api/auth", json={"token": "secret-token"})
         cached = await cached_client.get("/api/bootstrap")
@@ -194,7 +194,7 @@ async def test_webui_bootstrap_is_immediate_and_harness_detection_is_progressive
     (user_root() / "cache" / "harness-probes.json").write_text("{invalid", encoding="utf-8")
     fallback_transport = httpx.ASGITransport(app=create_web_app(workspace, "secret-token"))
     async with httpx.AsyncClient(
-        transport=fallback_transport, base_url="http://test"
+        transport=fallback_transport, base_url="http://127.0.0.1"
     ) as fallback_client:
         await fallback_client.post("/api/auth", json={"token": "secret-token"})
         fallback = await fallback_client.get("/api/bootstrap")

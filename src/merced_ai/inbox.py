@@ -50,6 +50,32 @@ class InboxError(ValueError):
     pass
 
 
+MAX_DELTA_BYTES = 1_000_000
+MAX_DEPTH = 64
+
+
+class _NoAliasLoader(yaml.SafeLoader):
+    """Safe YAML without anchors/aliases, which can expand a small file into a huge document."""
+
+    def compose_node(self, parent: Any, index: Any) -> Any:
+        if self.check_event(yaml.AliasEvent):
+            raise InboxError("YAML aliases are not accepted in deltas")
+        return super().compose_node(parent, index)
+
+
+def _check_shape(value: Any) -> None:
+    """Refuse documents nested deeper than any real delta, before anything recurses into them."""
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    while stack:
+        item, level = stack.pop()
+        if level > MAX_DEPTH:
+            raise InboxError(f"the delta is nested too deeply (max {MAX_DEPTH} levels)")
+        if isinstance(item, dict):
+            stack.extend((child, level + 1) for child in item.values())
+        elif isinstance(item, list):
+            stack.extend((child, level + 1) for child in item)
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -79,6 +105,15 @@ def _proposal_risk(proposal: dict[str, Any]) -> str:
     return declared if declared in {"low", "medium", "high"} else "medium"
 
 
+def _recheck_risk(item: dict[str, Any]) -> dict[str, Any]:
+    """Recompute proposal risk on every read: items live in the workspace, where a harness can
+    edit them, so a stored "low" on a tools or permissions proposal is never believed."""
+    for proposal in item.get("proposals") or []:
+        if isinstance(proposal, dict):
+            proposal["risk"] = _proposal_risk(proposal)
+    return item
+
+
 class DeltaInbox:
     def __init__(self, workspace: Path) -> None:
         self.workspace = workspace.resolve()
@@ -95,7 +130,7 @@ class DeltaInbox:
         path = self._path(item_id)
         if not path.exists():
             raise InboxError(f"inbox item {item_id!r} was not found")
-        return dict(json.loads(path.read_text(encoding="utf-8")))
+        return _recheck_risk(dict(json.loads(path.read_text(encoding="utf-8"))))
 
     def _save(self, item: dict[str, Any]) -> None:
         item["updated_at"] = _now()
@@ -104,15 +139,21 @@ class DeltaInbox:
     def items(self, status: str | None = None) -> list[dict[str, Any]]:
         if not self.root.exists():
             return []
-        items = [
-            json.loads(path.read_text(encoding="utf-8")) for path in self.root.glob("delta-*.json")
-        ]
+        items = []
+        for path in self.root.glob("delta-*.json"):
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue  # A torn or foreign file must not hide the rest of the inbox.
+            if isinstance(loaded, dict) and {"id", "status", "created_at"} <= loaded.keys():
+                items.append(_recheck_risk(loaded))
         items = [item for item in items if status is None or item["status"] == status]
         return sorted(items, key=lambda item: item["created_at"], reverse=True)
 
     # ---- intake --------------------------------------------------------------------------
 
     def add(self, document: dict[str, Any], *, source: str) -> dict[str, Any]:
+        _check_shape(document)
         if document.get("kind") != "AgentStateDelta" and isinstance(document.get("delta"), dict):
             document = document["delta"]  # A Loro proposal record wraps the delta.
         warnings = validate_delta(document)
@@ -153,8 +194,13 @@ class DeltaInbox:
         return item
 
     def add_file(self, path: Path) -> dict[str, Any]:
+        if path.stat().st_size > MAX_DELTA_BYTES:
+            raise InboxError(f"{path.name} is too large for a delta (max {MAX_DELTA_BYTES} bytes)")
         text = path.read_text(encoding="utf-8")
-        loaded = json.loads(text) if path.suffix == ".json" else yaml.safe_load(text)
+        try:
+            loaded = json.loads(text) if path.suffix == ".json" else yaml.load(text, _NoAliasLoader)
+        except RecursionError as error:
+            raise InboxError("the document is nested too deeply") from error
         if not isinstance(loaded, dict):
             raise InboxError(f"{path} does not contain a delta document")
         return self.add(loaded, source=f"file:{path.name}")

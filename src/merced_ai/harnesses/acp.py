@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import threading
 import time
 from collections.abc import Callable
@@ -31,10 +30,14 @@ from typing import Any
 from aais import create_request
 
 from merced_ai.harnesses.acp_launch import AcpLaunch
+from merced_ai.harnesses.acp_rpc import (
+    AcpConnection,
+    AcpError,
+    AcpMethodNotFound,
+)
 from merced_ai.harnesses.adapters.command import CommandHarnessAdapter, HarnessRunError
 from merced_ai.harnesses.api import HarnessSpec, prefixed_prompt
 from merced_ai.harnesses.detection import locate_executable
-from merced_ai.harnesses.process import Capture, stop_process
 from merced_ai.models import (
     HarnessCapabilities,
     HarnessProbe,
@@ -47,7 +50,9 @@ from merced_ai.models import (
 )
 
 ACP_PROTOCOL_VERSION = 1
-MAX_STDERR = 64_000
+# Bounds on what an untrusted agent can make the client hold.
+MAX_REPLY_CHARS = 10_000_000
+MAX_TOOL_CALLS = 500
 # Modes that approve tool calls without asking; Merced AI never selects them.
 AUTO_APPROVE_MODES = {"auto", "yolo", "bypassPermissions", "acceptEdits", "autoEdit"}
 READ_ONLY_MODES = ("plan", "chat", "read-only", "readonly")
@@ -57,162 +62,6 @@ SHELL_KINDS = {"execute"}
 
 ApprovalHandler = Callable[[dict[str, Any], threading.Event | None], dict[str, Any]]
 EventHandler = Callable[[dict[str, Any]], None]
-
-
-class AcpError(RuntimeError):
-    pass
-
-
-class AcpConnection:
-    """A JSON-RPC 2.0 client for one ACP agent process."""
-
-    def __init__(
-        self,
-        argv: list[str],
-        *,
-        cwd: Path,
-        env: dict[str, str],
-        on_notification: Callable[[str, dict[str, Any]], None],
-        on_request: Callable[[str, dict[str, Any]], dict[str, Any]],
-    ) -> None:
-        self._on_notification = on_notification
-        self._on_request = on_request
-        self._next_id = 0
-        self._pending: dict[int, dict[str, Any]] = {}
-        self._arrived = threading.Condition()
-        self._write_lock = threading.Lock()
-        self.stderr = Capture(MAX_STDERR)
-        self.closed = threading.Event()
-        self.process = subprocess.Popen(
-            argv,
-            cwd=cwd,
-            env=env,
-            shell=False,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            start_new_session=os.name != "nt",
-            creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
-        )
-        threading.Thread(target=self._read_stdout, daemon=True).start()
-        threading.Thread(target=self._read_stderr, daemon=True).start()
-
-    def _send(self, message: dict[str, Any]) -> None:
-        assert self.process.stdin is not None
-        data = (json.dumps(message) + "\n").encode()
-        with self._write_lock:
-            try:
-                self.process.stdin.write(data)
-                self.process.stdin.flush()
-            except OSError as error:
-                raise AcpError(f"agent closed its input: {error}") from error
-
-    def _read_stderr(self) -> None:
-        assert self.process.stderr is not None
-        descriptor = self.process.stderr.fileno()
-        try:
-            while chunk := os.read(descriptor, 16_384):
-                self.stderr.append(chunk)
-        except OSError:
-            return
-
-    def _read_stdout(self) -> None:
-        assert self.process.stdout is not None
-        try:
-            for line in self.process.stdout:
-                try:
-                    message = json.loads(line)
-                except ValueError:
-                    continue  # Agents sometimes print banners; JSON-RPC lines are what count.
-                if not isinstance(message, dict):
-                    continue
-                if "method" in message and "id" in message:
-                    threading.Thread(target=self._answer, args=(message,), daemon=True).start()
-                elif "method" in message:
-                    self._on_notification(str(message["method"]), message.get("params") or {})
-                elif "id" in message:
-                    with self._arrived:
-                        self._pending[int(message["id"])] = message
-                        self._arrived.notify_all()
-        finally:
-            self.closed.set()
-            with self._arrived:
-                self._arrived.notify_all()
-
-    def _answer(self, message: dict[str, Any]) -> None:
-        try:
-            result = self._on_request(str(message["method"]), message.get("params") or {})
-            reply: dict[str, Any] = {"jsonrpc": "2.0", "id": message["id"], "result": result}
-        except AcpMethodNotFound:
-            reply = {
-                "jsonrpc": "2.0",
-                "id": message["id"],
-                "error": {"code": -32601, "message": f"{message['method']} is not supported"},
-            }
-        except Exception as error:  # Report instead of leaving the agent waiting forever.
-            reply = {
-                "jsonrpc": "2.0",
-                "id": message["id"],
-                "error": {"code": -32603, "message": str(error)[:500]},
-            }
-        try:
-            self._send(reply)
-        except AcpError:
-            pass
-
-    def notify(self, method: str, params: dict[str, Any]) -> None:
-        self._send({"jsonrpc": "2.0", "method": method, "params": params})
-
-    def request(
-        self,
-        method: str,
-        params: dict[str, Any],
-        *,
-        timeout: float,
-        cancellation: threading.Event | None = None,
-        on_cancel: Callable[[], None] | None = None,
-    ) -> dict[str, Any]:
-        self._next_id += 1
-        request_id = self._next_id
-        self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
-        deadline = time.monotonic() + timeout
-        cancel_sent = False
-        with self._arrived:
-            while request_id not in self._pending:
-                if self.closed.is_set():
-                    raise AcpError(f"agent exited during {method}")
-                if cancellation is not None and cancellation.is_set() and not cancel_sent:
-                    cancel_sent = True
-                    if on_cancel is not None:
-                        on_cancel()
-                    # Give the agent a moment to stop cleanly and answer "cancelled".
-                    deadline = min(deadline, time.monotonic() + 5)
-                if time.monotonic() >= deadline:
-                    if cancel_sent:
-                        raise HarnessRunError("ACP run was cancelled", exit_code=130)
-                    raise HarnessRunError(
-                        f"ACP {method} timed out after {timeout:.0f}s", exit_code=5
-                    )
-                self._arrived.wait(0.05)
-            reply = self._pending.pop(request_id)
-        if "error" in reply:
-            error = reply["error"] or {}
-            raise AcpError(f"{method} failed: {error.get('message', error)}")
-        result = reply.get("result")
-        return result if isinstance(result, dict) else {}
-
-    def close(self) -> None:
-        try:
-            if self.process.stdin is not None:
-                self.process.stdin.close()
-        except OSError:
-            pass
-        if self.process.poll() is None:
-            stop_process(self.process)
-
-
-class AcpMethodNotFound(Exception):
-    pass
 
 
 def choose_mode(modes: dict[str, Any] | None, *, read_only: bool) -> str | None:
@@ -244,6 +93,8 @@ class _Turn:
     replaying: bool = False
     # Updates before our prompt (session replay, mode-change notices) are not part of the reply.
     prompting: bool = False
+    size: int = 0
+    truncated: bool = False
     text: list[str] = field(default_factory=list)
     tool_calls: dict[str, dict[str, Any]] = field(default_factory=dict)
     permissions: list[dict[str, Any]] = field(default_factory=list)
@@ -367,20 +218,34 @@ class AcpHarnessAdapter(CommandHarnessAdapter):
         def on_notification(method: str, params: dict[str, Any]) -> None:
             if method != "session/update" or turn.replaying or not turn.prompting:
                 return
-            update = params.get("update") or {}
+            update = params.get("update")
+            if not isinstance(update, dict):
+                return
             kind = update.get("sessionUpdate")
             if kind == "agent_message_chunk":
-                content = update.get("content") or {}
-                if content.get("type") == "text" and isinstance(content.get("text"), str):
-                    turn.text.append(content["text"])
-                    emit({"type": "assistant_delta", "text": content["text"]})
+                content = update.get("content")
+                text = content.get("text") if isinstance(content, dict) else None
+                if isinstance(text, str) and content.get("type") == "text":  # type: ignore[union-attr]
+                    room = MAX_REPLY_CHARS - turn.size
+                    if room <= 0:
+                        turn.truncated = True
+                        return
+                    if len(text) > room:
+                        text, turn.truncated = text[:room], True
+                    turn.size += len(text)
+                    turn.text.append(text)
+                    emit({"type": "assistant_delta", "text": text})
             elif kind in {"tool_call", "tool_call_update"}:
-                call_id = str(update.get("toolCallId", ""))
+                call_id = str(update.get("toolCallId", ""))[:200]
+                if call_id not in turn.tool_calls and len(turn.tool_calls) >= MAX_TOOL_CALLS:
+                    return
                 merged = {**turn.tool_calls.get(call_id, {}), **_tool_summary(update)}
                 turn.tool_calls[call_id] = merged
                 emit({"type": "tool_call", "tool_call": merged})
             elif kind == "plan":
-                emit({"type": "plan", "entries": update.get("entries", [])[:50]})
+                entries = update.get("entries")
+                if isinstance(entries, list):
+                    emit({"type": "plan", "entries": entries[:50]})
 
         def on_request(method: str, params: dict[str, Any]) -> dict[str, Any]:
             if method == "session/request_permission":
@@ -477,6 +342,7 @@ class AcpHarnessAdapter(CommandHarnessAdapter):
                 "stop_reason": stop_reason,
                 "resumed": resumed,
                 "load_session": can_load,
+                "truncated": turn.truncated,
                 "load_error": load_error,
                 "tool_calls": list(turn.tool_calls.values())[-50:],
                 "permissions": turn.permissions,
@@ -578,7 +444,7 @@ def _option(options: list[dict[str, Any]], kind: str) -> dict[str, Any] | None:
 
 def _tool_summary(update: dict[str, Any]) -> dict[str, Any]:
     return {
-        key: update[key]
+        key: update[key][:500]
         for key in ("toolCallId", "title", "kind", "status")
         if key in update and isinstance(update[key], str)
     }

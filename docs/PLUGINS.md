@@ -44,8 +44,8 @@ def build(ctx: InvocationContext) -> HarnessInvocation:
 SPEC = HarnessSpec(
     descriptor("my-harness", "My Harness", "my-harness"),
     build,
-    projection="prefixed",   # or "system_prompt", or "native"
-    output="json",           # or "text", or a function stdout -> (reply, payload, session_id)
+    projection="prefixed",  # or "system_prompt", or "native"
+    output="json",  # or "text", or a function stdout -> (reply, payload, session_id)
 )
 ```
 
@@ -93,3 +93,6 @@ For a live check against the installed harness, add it to your own smoke test th
 - `MERCED_AI_DISABLE_PLUGINS=1` loads only the built-in adapters.
 - Plugins run in the Merced AI process with your permissions. Install them only from sources you
   trust, as you would the harnesses themselves.
+- A distribution that sits in the current working directory (for example a `*.dist-info` folder
+  checked into a project) is ignored and reported, so opening a project cannot register a plugin.
+  `python -m merced_ai` also leaves the working directory off `sys.path`.

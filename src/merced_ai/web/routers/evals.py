@@ -55,6 +55,9 @@ async def eval_start(spec: EvalSpec, context: WriteContext) -> dict[str, Any]:
         "error": None,
     }
     context.eval_jobs[job_id] = job
+    finished = [key for key, item in context.eval_jobs.items() if item["status"] != "running"]
+    for key in finished[: max(0, len(context.eval_jobs) - 50)]:
+        context.eval_jobs.pop(key, None)
     runner = EvalRunner(context.workspace, context.registry)
 
     def progress(outcome: HarnessOutcome) -> None:

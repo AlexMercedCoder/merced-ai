@@ -561,8 +561,12 @@ async function pollAAIS() {
     $("#aais-risk").textContent = `${request.risk.level.toUpperCase()} · ${request.risk.reasons.join(" · ")}`;
     $("#aais-action").textContent = JSON.stringify({ name: request.action.name, resource: request.action.resource, working_directory: request.action.working_directory, arguments: request.action.arguments, digest: request.action_digest }, null, 2);
     $("#aais-origin").textContent = `${request.origin.harness} · ${request.origin.project || "local project"}`;
-    $("#aais-choices").innerHTML = request.choices.map((choice) => `<button class="${choice.decision === "approve" ? "primary-button" : "secondary-button"}" data-decision="${escapeHtml(choice.decision)}" data-scope="${escapeHtml(choice.scope)}">${escapeHtml(choice.label)}</button>`).join("");
-    if (!dialog.open) dialog.showModal();
+    $("#aais-choices").innerHTML = request.choices.map((choice) => `<button class="${choice.decision === "approve" ? "primary-button" : "secondary-button"}" data-decision="${escapeHtml(choice.decision)}" data-scope="${escapeHtml(choice.scope)}">${escapeHtml(choiceLabel(choice))}</button>`).join("");
+    if (!dialog.open) {
+      dialog.showModal();
+      // Enter should never grant access by accident: start on a refusal when there is one.
+      dialog.querySelector('#aais-choices [data-decision="deny"]')?.focus();
+    }
   } catch { /* the active run stream remains usable during transient reconnects */ }
 }
 
@@ -753,6 +757,21 @@ function diffLineClass(line) {
   return "";
 }
 
+// Button text comes from what the choice does, never from the harness's own label: a harness
+// could otherwise label an "always allow" choice "Deny".
+const CHOICE_LABELS = {
+  "approve/once": "Allow once",
+  "approve/session": "Allow for this session",
+  "approve/persistent": "Always allow",
+  "deny/once": "Deny",
+  "deny/session": "Deny for this session",
+  "deny/persistent": "Always deny",
+};
+
+function choiceLabel(choice) {
+  return CHOICE_LABELS[`${choice.decision}/${choice.scope}`] || `${titleCase(String(choice.decision))} (${choice.scope})`;
+}
+
 function renderCompare() {
   const { bots, selected, patch } = compareState;
   $("#compare-bots").innerHTML = bots.length
@@ -770,7 +789,7 @@ function renderCompare() {
   $("#compare-summary").textContent = bot.files?.length
     ? `${titleCase(bot.bot_name)} changed ${bot.files.length} file${bot.files.length === 1 ? "" : "s"} on branch ${bot.branch}.`
     : `${titleCase(bot.bot_name)} has not changed any files.`;
-  $("#compare-files").innerHTML = (bot.files || []).map((file) => `<li><code>${escapeHtml(file.path)}</code><span class="diff-add">+${file.insertions}</span><span class="diff-del">−${file.deletions}</span></li>`).join("");
+  $("#compare-files").innerHTML = (bot.files || []).map((file) => `<li><code>${escapeHtml(file.path)}</code>${file.symlink != null ? `<span class="diff-link${file.unsafe ? " diff-unsafe" : ""}">symlink → ${escapeHtml(file.symlink)}${file.unsafe ? " (outside the repository; apply will refuse)" : ""}</span>` : ""}<span class="diff-add">+${file.insertions}</span><span class="diff-del">−${file.deletions}</span></li>`).join("");
   $("#compare-patch").innerHTML = patch === null
     ? '<span class="diff-hunk">Loading diff…</span>'
     : (patch.patch || "").split("\n").map((line) => `<span class="${diffLineClass(line)}">${escapeHtml(line)}</span>`).join("\n") + (patch.truncated ? '\n<span class="diff-hunk">… diff truncated; see the branch for the rest.</span>' : "");
