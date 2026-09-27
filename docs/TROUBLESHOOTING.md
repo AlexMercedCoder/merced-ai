@@ -62,7 +62,8 @@ Current Merced builds invoke `openclaw agent --local --agent main`. If an older 
 
 ## "The prompt is too large to pass to ... on the command line" (exit status 7)
 
-MagAgent, Loro, DSH, and Antigravity accept the prompt only as a command-line argument, so Merced
+MagAgent, Loro versions without `run --prompt-file`, DSH, and Antigravity accept the prompt only
+as a command-line argument, so Merced
 AI refuses to build a command line over 100 KB (24 KB on Windows) rather than let the operating
 system reject it. Long conversations replay up to twenty turns, and attached context files can add
 up to 750 KB, so this usually means the context is too large for that harness. Remove attached

@@ -214,7 +214,7 @@ def test_harness_answers_through_the_adapter(
     entry: dict[str, object] = {
         "harness": harness_id,
         "version": (probe.version or "").splitlines()[0][:80],
-        "prompt_delivery": adapter.descriptor.prompt_delivery.value,
+        "prompt_delivery": (probe.prompt_delivery or adapter.descriptor.prompt_delivery).value,
         "model": NOUS_MODEL if harness_id in {"loro", "magagent"} else "harness default",
     }
     try:

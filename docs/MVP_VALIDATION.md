@@ -137,7 +137,8 @@ tool environment fails to import (`anton version` raises), not because of an ada
 | Goose | 1.48.0 | stdin (`--instructions -`) | `OK` after a fix: the reply had been the echoed user message |
 | OpenCode | 1.18.31 | stdin | `OK` after a fix: the reply had been empty |
 | MagAgent | 1.3.0 (repo build) | argument | `OK` via Nous after a fix: the reply had been empty; the globally installed 1.1.2 needs `magent user create` first |
-| Loro | 0.21.0 (repo build) and 0.19.2 | argument | Not passing. Merced AI delivered the run, but `loro run` reported `provider_error` (HTTP 401 with an OpenAI-style "Incorrect API key" message) while `loro providers smoke` with the same config and key returned `ok`. This is a Loro issue; Merced AI now reports it as a failed run instead of returning the summary as the reply. |
+| Loro | `claude/next-release` build with L-8/L-9 | private file (`--prompt-file`), `--json` | `OK` via Nous, run from a throwaway venv and HOME after Loro fixed its run-path provider defaults. |
+| Loro (earlier the same day) | 0.21.0 (repo build) and 0.19.2 | argument | Not passing. Merced AI delivered the run, but `loro run` reported `provider_error` (HTTP 401 with an OpenAI-style "Incorrect API key" message) while `loro providers smoke` with the same config and key returned `ok`. This is a Loro issue; Merced AI now reports it as a failed run instead of returning the summary as the reply. |
 
 Model calls made: about 17, all one-line prompts (9 through the suite across four runs while fixing the issues above, 8 manual reproductions); the Loro attempts were rejected with HTTP 401.
 

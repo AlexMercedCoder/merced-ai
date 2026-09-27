@@ -7,12 +7,14 @@ it in docs/COMPATIBILITY.md ("Prompt delivery").
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from merced_ai.harnesses.acp_launch import AcpLaunch
 from merced_ai.harnesses.api import (
     HarnessInvocation,
     HarnessSpec,
     InvocationContext,
+    help_flags,
     profile_provider,
     qualified_model,
 )
@@ -122,17 +124,31 @@ def build_magagent(ctx: InvocationContext) -> HarnessInvocation:
     return HarnessInvocation(command, ARGV)
 
 
+LORO_FEATURES = ("--prompt-file", "--json")
+
+
+def loro_features(executable: Path) -> frozenset[str]:
+    """Loro 0.22 added `run --prompt-file` and `run --json`; older versions have neither."""
+    return help_flags([str(executable), "run", "--help"], LORO_FEATURES)
+
+
 def build_loro(ctx: InvocationContext) -> HarnessInvocation:
-    # Same constraint as MagAgent: stdin carries AAIS envelopes.
-    command = [
-        str(ctx.executable),
-        "run",
-        ctx.prompt if ctx.native_profile else ctx.prefixed_prompt,
-    ]
+    # stdin carries AAIS envelopes, so the prompt goes through --prompt-file when this Loro has
+    # it (a 0600 file in the run's private temp dir) and otherwise on argv behind the guard.
+    task = ctx.prompt if ctx.native_profile else ctx.prefixed_prompt
+    command = [str(ctx.executable), "run"]
+    delivery = ARGV
+    if "--prompt-file" in ctx.features:
+        command.extend(("--prompt-file", str(ctx.private_file("prompt.md", task))))
+        delivery = FILE
+    else:
+        command.append(task)
+    if "--json" in ctx.features:
+        command.append("--json")
     if ctx.native_profile:
         command.extend(("--agent", ctx.profile.name))
     command.append("--approval-stdio")
-    return HarnessInvocation(command, ARGV)
+    return HarnessInvocation(command, delivery)
 
 
 def build_opencode(ctx: InvocationContext) -> HarnessInvocation:
@@ -280,6 +296,7 @@ BUILTIN_SPECS: tuple[HarnessSpec, ...] = (
         projection="native",
         output=normalize_loro,
         aais_control=True,
+        features=loro_features,
     ),
     HarnessSpec(
         descriptor(

@@ -34,6 +34,12 @@ Targets 0.8.0.
   top-level answers (`result`, `response`) now win, then the assistant's own turn; a user turn is
   never returned. `loro run` summaries now yield only the "Model response" text, and a Loro
   `provider_error` stop is reported as a failed run instead of as the reply.
+- Loro: when the installed `loro run` offers `--prompt-file` (detected from its help and cached
+  per executable and modification time), the prompt goes through a 0600 file in the run's private
+  temp directory instead of the command line, and `--json` output is parsed for the reply, stop
+  reason, and Loro's session ID. A Loro provider error (non-zero exit) is reported with Loro's own
+  message. Older Loro keeps the argument and its size guard; `harness show` reports the detected
+  delivery. Adapter specs can declare such optional-feature detection (`HarnessSpec.features`).
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
 

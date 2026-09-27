@@ -202,6 +202,7 @@ harness list:
     webmcp: bool
   capabilities_verified: bool
   duration_ms: int
+  features: []
   harness_id: str
   harness_supports:
     approvals: bool
@@ -236,6 +237,7 @@ harness show:
     webmcp: bool
   capabilities_verified: bool
   duration_ms: int
+  features: []
   harness_id: str
   harness_supports:
     approvals: bool

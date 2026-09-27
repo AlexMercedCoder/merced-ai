@@ -91,6 +91,8 @@ class HarnessProbe(BaseModel):
     harness_supports: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
     broker_implements: HarnessCapabilities = Field(default_factory=HarnessCapabilities)
     prompt_delivery: PromptDelivery | None = None
+    # Optional CLI features detected on the installed version (for example "--prompt-file").
+    features: tuple[str, ...] = ()
     capabilities_verified: bool = False
     warnings: tuple[str, ...] = ()
     duration_ms: int = 0

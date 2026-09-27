@@ -8,6 +8,7 @@ files, the argv size guard, bounded capture, cancellation, the AAIS control chan
 
 from __future__ import annotations
 
+import functools
 import os
 import subprocess
 import sys
@@ -44,6 +45,7 @@ from merced_ai.models import (
     ProfileProjection,
     ProfileRecord,
     ProjectionAdjustment,
+    PromptDelivery,
     RunRequest,
     RunResult,
 )
@@ -137,7 +139,14 @@ class CommandHarnessAdapter:
         return self.spec.aais_control
 
     def probe(self, workspace: Path | None = None) -> HarnessProbe:
-        return probe_executable(self.descriptor, workspace)
+        probe = probe_executable(self.descriptor, workspace)
+        if probe.path is None or self.spec.features is None:
+            return probe
+        features = self.features(probe.path)
+        update: dict[str, Any] = {"features": tuple(sorted(features))}
+        if "--prompt-file" in features and self.descriptor.prompt_delivery.value == "argv":
+            update["prompt_delivery"] = PromptDelivery.FILE
+        return probe.model_copy(update=update)
 
     def project_profile(self, profile: ProfileRecord) -> ProfileProjection:
         harness_id = self.descriptor.id
@@ -214,7 +223,22 @@ class CommandHarnessAdapter:
         executable = locate_executable(self.descriptor)
         if executable is None:
             raise HarnessRunError(f"Harness {self.descriptor.id!r} is not installed.", exit_code=3)
-        return self.spec.build(InvocationContext(request, executable, scratch))
+        return self.spec.build(
+            InvocationContext(request, executable, scratch, self.features(executable))
+        )
+
+    def features(self, executable: Path | None = None) -> frozenset[str]:
+        """Optional CLI features of the installed executable, cached per path and mtime."""
+        if self.spec.features is None:
+            return frozenset()
+        executable = executable or locate_executable(self.descriptor)
+        if executable is None:
+            return frozenset()
+        try:
+            stamp = executable.stat().st_mtime_ns
+        except OSError:
+            return frozenset()
+        return _cached_features(self.spec.features, str(executable), stamp)
 
     def normalize(self, stdout: str) -> NormalizedOutput:
         output = self.spec.output
@@ -290,8 +314,12 @@ class CommandHarnessAdapter:
                 exit_code=5,
             ) from exc
         if result.returncode != 0:
+            # A harness that reports failures as structured output (for example `loro run
+            # --json` on a provider error) says more in its reply than in its last stderr line.
+            reply, reply_raw, _ = self.normalize(result.stdout)
             summary = (
-                _last_nonempty_line(result.stderr)
+                (reply[:500] if reply_raw is not None and reply else None)
+                or _last_nonempty_line(result.stderr)
                 or _last_nonempty_line(result.stdout)
                 or "unknown error"
             )
@@ -325,6 +353,13 @@ class CommandHarnessAdapter:
             native_session_id=native_session_id,
             duration_ms=round((time.monotonic() - started) * 1000),
         )
+
+
+@functools.lru_cache(maxsize=64)
+def _cached_features(
+    detector: Callable[[Path], frozenset[str]], executable: str, _mtime_ns: int
+) -> frozenset[str]:
+    return detector(Path(executable))
 
 
 def _clean_environment() -> dict[str, str]:

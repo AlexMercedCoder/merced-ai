@@ -48,6 +48,29 @@ class HarnessInvocation:
     stdin: str | None = None
 
 
+def help_flags(
+    argv: list[str], wanted: tuple[str, ...], *, timeout: float = 10.0
+) -> frozenset[str]:
+    """Which of ``wanted`` flags appear in a command's ``--help`` output (never raises)."""
+    import subprocess
+
+    try:
+        completed = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env={**os.environ, "COLUMNS": "400", "NO_COLOR": "1", "TERM": "dumb"},
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return frozenset()
+    text = completed.stdout + completed.stderr
+    return frozenset(flag for flag in wanted if flag in text)
+
+
 def write_private(path: Path, content: str) -> Path:
     """Write a file readable only by the current user (mode 0600 on POSIX)."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -90,6 +113,8 @@ class InvocationContext:
     request: RunRequest
     executable: Path
     scratch: Path
+    # Optional CLI features detected on this installed version (see HarnessSpec.features).
+    features: frozenset[str] = frozenset()
 
     @property
     def profile(self) -> ProfileRecord:
@@ -152,6 +177,10 @@ class HarnessSpec:
     env: Callable[[InvocationContext], dict[str, str]] | None = None
     # The harness speaks AAIS 1.0 envelopes on stdout/stdin (stdin is then not a prompt channel).
     aais_control: bool = False
+    # Detects optional CLI features of the installed executable (for example a newer
+    # `--prompt-file` flag) so `build` can use them and fall back on older versions. Results are
+    # cached per executable path and modification time.
+    features: Callable[[Path], frozenset[str]] | None = None
     api_version: int = ADAPTER_API_VERSION
     # Where the adapter came from: "builtin" or the distribution that provided the entry point.
     origin: str = field(default="builtin", compare=False)

@@ -65,6 +65,18 @@ def normalize_loro(text: str) -> tuple[str, dict[str, Any] | None, str | None]:
     provider error is reported as a failure instead of as the reply.
     """
     text = text.strip()
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict) and "stop_reason" in payload and "response" in payload:
+        # `loro run --json` (Loro 0.22+).
+        response = payload.get("response")
+        return (
+            response.strip() if isinstance(response, str) else "",
+            payload,
+            payload.get("session_id") if isinstance(payload.get("session_id"), str) else None,
+        )
     if not LORO_SUMMARY_RE.search(text) or "\nModel response: " not in text:
         return text, None, None
     response = text.rsplit("\nModel response: ", 1)[1]
