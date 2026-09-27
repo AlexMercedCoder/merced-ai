@@ -12,8 +12,9 @@ Targets 0.8.0.
   prompt from a private temporary file. Before this change a long conversation plus attached
   context (up to about 850 KB) was passed as one argument and could fail with `E2BIG` on Linux or a
   command-line length error on Windows.
-- MagAgent, Loro, DSH, and Antigravity still take the prompt as an argument (MagAgent and Loro use
-  stdin for AAIS approvals). A new guard refuses any command line over 100 KB on POSIX or 24 KB on
+- DSH and Antigravity still take the prompt as an argument, and so do MagAgent and Loro releases
+  without `--prompt-file` (both use stdin for AAIS approvals; see the Loro and MagAgent entries
+  below). A new guard refuses any command line over 100 KB on POSIX or 24 KB on
   Windows with a clear message and exit status 7, instead of failing to start the process.
 - A corrupt `.merced-ai/aais-presenter.json` no longer stops `merced-ai ui` from starting. The
   file is moved aside as `aais-presenter.corrupt-<timestamp>.json`, the presenter starts with empty
@@ -194,6 +195,8 @@ regression test in `tests/test_security_review.py` that fails without the fix.
   the README current-release line, the conformance results, the newest dated changelog heading,
   and the release-notes link agree. CI runs it on every push: advisory on branches, strict on `v*`
   tag builds (the workflow now also triggers on tags).
+- The dev extra bounds ruff to 0.16.x (`ruff>=0.16,<0.17`), because CI runs `ruff format --check`
+  and a new ruff minor can change formatting or add lint rules.
 
 ### Performance
 
