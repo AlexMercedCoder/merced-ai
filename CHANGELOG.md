@@ -88,12 +88,19 @@ Targets 0.8.0.
   and the release-notes link agree. CI runs it on every push: advisory on branches, strict on `v*`
   tag builds (the workflow now also triggers on tags).
 
+### Internal structure
+
+- The 1,000-line `webui_server.py` is now the `merced_ai.web` package: an app composer, a shared
+  `WebContext` with typed read/write authentication dependencies, a harness probe cache service, a
+  run service that owns turn planning and supervised execution, and three routers (workspace,
+  catalog, conversations). No module is over 300 lines. `merced_ai.webui_server` still exports
+  `create_web_app` and `run_web_ui`. The HTTP API is unchanged.
+
 ### Type checking
 
-- mypy now runs in CI (Ubuntu) over `src/merced_ai` with a lenient baseline
-  (`check_untyped_defs`, `no_implicit_optional`, `warn_unused_ignores`). The only module still
-  excluded is `merced_ai.webui_server`; `tests/test_typing_ratchet.py` fails if the exclusion list
-  grows. Fixing the baseline tightened a few real edges: bot edit/delete now reject a binding with
+- mypy now runs in CI (Ubuntu) over all of `src/merced_ai` with a lenient baseline
+  (`check_untyped_defs`, `no_implicit_optional`, `warn_unused_ignores`) and no excluded modules;
+  `tests/test_typing_ratchet.py` fails if any module is excluded again. Fixing the baseline tightened a few real edges: bot edit/delete now reject a binding with
   no file path instead of failing on `None`, and platform-specific locking, liveness, and
   process-group code is gated on `sys.platform` so it type-checks per OS.
 

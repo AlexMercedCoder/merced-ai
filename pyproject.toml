@@ -73,9 +73,8 @@ source = ["merced_ai"]
 skip_covered = true
 
 [tool.mypy]
-# Lenient baseline enforced in CI, plus a ratchet: modules listed in the override below are the
-# backlog. Move a module off the list once it type-checks; tests/test_typing_ratchet.py fails if
-# the list grows.
+# Lenient baseline enforced in CI over the whole package. tests/test_typing_ratchet.py fails if
+# any module is ever excluded again.
 python_version = "3.11"
 files = ["src/merced_ai"]
 ignore_missing_imports = true
@@ -84,12 +83,7 @@ warn_unused_ignores = true
 no_implicit_optional = true
 check_untyped_defs = true
 
-# Ratchet backlog. Shrink this list; do not grow it.
-[[tool.mypy.overrides]]
-module = [
-  "merced_ai.webui_server",
-]
-ignore_errors = true
+# Ratchet backlog: empty. Do not add modules here; fix the types instead.
 
 [tool.ruff]
 line-length = 100

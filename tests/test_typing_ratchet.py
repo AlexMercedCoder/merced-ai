@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # Modules allowed to skip type checking. Remove entries as they are fixed; never add one.
-BASELINE = {"merced_ai.webui_server"}
+BASELINE: set[str] = set()
 
 
 def _ignored_modules() -> set[str]:

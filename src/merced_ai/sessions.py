@@ -119,6 +119,7 @@ class SessionStore:
         harness_id: str | None = None,
         turn_id: str | None = None,
         profile: ProfileRecord | None = None,
+        native_session_id: str | None = None,
     ) -> None:
         turn = ConversationTurn(
             id=turn_id or str(uuid4()),
@@ -129,6 +130,7 @@ class SessionStore:
             profile_revision=profile.revision if profile else None,
             spec_digest=profile.spec_digest if profile else None,
             profile_digest=profile.profile_digest if profile else None,
+            native_session_id=native_session_id,
         )
         with file_lock(self._path(session.id)):
             current = self.load(session.id)

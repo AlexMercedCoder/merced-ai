@@ -190,6 +190,8 @@ class ConversationTurn(BaseModel):
     profile_revision: int | None = None
     spec_digest: str | None = None
     profile_digest: str | None = None
+    # The harness's own session ID for this reply, when it reports one (used for native resume).
+    native_session_id: str | None = None
 
 
 class SessionParticipant(BaseModel):

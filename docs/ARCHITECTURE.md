@@ -43,7 +43,18 @@ routing or subprocess pipeline.
 - `sessions.py`: atomic normalized session persistence, exact mention selection, and deterministic
   group dispatch.
 - `cli.py`: human and JSON automation surfaces.
-- `webui_server.py`: loopback-first optional UI over the same application records.
+- `web/`: the optional loopback-first UI over the same application records.
+  - `app.py` composes the FastAPI app (security headers, static assets, routers) and
+    `run_web_ui` enforces loopback binding and the one-time token.
+  - `context.py` holds per-server state (`WebContext`) and the authentication dependencies:
+    every endpoint takes `ReadContext` (cookie or token) or `WriteContext` (also same-origin).
+  - `probes.py` is the cached, background-refreshed harness detection service.
+  - `runs.py` is the run service: it plans a turn, asks launch consent, and owns the supervised
+    run whose events every HTTP stream only observes.
+  - `routers/` groups endpoints by resource: `workspace` (auth, bootstrap, harnesses, context,
+    history), `catalog` (profiles, bots, projection), and `conversations` (sessions, messages,
+    replay, cancel, approvals).
+  - `webui_server.py` remains as a compatibility import path.
 
 The UI bootstrap path never probes executables. It returns profiles, bots, sessions, and a cached
 or placeholder harness snapshot, then a separate authenticated endpoint starts one bounded
