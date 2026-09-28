@@ -98,6 +98,15 @@ regression test in `tests/test_security_review.py` that fails without the fix.
 
 ### Added
 
+- Terminal approvals: when MagAgent, Loro, or an ACP agent asks for approval during `ask`,
+  `chat`, `group ask`, or `group chat`, the CLI now shows the request on the terminal (the exact
+  action and arguments, risk and reasons, the bot and harness that asked, and Merced AI's own
+  labels for each choice) and takes one key: a number to choose, Enter, Esc, or Ctrl-C to deny.
+  Deny is the default. Decisions go through the same AAIS presenter as the web UI, so the receipt
+  is the same envelope, recorded as `authenticated_by: merced-ai-terminal`. Prompts from bots
+  running in parallel are shown one at a time. Before this, every request from MagAgent and Loro
+  was denied silently on the command line. Without an interactive terminal the request is still
+  denied, now with one line on stderr naming the request and how to approve instead.
 - Group turns now run write-capable bots that share a workspace one at a time, in participant
   order, and say so: a stderr warning in the CLI (plus `write_serialization` in
   `group ask --json`), and an amber notice above the web composer with queued-participant status.

@@ -75,10 +75,11 @@ When a profile does not explicitly deny both editing and shell access, the UI re
 confirmation before launching the harness. This is a Merced AI preflight, not a replacement for
 the harness's own approval and sandbox policy. The inspector labels that boundary explicitly.
 Subprocess adapters run without an attached terminal, so they cannot strand an invisible prompt:
-an action requiring authority that the adapter cannot carry is refused by the child harness. A
-native harness UI such as MagAgent or Loro can provide live browser decisions. Relaying a live
-approval through Merced AI requires a versioned, bidirectional approval transport from that harness;
-the current one-shot CLI adapter contract cannot safely infer or grant one.
+an action requiring authority that the adapter cannot carry is refused by the child harness.
+MagAgent and Loro relay live AAIS requests over their stdio channel, and ACP agents send
+`session/request_permission`; the UI shows both in the approval dialog, with button labels
+Merced AI derives from each choice's decision and scope. The CLI shows the same requests in the
+terminal and records decisions through the same presenter (see the README).
 
 ## Local security model
 

@@ -247,6 +247,7 @@ class AAISPresenter:
         *,
         actor_id: str = "local-user",
         decision_id: str | None = None,
+        authenticated_by: str = "merced-ai-web-session",
     ) -> dict[str, Any]:
         with self._lock, file_lock(self.path):
             self._load()
@@ -281,7 +282,7 @@ class AAISPresenter:
                 actor={
                     "id": actor_id.replace(" ", "."),
                     "type": "policy" if actor_id.startswith("merced-ai.") else "human",
-                    "authenticated_by": "merced-ai-web-session",
+                    "authenticated_by": authenticated_by,
                 },
                 sequence=self._sequence,
                 stream="merced-ai.presenter",

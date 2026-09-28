@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from merced_ai.bots import resolve_bot
 from merced_ai.harnesses.registry import HarnessRegistry, default_registry
@@ -47,6 +50,10 @@ def shared_workspace_writers(prepared: tuple[PreparedRun, ...]) -> tuple[str, ..
             by_workspace.setdefault(item.request.workspace, []).append(item.bot.name)
     shared = {name for names in by_workspace.values() if len(names) > 1 for name in names}
     return tuple(item.bot.name for item in prepared if item.bot.name in shared)
+
+
+# Answers one AAIS approval.requested envelope with an approval.decided envelope.
+ApprovalHandler = Callable[[dict[str, Any], threading.Event | None], dict[str, Any]]
 
 
 @dataclass
@@ -145,9 +152,21 @@ def prepare_run(
     return PreparedRun(bot, profile, projection, request)
 
 
-def execute(prepared: PreparedRun, registry: HarnessRegistry | None = None) -> RunResult:
+def execute(
+    prepared: PreparedRun,
+    registry: HarnessRegistry | None = None,
+    *,
+    approval_handler: ApprovalHandler | None = None,
+) -> RunResult:
+    """Run one prepared turn. ``approval_handler`` answers the harness's AAIS requests; without
+    one, adapters that relay approvals deny every request."""
     registry = registry or default_registry()
-    return registry.get(prepared.request.harness_id).run(prepared.request)
+    adapter = registry.get(prepared.request.harness_id)
+    runner = getattr(adapter, "run_cancellable", None)
+    if approval_handler is not None and runner is not None:
+        result: RunResult = runner(prepared.request, None, approval_handler)
+        return result
+    return adapter.run(prepared.request)
 
 
 def participant_from_run(prepared: PreparedRun) -> SessionParticipant:

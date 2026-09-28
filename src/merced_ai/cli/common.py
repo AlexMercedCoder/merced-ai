@@ -165,8 +165,20 @@ def _fail(message: str, code: int) -> NoReturn:
     raise typer.Exit(code=code)
 
 
-def _execute(prepared: PreparedRun) -> RunResult:
-    """Run a prepared turn through ``merced_ai.cli.execute`` (the documented patch point)."""
-    import merced_ai.cli as package
+def _execute(prepared: PreparedRun, registry: HarnessRegistry | None = None) -> RunResult:
+    """Run a prepared turn through ``merced_ai.cli.execute`` (the documented patch point).
 
-    return package.execute(prepared)
+    Harnesses that relay approval requests (MagAgent, Loro) get a terminal prompt when stdin and
+    stderr are terminals, and a one-line explained denial otherwise.
+    """
+    import merced_ai.cli as package
+    from merced_ai.cli.approvals import approval_handler
+    from merced_ai.harnesses.registry import default_registry
+
+    adapter = (registry or default_registry()).get(prepared.request.harness_id)
+    if not getattr(adapter, "relays_approvals", False):
+        return package.execute(prepared)
+    return package.execute(
+        prepared,
+        approval_handler=approval_handler(prepared.request.workspace, bot=prepared.bot.name),
+    )

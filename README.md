@@ -132,6 +132,12 @@ merced-ai session list
 merced-ai session resume <session-id>
 ```
 
+When MagAgent, Loro, or an ACP agent asks for approval during `ask`, `chat`, or a group command,
+the request appears in the terminal: the exact action and arguments, its risk, and the bot and
+harness that asked. Press a number to choose; Enter, Esc, and Ctrl-C deny. The decision is
+recorded through the same AAIS presenter as the web UI. Without an interactive terminal (piped
+input, CI) the request is denied and one line on stderr says so.
+
 Launch the optional local UI:
 
 ```bash

@@ -114,6 +114,12 @@ probe reports streaming, relayed approvals, and (except Gemini) native resume on
 launcher is installed. Probe JSON still contains a `capabilities` field equal to
 `broker_implements` for one release so existing automation keeps working.
 
+Approval requests reach a person through `AAISPresenter`. The web UI shows them in its approval
+dialog; the CLI (`cli/approvals.py`) shows them on the terminal when stdin and stderr are
+terminals, serializes prompts from parallel group bots, and records the decision through the same
+presenter (the receipt differs only in `authenticated_by: merced-ai-terminal`). Without a terminal
+the CLI denies and says so on stderr.
+
 Permission projection is advisory and may only narrow intent. The harness remains responsible for
 credentials, provider traffic, approvals, sandboxing, tools, and final policy enforcement.
 

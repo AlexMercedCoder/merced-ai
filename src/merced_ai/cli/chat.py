@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import json
-import sys
-import threading
 from pathlib import Path
 from typing import Annotated, Any
 
 import typer
-from aais import create_decision
 from rich.markdown import Markdown
 from rich.table import Table
 
@@ -20,6 +17,7 @@ from merced_ai.application import (
     prepare_run,
 )
 from merced_ai.bots import BotError
+from merced_ai.cli.approvals import approval_handler
 from merced_ai.cli.apps import (
     app,
     session_app,
@@ -187,27 +185,6 @@ def _store_reply(
     )
 
 
-def _terminal_approval(envelope: dict[str, Any], _cancel: threading.Event | None) -> dict[str, Any]:
-    """Ask on the terminal before an ACP agent runs a tool call; default is to deny."""
-    request = envelope["request"]
-    action = request["action"]
-    console.print(
-        f"\n[bold yellow]Approval requested[/bold yellow] by {request['origin']['harness']}: "
-        f"{action.get('summary', action.get('name'))}"
-    )
-    if action.get("arguments"):
-        console.print(f"[dim]{json.dumps(action['arguments'])[:500]}[/dim]")
-    approved = typer.confirm("Allow this once?", default=False)
-    return create_decision(
-        envelope,
-        decision="approve" if approved else "deny",
-        scope="once",
-        actor={"id": "local-user", "type": "human", "authenticated_by": "merced-ai-terminal"},
-        sequence=int(envelope.get("sequence", 1)),
-        stream="merced-ai.terminal",
-    )
-
-
 def _run_turn(
     prepared: PreparedRun, *, registry: HarnessRegistry | None = None, interactive: bool
 ) -> tuple[RunResult, bool]:
@@ -218,7 +195,7 @@ def _run_turn(
     adapter = (registry or default_registry()).get(prepared.request.harness_id)
     acp_available = getattr(adapter, "acp_available", None)
     if not (interactive and callable(acp_available) and acp_available()):
-        return _execute(prepared), False
+        return _execute(prepared, registry), False
     printed: list[str] = []
 
     def on_event(event: dict[str, Any]) -> None:
@@ -231,7 +208,7 @@ def _run_turn(
                 f"\n[dim]· {call.get('title') or call.get('kind')} ({call.get('status', '')})[/dim]"
             )
 
-    handler = _terminal_approval if sys.stdin.isatty() else None
+    handler = approval_handler(prepared.request.workspace, bot=prepared.bot.name)
     result = adapter.run_cancellable(  # type: ignore[attr-defined]
         prepared.request, None, handler, None, on_event=on_event
     )
