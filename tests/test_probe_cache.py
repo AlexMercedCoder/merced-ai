@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -103,9 +104,13 @@ def test_a_slow_version_check_says_so(tmp_path, monkeypatch) -> None:  # type: i
 
     from merced_ai.harnesses import default_registry, detection
 
-    slow = tmp_path / "loro"
-    slow.write_text("#!/bin/sh\nsleep 5\n", encoding="utf-8")
-    slow.chmod(0o755)
+    if sys.platform == "win32":  # A shebang script is not executable on Windows; a .cmd is.
+        slow = tmp_path / "loro.cmd"
+        slow.write_text(f'@"{sys.executable}" -c "import time; time.sleep(5)"\n', encoding="utf-8")
+    else:
+        slow = tmp_path / "loro"
+        slow.write_text("#!/bin/sh\nsleep 5\n", encoding="utf-8")
+        slow.chmod(0o755)
     monkeypatch.setenv("MERCED_AI_LORO_PATH", str(slow))
     assert detection.PROBE_TIMEOUT_SECONDS >= 10
     monkeypatch.setattr(detection, "PROBE_TIMEOUT_SECONDS", 0.2)

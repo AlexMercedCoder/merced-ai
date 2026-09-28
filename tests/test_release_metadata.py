@@ -39,24 +39,29 @@ def test_detects_the_drift_fixed_for_0_7_0(tmp_path: Path) -> None:
     root = _copy_metadata(tmp_path)
     version = checker.check(root).version
     conformance = root / "docs" / "oap-conformance.json"
-    payload = json.loads(conformance.read_text())
+    payload = json.loads(conformance.read_text(encoding="utf-8"))
     payload["implementation_version"] = "0.4.0"
-    conformance.write_text(json.dumps(payload))
+    conformance.write_text(json.dumps(payload), encoding="utf-8")
     readme = root / "README.md"
     readme.write_text(
-        readme.read_text().replace(f"Current release: {version}", "Release:")
-        + "\nMerced AI `0.4.0` uses the OAP support library.\n"
+        readme.read_text(encoding="utf-8").replace(f"Current release: {version}", "Release:")
+        + "\nMerced AI `0.4.0` uses the OAP support library.\n",
+        encoding="utf-8",
     )
     changelog = root / "CHANGELOG.md"
-    text = changelog.read_text()
+    text = changelog.read_text(encoding="utf-8")
     changelog.write_text(
         text.replace(f"## {version} — ", f"## {version} — Unreleased\n\n## Old ", 1)
         # Two headings, so the repeat is detected whether or not the real changelog still has
         # an Unreleased section (it does not right after a release).
-        + "\n## Unreleased\n\n## Unreleased\n"
+        + "\n## Unreleased\n\n## Unreleased\n",
+        encoding="utf-8",
     )
     index = root / "docs" / "README.md"
-    index.write_text(index.read_text().replace(f"(RELEASE_NOTES_{version}.md)", "(missing.md)"))
+    index.write_text(
+        index.read_text(encoding="utf-8").replace(f"(RELEASE_NOTES_{version}.md)", "(missing.md)"),
+        encoding="utf-8",
+    )
 
     issues = "\n".join(checker.check(root).issues)
 
