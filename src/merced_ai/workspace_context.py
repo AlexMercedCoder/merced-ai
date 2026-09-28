@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from aais.liveness import Liveness, OwnerIdentity, current_host_id, process_start_time
 from pydantic import BaseModel, Field
 
 from merced_ai.paths import ensure_project_layout
@@ -45,7 +46,10 @@ class RunRecord(BaseModel):
     completed: int = 0
     failed: int = 0
     duration_ms: int = 0
-    owner_pid: int | None = None
+    owner_pid: int | None = None  # Kept for readers of older records; see ``owner``.
+    # The process running the turn as an aais.liveness OwnerIdentity (pid, start time, host),
+    # so a reused PID is not mistaken for the owner. Missing on records written before 0.8.0.
+    owner: dict[str, Any] | None = None
 
 
 def _safe_relative(workspace: Path, value: str) -> tuple[Path, str]:
@@ -187,6 +191,7 @@ class RunStore:
             context=context,
             started_at=datetime.now(UTC).isoformat(),
             owner_pid=os.getpid(),
+            owner=OwnerIdentity.current().to_dict(),
         )
         self.save(record)
         return record
@@ -211,12 +216,35 @@ class RunStore:
         return sorted(records, key=lambda item: item.started_at, reverse=True)[:limit]
 
     def recover_interrupted(self) -> None:
+        """Mark runs whose owning process is gone as interrupted.
+
+        A PID whose process start time differs from the recorded one was reused, so that run is
+        interrupted too. An owner on another host or PID namespace is unknown, never dead.
+        Records from before 0.8.0 carry only ``owner_pid``; they are checked by PID and upgraded
+        to a full identity while their owner is still running.
+        """
         for record in self.list():
             if record.status != "running":
                 continue
-            from merced_ai.process_liveness import process_alive
-
-            if process_alive(record.owner_pid):
+            try:
+                owner = (
+                    OwnerIdentity.from_dict(record.owner)
+                    if record.owner is not None
+                    else OwnerIdentity.from_dict(record.owner_pid)
+                    if record.owner_pid is not None
+                    else None
+                )
+            except (TypeError, ValueError):
+                owner = None
+            state = owner.liveness() if owner is not None else Liveness.DEAD
+            if state is not Liveness.DEAD:
+                if record.owner is None and owner is not None and state is Liveness.ALIVE:
+                    # Upgrade a legacy PID-only record: pin the start time of the process that
+                    # holds the PID now, so a later reuse of that PID is detected.
+                    record.owner = OwnerIdentity(
+                        owner.pid, process_start_time(owner.pid), current_host_id()
+                    ).to_dict()
+                    self.save(record)
                 continue
             record.status = "interrupted"
             record.finished_at = datetime.now(UTC).isoformat()

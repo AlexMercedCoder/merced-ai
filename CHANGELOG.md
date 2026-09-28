@@ -244,6 +244,12 @@ regression test in `tests/test_security_review.py` that fails without the fix.
   and cannot be decided; an owner on another host or PID namespace is reported as unknown and
   never treated as stopped. Existing `.merced-ai/aais-presenter.json` files with bare PIDs are
   read as local PID-only owners and rewritten in the new form when the presenter opens them.
+- Run records (`.merced-ai/runs/run-*.json`) get the same treatment: each records an `owner`
+  identity next to the existing `owner_pid`, and startup recovery marks a run interrupted when its
+  owner is gone or its PID was reused, while a run owned on another host stays as it is. Records
+  from earlier versions are checked by PID and upgraded while their process is still running.
+  `process_liveness.process_alive` now delegates to `aais.liveness`; no bare-PID ownership check
+  remains.
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the
   harness documents for itself) and `broker_implements` (what Merced AI delivers through its
   adapter). Previously every rich harness advertised streaming, resume, approvals, attachments,

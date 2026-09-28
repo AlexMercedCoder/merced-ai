@@ -1,33 +1,15 @@
-"""Non-destructive process liveness checks for recovery ownership."""
+"""Non-destructive process liveness checks for recovery ownership.
 
-import os
-import sys
+Ownership records use :class:`aais.liveness.OwnerIdentity` (PID, process start time, and host),
+which survives PID reuse. This PID-only helper remains for callers that have nothing more than a
+PID; it never signals or disturbs the process (on Windows, ``os.kill(pid, 0)`` would terminate it).
+"""
+
+from aais.liveness import Liveness, pid_liveness
 
 
 def process_alive(pid: int | None) -> bool:
+    """True only when the PID is known to belong to a running process."""
     if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
         return False
-    if sys.platform == "win32":
-        # os.kill(pid, 0) terminates a Windows process. Query its wait state instead.
-        import ctypes
-        from ctypes import wintypes
-
-        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-        kernel.OpenProcess.restype = wintypes.HANDLE
-        kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-        kernel.WaitForSingleObject.restype = wintypes.DWORD
-        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-        kernel.CloseHandle.restype = wintypes.BOOL
-        handle = kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE only
-        if not handle:
-            return False
-        try:
-            return kernel.WaitForSingleObject(handle, 0) == 0x00000102  # WAIT_TIMEOUT
-        finally:
-            kernel.CloseHandle(handle)
-    try:
-        os.kill(pid, 0)
-        return True
-    except (OSError, ValueError, OverflowError):
-        return False
+    return pid_liveness(pid) is Liveness.ALIVE
