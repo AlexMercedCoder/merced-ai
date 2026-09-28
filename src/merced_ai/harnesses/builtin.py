@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Literal
 
 from merced_ai.harnesses.acp_launch import AcpLaunch
 from merced_ai.harnesses.api import (
@@ -124,36 +125,42 @@ def magagent_features(executable: Path) -> frozenset[str]:
     return flags
 
 
+_MAGAGENT_SHELL_REPORT: dict[tuple[str, bool], tuple[Literal["mapped", "narrowed"], str]] = {
+    ("ask", True): (
+        "mapped",
+        "MagAgent asks before every shell command (and run_python and install_package) under "
+        "this profile, in every permission mode; an exact-command grant you made earlier still "
+        "counts. Merced AI relays each request as an AAIS approval.",
+    ),
+    ("ask", False): (
+        "narrowed",
+        "This MagAgent (before 1.4.0) ignores shell: ask for commands it classifies as read-only "
+        "(echo, cat, grep, sed without -i, awk) and runs those without asking; other commands "
+        "are relayed as AAIS approvals. MagAgent 1.4.0 asks for every command.",
+    ),
+    ("deny", True): (
+        "mapped",
+        "MagAgent removes run_shell, run_python, install_package, and git_op under this profile.",
+    ),
+    ("deny", False): (
+        "narrowed",
+        "This MagAgent (before 1.4.0) ignores shell: deny, so Merced AI starts it in paranoid "
+        "mode: shell commands still exist but each one needs approval. MagAgent 1.4.0 removes "
+        "the shell tools.",
+    ),
+}
+
+
 def magagent_native_adjustments(
     profile: ProfileRecord, features: frozenset[str]
 ) -> tuple[ProjectionAdjustment, ...]:
     """How MagAgent applies the profile's `shell` permission, for the projection report."""
     shell = profile.document.get("spec", {}).get("permissions", {}).get("shell")
-    if shell != "ask":
+    report = _MAGAGENT_SHELL_REPORT.get((str(shell), SHELL_ASK_EVERY_COMMAND in features))
+    if report is None:
         return ()
-    if SHELL_ASK_EVERY_COMMAND in features:
-        return (
-            ProjectionAdjustment(
-                field="spec.permissions.shell",
-                action="mapped",
-                reason=(
-                    "MagAgent asks before every shell command under this profile, in every "
-                    "permission mode; Merced AI relays each request as an AAIS approval."
-                ),
-            ),
-        )
-    return (
-        ProjectionAdjustment(
-            field="spec.permissions.shell",
-            action="narrowed",
-            reason=(
-                "This MagAgent (before 1.4.0) ignores shell: ask for commands it classifies as "
-                "read-only (echo, cat, grep, sed without -i, awk) and runs those without asking; "
-                "other commands are relayed as AAIS approvals. MagAgent 1.4.0 asks for every "
-                "command."
-            ),
-        ),
-    )
+    action, reason = report
+    return (ProjectionAdjustment(field="spec.permissions.shell", action=action, reason=reason),)
 
 
 def build_magagent(ctx: InvocationContext) -> HarnessInvocation:

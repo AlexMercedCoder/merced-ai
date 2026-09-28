@@ -135,7 +135,17 @@ def test_shell_ask_projection_matches_the_detected_magagent(
     else:  # 1.3.0 still auto-runs read-only commands; the report must say so
         assert shell[0].action == "narrowed" and "without asking" in shell[0].reason
     denied = create_profile("reader", "Reads.", "Read.", workspace, shell_permission="deny")
+    (deny,) = [
+        item
+        for item in _adapter().project_profile(denied).adjustments
+        if item.field == "spec.permissions.shell"
+    ]
+    if new:  # 1.4.0 removes the shell tools
+        assert deny.action == "mapped" and "removes run_shell" in deny.reason
+    else:  # older MagAgent ignores deny; Merced AI's paranoid mode is the backstop
+        assert deny.action == "narrowed" and "paranoid" in deny.reason
+    allowed = create_profile("doer", "Does.", "Do.", workspace, shell_permission="allow")
     assert not any(
         item.field == "spec.permissions.shell"
-        for item in _adapter().project_profile(denied).adjustments
+        for item in _adapter().project_profile(allowed).adjustments
     )

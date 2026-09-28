@@ -109,9 +109,12 @@ regression test in `tests/test_security_review.py` that fails without the fix.
   JSON gains `origin`, `also_in`, and `conflict`. MagAgent and Loro are passed a profile by name
   only when it is in a directory that harness reads; a `.loro/agents/` profile routed to MagAgent
   (or the reverse) is sent as prompt context and reported as such.
-- The MagAgent projection report states how the profile's `shell: ask` is applied: on MagAgent
-  1.4.0 and later every shell command asks (`mapped`); on older versions commands MagAgent
-  classifies as read-only run without asking (`narrowed`). Detected from `magent --version`; a
+- The MagAgent projection report states how the profile's `shell` permission is applied. On
+  MagAgent 1.4.0 and later, `shell: ask` asks for every shell command (plus `run_python` and
+  `install_package`) in every permission mode, and `shell: deny` removes the shell, Python,
+  package, and git tools (`mapped`). Older MagAgent ignores both: under `ask` it runs commands it
+  classifies as read-only without asking, and under `deny` Merced AI's paranoid mode is the only
+  backstop, so each command asks instead of being removed (`narrowed`). Detected from `magent --version`; a
   development build that still reports 1.3.x is reported as the older behavior. Probes list the
   newer behavior as the feature `oap-shell-ask-every-command`.
 - Terminal approvals: when MagAgent, Loro, or an ACP agent asks for approval during `ask`,
