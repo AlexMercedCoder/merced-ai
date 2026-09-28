@@ -29,8 +29,9 @@ def file_lock(path: Path, timeout: float | None = None) -> Iterator[None]:
         if sys.platform == "win32":  # pragma: no cover - Windows CI
             import msvcrt
 
-            if os.fstat(fd).st_size == 0:
-                os.write(fd, b"0")
+            # Windows lets a process lock a byte past end-of-file, so the lock file
+            # stays empty. Writing a placeholder byte first raced with a process
+            # that already held byte 0 locked and failed with PermissionError.
         else:
             import fcntl
         while not locked:
