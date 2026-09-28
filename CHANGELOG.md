@@ -350,7 +350,9 @@ regression test in `tests/test_security_review.py` that fails without the fix.
   budgets failed intermittently.
 - Tests no longer depend on the CI runner's terminal settings. Typer forces terminal mode when
   `GITHUB_ACTIONS` (or `FORCE_COLOR`) is set, so in CI help screens came out with ANSI styles and,
-  under the golden tests' `TERM=dumb`, 80 columns wide; a shared fixture now resets that. The release-metadata test reads files as UTF-8
+  under the golden tests' `TERM=dumb`, 80 columns wide. On the Windows runner Rich also fell back
+  to legacy console rendering (square corners, one column narrower). A shared fixture now resets
+  both. The release-metadata test reads files as UTF-8
   (it failed on Windows' default code page), and the slow-probe test uses a `.cmd` harness on
   Windows instead of a shell script.
 

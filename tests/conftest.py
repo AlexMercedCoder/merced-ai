@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import rich.console
 import typer.rich_utils
 
 
@@ -18,6 +19,9 @@ def isolated_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(typer.rich_utils, "MAX_WIDTH", None)
     for name in ("FORCE_COLOR", "PY_COLORS", "TERMINAL_WIDTH"):  # Rich reads these at runtime.
         monkeypatch.delenv(name, raising=False)
+    # Without a console (as under CliRunner on a Windows runner) Rich falls back to legacy Windows
+    # rendering: square box corners and one column narrower than COLUMNS.
+    monkeypatch.setattr(rich.console, "detect_legacy_windows", lambda: False)
 
 
 @pytest.fixture
