@@ -95,9 +95,9 @@ OpenClaw, Kimi, DSH, and AGY mechanisms are confirmed from help or source only.
 | OpenClaw 2026.9 | `--message-file` (private file, 4 MiB max) | prefixed into the file | `openclaw agent --help` |
 | Kimi Code CLI 1.49 | stdin in print mode | prefixed into stdin | source: print mode reads stdin when `--prompt` is absent |
 | Anton | stdin REPL turn | prefixed into stdin | existing REPL bridge |
-| Loro (with `run --prompt-file`) | private file | native profile by name, or prefixed | detected from `loro run --help` and cached per executable; `--json` output is used when present |
-| MagAgent (with `ask --prompt-file`) | private file | native profile by name, or prefixed | detected from `magent ask --help` and cached per executable |
-| Older MagAgent and Loro | argument | native profile by name, or prefixed | stdin carries AAIS approval envelopes; these versions take the task only as an argument |
+| Loro 0.22.0+ (`run --prompt-file`) | private file | native profile by name, or prefixed | detected from `loro run --help` and cached per executable; `--json` output is used when present |
+| MagAgent 1.4.0+ (`ask --prompt-file`) | private file | native profile by name, or prefixed | detected from `magent ask --help` and cached per executable |
+| MagAgent before 1.4.0, Loro before 0.22.0 | argument | native profile by name, or prefixed | stdin carries AAIS approval envelopes; these versions take the task only as an argument |
 | DSH 0.1.5 | argument | prefixed | the headless profile takes its task from the command line only |
 | Antigravity (AGY) 1.1 | `--print=` argument | prefixed | print mode reads stdin only as `stream-json`; plain-text stdin is not confirmed |
 

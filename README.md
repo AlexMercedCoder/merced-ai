@@ -2,7 +2,7 @@
 
 One portable agent identity across the harnesses you already use, with honest reports of what each one drops.
 
-Current release: 0.7.0 ([release notes](docs/RELEASE_NOTES_0.7.0.md)). Unreleased work is tracked in
+Current release: 0.8.0 ([release notes](docs/RELEASE_NOTES_0.8.0.md)). Unreleased work is tracked in
 the [changelog](CHANGELOG.md).
 
 ## Which tool do I want?
@@ -187,8 +187,8 @@ for the pinned revisions and exact boundary.
 
 | Harness | Discovery | Execution | OAP projection | Prompt delivery |
 | --- | --- | --- | --- | --- |
-| MagAgent | yes | one-shot with AAIS approval relay | native for project-discovered profiles | private file (`--prompt-file`) on MagAgent with that flag; argument on older MagAgent |
-| Loro | yes | one-shot with AAIS approval relay | native for project-discovered profiles | private file (`--prompt-file`) on Loro with that flag; argument on older Loro |
+| MagAgent | yes | one-shot with AAIS approval relay | native for project-discovered profiles | private file (`--prompt-file`) on MagAgent 1.4.0 and later; argument on older MagAgent |
+| Loro | yes | one-shot with AAIS approval relay | native for project-discovered profiles | private file (`--prompt-file`) on Loro 0.22.0 and later; argument on older Loro |
 | Claude Code | yes | ACP session via `claude-agent-acp` (streaming, approvals, resume), else structured print mode | system-prompt projection (delimited prompt over ACP) | stdin; system prompt via private file |
 | Codex | yes | noninteractive exec | delimited prompt compatibility mode | stdin (`exec -`) |
 | Gemini CLI | yes | ACP session via `gemini --acp` (streaming, approvals), else structured headless mode | delimited prompt compatibility mode | stdin |

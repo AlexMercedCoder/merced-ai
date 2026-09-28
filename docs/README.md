@@ -24,6 +24,8 @@ Use this index as the release documentation entry point.
 - [MVP validation](MVP_VALIDATION.md): automated, packaging, and live-test evidence.
 - [Release process](RELEASING.md): maintainer checklist from versioning through post-release
   verification.
+- [0.8.0 release notes](RELEASE_NOTES_0.8.0.md): harness adapter plugins, ACP client and server,
+  worktree rooms, cross-harness evals, terminal approvals, and prompt delivery off the command line.
 - [0.7.0 release notes](RELEASE_NOTES_0.7.0.md): transactional sessions, broker-owned runs with
   reconnect, process-tree cancellation, and durable approval recovery.
 - [0.6.0 release notes](RELEASE_NOTES_0.6.0.md): capability-aware WebMCP routing through MagAgent

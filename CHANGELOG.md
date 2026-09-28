@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 — 2026-09-28
 
-Targets 0.8.0.
+See [release notes](docs/RELEASE_NOTES_0.8.0.md).
 
 ### Fixed
 
@@ -71,13 +71,13 @@ Targets 0.8.0.
   top-level answers (`result`, `response`) now win, then the assistant's own turn; a user turn is
   never returned. `loro run` summaries now yield only the "Model response" text, and a Loro
   `provider_error` stop is reported as a failed run instead of as the reply.
-- Loro: when the installed `loro run` offers `--prompt-file` (detected from its help and cached
+- Loro: when the installed `loro run` offers `--prompt-file` (Loro 0.22.0 and later; detected from its help and cached
   per executable and modification time), the prompt goes through a 0600 file in the run's private
   temp directory instead of the command line, and `--json` output is parsed for the reply, stop
   reason, and Loro's session ID. A Loro provider error (non-zero exit) is reported with Loro's own
   message. Older Loro keeps the argument and its size guard; `harness show` reports the detected
   delivery. Adapter specs can declare such optional-feature detection (`HarnessSpec.features`).
-- MagAgent: when the installed `magent ask` offers `--prompt-file`, the task goes through a 0600
+- MagAgent: when the installed `magent ask` offers `--prompt-file` (MagAgent 1.4.0 and later), the task goes through a 0600
   file in the run's private temp directory instead of the command line (detected and cached like
   Loro's); older MagAgent keeps the argument and its size guard.
 - Output parsing prefers a result document at the end of stdout over earlier JSON lines. MagAgent
