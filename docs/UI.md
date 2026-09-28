@@ -43,6 +43,11 @@ asks before editing files or running commands), or sends you to create a bot fro
 profile. The message box always accepts text; until a bot is chosen, Send is disabled and a line
 under the box says why, and the draft is kept.
 
+The UI ships its own fonts (Inter and Source Serif 4, Latin subsets, SIL Open Font License 1.1;
+see `src/merced_ai/webui/fonts/`), served from the same origin under the existing Content Security
+Policy, so the layout does not depend on what is installed. Every font stack ends in a generic
+family.
+
 ## Product surfaces
 
 - Start, search, select, resume, and export normalized conversations.

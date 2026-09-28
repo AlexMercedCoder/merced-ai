@@ -20,6 +20,12 @@ Targets 0.8.0.
 - Web UI: the New conversation shortcut is a single key chip (`Ctrl K`, `⌘K` on macOS) that no
   longer wraps; disabled header actions (including Delete) look disabled; conversation-only
   actions (Participants, Rename, Export, Delete) are hidden until a conversation is selected.
+- Web UI fonts are self-hosted: Inter and Source Serif 4 (Latin-subset variable woff2, SIL Open
+  Font License 1.1, `font-display: swap`, served from the UI's own origin). The layout previously
+  assumed Inter was installed and fell back to wider fonts, so "New conversation" wrapped next to
+  its shortcut; it now fits on one line at 1280 and 1024 pixels wide (the shortcut chip moves to
+  the button's tooltip in the narrower sidebar). A test fails if any font stack lacks a generic
+  fallback.
 - `merced-ai ui` flushes its URL line immediately, so it appears when output is piped (for
   example `merced-ai ui | tee ui.log`) instead of only when the server stops.
 - Web UI: the bot inspector and `/api/projection` returned a server error for a bot whose profile

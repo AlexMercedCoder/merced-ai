@@ -119,3 +119,64 @@ def test_first_run_token_and_draft_contracts() -> None:
     assert ".shortcut { display: inline-flex;" in styles and "white-space: nowrap" in styles
     assert '"#delete-session", "#derive-group"]) $(id).hidden = !session;' in script
     assert ".danger-button:disabled" in styles
+
+
+GENERIC_FAMILIES = {
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "emoji",
+    "math",
+    "fangsong",
+}
+
+
+def _font_stacks(css: str) -> list[str]:
+    import re
+
+    without_faces = re.sub(r"@font-face\s*{[^}]*}", "", css)
+    stacks = re.findall(r"font-family:\s*([^;}]+)", without_faces)
+    for value in re.findall(r"(?<![-\w])font:\s*([^;}]+)", without_faces):
+        if value.strip() not in {"inherit", "initial", "unset", "revert"}:
+            stacks.append(value)
+    return stacks
+
+
+def test_every_font_stack_ends_in_a_generic_family() -> None:
+    """UI-5: the layout must not depend on a font the user may not have installed."""
+    css = (ROOT / "styles.css").read_text(encoding="utf-8")
+    stacks = _font_stacks(css)
+    assert len(stacks) >= 5
+    for stack in stacks:
+        last = stack.split(",")[-1].split()[-1].strip().strip("\"'")
+        assert last in GENERIC_FAMILIES, f"font stack without a generic fallback: {stack!r}"
+    # The linter itself catches a missing fallback.
+    bad = _font_stacks(".x { font-family: Inter; } .y { font: 600 12px/1 Georgia; }")
+    assert all(item.split(",")[-1].split()[-1] not in GENERIC_FAMILIES for item in bad)
+
+
+def test_web_fonts_are_self_hosted_licensed_and_swapped() -> None:
+    import re
+
+    css = (ROOT / "styles.css").read_text(encoding="utf-8")
+    faces = re.findall(r"@font-face\s*{([^}]*)}", css)
+    assert {re.search(r'font-family:\s*"([^"]+)"', face)[1] for face in faces} == {
+        "Inter Variable",
+        "Source Serif 4 Variable",
+    }
+    for face in faces:
+        assert "font-display: swap" in face
+        for url in re.findall(r'url\("([^"]+)"\)', face):
+            assert not url.startswith(("http:", "https:", "//")), url  # CSP: font-src 'self'
+            assert (ROOT / url).is_file(), url
+            assert url.endswith(".woff2") and "latin" in url
+    for license_file in ("OFL-Inter.txt", "OFL-SourceSerif4.txt"):
+        text = (ROOT / "fonts" / license_file).read_text(encoding="utf-8")
+        assert "SIL Open Font License" in text

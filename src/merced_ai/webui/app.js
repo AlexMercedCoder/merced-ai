@@ -1480,6 +1480,7 @@ async function boot() {
   const mac = /mac/i.test(platform);
   $("#shortcut-label").innerHTML = mac ? "<kbd>⌘K</kbd>" : "<kbd>Ctrl K</kbd>";
   $("#shortcut-label").setAttribute("aria-label", mac ? "Keyboard shortcut Command K" : "Keyboard shortcut Control K");
+  $("#new-thread").title = `New conversation (${mac ? "⌘K" : "Ctrl K"})`;
   document.body.dataset.theme = localStorage.getItem("merced-ai-theme") || "dark";
   bindEvents();
   await authenticate();
