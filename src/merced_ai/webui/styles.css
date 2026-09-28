@@ -75,8 +75,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-
 .brand-mark { width: 29px; height: 29px; display: grid; place-items: center; color: var(--on-accent); background: var(--accent); border-radius: 9px 9px 9px 3px; font-size: 14px; font-weight: 900; transform: rotate(-3deg); }
 
 .new-thread { display: flex; align-items: center; gap: 9px; width: 100%; border: 1px solid var(--line-strong); background: var(--surface-raised); border-radius: 11px; padding: 10px 11px; cursor: pointer; font-weight: 650; text-align: left; box-shadow: inset 0 1px rgba(255,255,255,.025); }
-.new-thread span { font-size: 18px; color: var(--accent); }
-.new-thread kbd { margin-left: auto; color: var(--muted-2); background: transparent; font-size: 11px; }
+.new-thread .plus { font-size: 18px; color: var(--accent); }
+.new-thread-label { flex: 1; min-width: 0; }
+.shortcut { display: inline-flex; gap: 3px; margin-left: auto; flex-shrink: 0; white-space: nowrap; }
+.shortcut kbd { min-width: 18px; padding: 1px 5px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--muted); font: 600 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
 .primary-nav { display: grid; gap: 3px; margin-top: 15px; }
 .nav-item { border: 0; background: transparent; display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; cursor: pointer; color: var(--text-soft); font-size: 13px; text-align: left; }
 .nav-item:hover, .nav-item.active { background: var(--surface-hover); color: var(--text); }
@@ -533,3 +535,47 @@ body[data-theme="light"] .eval-error { color: #b3261e; }
 .header-actions button { white-space: nowrap; }
 .profile-warnings strong { font-size: 12px; }
 .profile-warnings span { font-size: 12px; }
+
+/* Disabled actions look inactive, including the danger variant. */
+.subtle-button:disabled, .danger-button:disabled { opacity: .45; border-color: transparent !important; color: var(--muted-2) !important; background: transparent !important; box-shadow: none; }
+.danger-button:disabled:hover { background: transparent !important; }
+
+/* First run: no bots yet. */
+.first-run { display: grid; gap: 14px; width: min(560px, 100%); margin: 18px auto 0; padding: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); text-align: left; }
+.first-run-harnesses { display: grid; gap: 8px; }
+.first-run-harnesses strong { font-size: 13px; color: var(--text); }
+.first-run-harnesses p { margin: 0; color: var(--muted); font-size: 12px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.harness-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 99px; color: var(--text); font-size: 12px; }
+.first-run-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.first-run-form label { color: var(--muted); font-size: 12px; }
+.first-run-form select { flex: 1 1 160px; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); color: var(--text); }
+.first-run-form .primary-button { padding: 9px 14px; border-radius: 9px; font-weight: 700; cursor: pointer; }
+.first-run-note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.first-run-links { display: flex; flex-wrap: wrap; gap: 14px; }
+.link-button { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-size: 12px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+body[data-theme="light"] .link-button { color: #3f6212; }
+.small-button { margin-top: 10px; padding: 7px 12px; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer; }
+
+/* Composer: why Send is unavailable, without touching the draft. */
+.composer-hint { margin: 6px 4px 0; color: var(--muted); font-size: 12px; }
+.composer-hint.attempted { color: var(--amber); }
+
+/* Missing or invalid token. */
+.connect-screen { display: grid; place-items: center; min-height: 100vh; padding: 24px 16px; background: var(--bg); }
+.connect-card { width: min(520px, 100%); padding: 28px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); color: var(--text); }
+.connect-card h1 { margin: 18px 0 8px; font-size: 22px; }
+.connect-card p, .connect-card li { color: var(--muted); font-size: 14px; line-height: 1.55; }
+.connect-card ol { margin: 10px 0 18px; padding-left: 20px; }
+.connect-card code { padding: 1px 5px; border-radius: 5px; background: var(--surface); color: var(--text); font-size: 12px; }
+.connect-form label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
+.connect-row { display: flex; gap: 8px; }
+.connect-row input { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--text); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.connect-row .primary-button { padding: 9px 16px; border-radius: 9px; font-weight: 700; cursor: pointer; }
+.connect-error { margin: 8px 0 0; color: #ff8a80; font-size: 13px; }
+body[data-theme="light"] .connect-error { color: #b3261e; }
+.first-run p { max-width: none; margin: 0; padding: 0; text-align: left; }
+.new-thread-label { font-size: 13px; line-height: 1.25; }
+.identity-card .bot-orb { flex-shrink: 0; }
+.new-thread { gap: 7px; padding-right: 9px; }
+.shortcut kbd { padding: 1px 4px; }

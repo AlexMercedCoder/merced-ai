@@ -9,6 +9,23 @@
     <link rel="stylesheet" href="/assets/styles.css" />
   </head>
   <body>
+    <section id="connect-screen" class="connect-screen" aria-labelledby="connect-title" hidden>
+      <div class="connect-card">
+        <div class="brand-row"><div class="brand-mark" aria-hidden="true">M</div><div><strong>Merced</strong><span>AI</span></div></div>
+        <h1 id="connect-title">This tab is not connected</h1>
+        <p id="connect-reason">The local UI token is missing or no longer valid.</p>
+        <p>Merced AI creates a new token each time <code>merced-ai ui</code> starts, and only a tab opened with that URL is signed in. Nothing in your workspace has changed.</p>
+        <ol>
+          <li>Open the URL <code>merced-ai ui</code> printed in your terminal. It ends in <code>#token=…</code>.</li>
+          <li>Or restart <code>merced-ai ui</code> and use its new URL.</li>
+        </ol>
+        <form id="connect-form" class="connect-form">
+          <label for="connect-token">Or paste the token</label>
+          <div class="connect-row"><input id="connect-token" autocomplete="off" spellcheck="false" placeholder="Token from the #token= part of the URL" /><button class="primary-button" type="submit">Connect</button></div>
+          <p id="connect-error" class="connect-error" role="alert" hidden></p>
+        </form>
+      </div>
+    </section>
     <a class="skip-link" href="#main-content">Skip to conversation</a>
     <div id="sidebar-backdrop" class="backdrop" hidden></div>
     <div class="app-shell">
@@ -19,7 +36,7 @@
           <button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation">×</button>
         </div>
 
-        <button id="new-thread" class="new-thread"><span>＋</span> New conversation <kbd id="shortcut-label">Ctrl K</kbd></button>
+        <button id="new-thread" class="new-thread"><span class="plus" aria-hidden="true">＋</span><span class="new-thread-label">New conversation</span><span id="shortcut-label" class="shortcut" aria-label="Keyboard shortcut Control K"><kbd>Ctrl K</kbd></span></button>
 
         <nav class="primary-nav" aria-label="Primary navigation">
           <button class="nav-item active" data-view="conversations"><span class="nav-icon">◉</span> Conversations <span class="count" id="session-count">0</span></button>
@@ -84,6 +101,7 @@
               <h1 id="conversation-title">Your harness-native collaborator</h1>
               <p id="welcome-copy">Choose a bot to start a secure local conversation.</p>
               <div id="participant-list" class="participant-list" aria-label="Conversation participants"></div>
+              <div id="first-run" class="first-run" hidden></div>
             </div>
             <div id="message-list"></div>
             <div id="activity-list" class="activity-list" aria-live="polite"></div>
@@ -108,6 +126,7 @@
                 </div>
               </div>
             </form>
+            <p id="composer-hint" class="composer-hint" role="status" hidden></p>
             <p id="composer-status">Harness policy remains authoritative. Review approval details before running.</p>
           </footer>
         </section>
@@ -122,7 +141,7 @@
         <header><div><span class="eyebrow">ACTIVE COLLABORATOR</span><h2>Bot profile</h2></div><button id="close-inspector" class="icon-button" aria-label="Close inspector">×</button></header>
         <section class="identity-card">
           <div class="bot-orb medium"><span>✦</span></div>
-          <div><h3 id="inspector-name">No bot selected</h3><p id="inspector-description">Create an OAP profile and bind it to a harness.</p></div>
+          <div><h3 id="inspector-name">No bot selected</h3><p id="inspector-description">Create an OAP profile and bind it to a harness.</p><button id="inspector-create-bot" class="primary-button small-button" type="button" hidden>Create your first bot</button></div>
         </section>
         <section class="panel-section"><div class="section-heading"><span>Participants</span><span id="participant-count">0</span></div><div id="inspector-participants" class="inspector-participants"></div></section>
         <section class="panel-section">

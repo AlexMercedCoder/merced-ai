@@ -604,10 +604,35 @@ def test_run_web_ui_prints_recovery_warning(
         __import__("sys").modules, "uvicorn", types.SimpleNamespace(run=lambda *a, **k: None)
     )
 
+    monkeypatch.setattr("merced_ai.web.app.choose_port", lambda host, port: (8773, None))
     run_web_ui(workspace, open_browser=False)
 
     captured = capsys.readouterr()
     assert "Approval state" not in captured.out
     assert "could not be read" in captured.err
     assert "aais-presenter.corrupt-" in captured.err
-    assert "Merced AI UI: http://127.0.0.1:8765/#token=" in captured.out
+    assert "Merced AI UI: http://127.0.0.1:8773/#token=" in captured.out
+
+
+def test_ui_port_defaults_to_8773_and_moves_past_a_busy_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import socket
+
+    from merced_ai.web import app as web_app
+
+    assert web_app.DEFAULT_UI_PORT == 8773
+    with socket.socket() as holder:
+        holder.bind(("127.0.0.1", 0))
+        holder.listen()
+        busy = holder.getsockname()[1]
+        monkeypatch.setattr(web_app, "DEFAULT_UI_PORT", busy)
+
+        port, notice = web_app.choose_port("127.0.0.1", None)
+        assert port > busy
+        assert notice == f"Port {busy} is in use; serving on {port} instead."
+
+        with pytest.raises(ValueError, match=f"Port {busy} on 127.0.0.1 is already in use"):
+            web_app.choose_port("127.0.0.1", busy)  # an explicit --port is never moved
+    free, notice = web_app.choose_port("127.0.0.1", busy)
+    assert (free, notice) == (busy, None)

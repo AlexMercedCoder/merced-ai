@@ -142,7 +142,7 @@ Launch the optional local UI:
 
 ```bash
 python -m pip install 'merced-ai[webui]'
-merced-ai ui
+merced-ai ui            # http://127.0.0.1:8773 (next free port if busy; --port to choose)
 ```
 
 The UI binds to loopback and exchanges an ephemeral fragment token for an HTTP-only local session.

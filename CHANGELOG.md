@@ -6,6 +6,22 @@ Targets 0.8.0.
 
 ### Fixed
 
+- Web UI: text typed before a bot existed was lost. The message box was disabled without saying
+  why, so typing appeared to do nothing and Enter cleared it. The box now always accepts text;
+  Send stays disabled with an inline reason and a button to choose or create a bot, and the
+  draft survives creating one.
+- Web UI first run: a workspace with no bots showed "Choose a bot" with nothing to choose. It now
+  shows a guide listing the detected harnesses, a one-click starter bot (an **assistant** profile
+  that asks before editing or running commands), a path to build a bot from an existing profile,
+  and a link to the docs; the inspector says the same.
+- Web UI: opening the UI without its token (or with a stale one) rendered the whole app with
+  "UI connection unavailable". A dedicated screen now explains what happened, how to reconnect,
+  and accepts a pasted token or URL.
+- Web UI: the New conversation shortcut is a single key chip (`Ctrl K`, `⌘K` on macOS) that no
+  longer wraps; disabled header actions (including Delete) look disabled; conversation-only
+  actions (Participants, Rename, Export, Delete) are hidden until a conversation is selected.
+- `merced-ai ui` flushes its URL line immediately, so it appears when output is piped (for
+  example `merced-ai ui | tee ui.log`) instead of only when the server stops.
 - Web UI: the bot inspector and `/api/projection` returned a server error for a bot whose profile
   was missing or invalid; they now show "Profile unavailable" with the reason (HTTP 409).
   Deleting a profile no longer fails when an unrelated bot's profile cannot be resolved.
@@ -197,6 +213,10 @@ regression test in `tests/test_security_review.py` that fails without the fix.
 
 ### Changed
 
+- **Behavior change: `merced-ai ui` now defaults to port 8773** (was 8765, which is also Loro's
+  `loro web` default, so running both failed). When the default is busy the next free port is
+  used and the CLI says so; an explicit `--port` that is busy fails with a message suggesting
+  another. Update bookmarks and A2A client configuration that assumed 8765.
 - The `agent-approval-interchange` requirement is widened to `>=0.1.0,<0.3` so Merced AI installs
   alongside Loro and MagAgent builds that require AAIS 0.2. The full suite passes against the
   published 0.1.0 and against the unreleased local 0.2.0 build.

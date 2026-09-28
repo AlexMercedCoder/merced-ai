@@ -74,7 +74,7 @@ loopback address and token as the UI:
 Example:
 
 ```bash
-curl -s http://127.0.0.1:8765/a2a -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+curl -s http://127.0.0.1:8773/a2a -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user",
   "messageId":"m1","parts":[{"kind":"text","text":"Review README.md"}],"metadata":{"bot":"reviewer"}}}}'
 ```

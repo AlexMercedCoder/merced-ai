@@ -151,7 +151,16 @@ def ui(
         Path, typer.Option("--workspace", "-C", help=WORKSPACE_HELP, show_default=False)
     ] = DEFAULT_WORKSPACE,
     host: Annotated[str, typer.Option("--host")] = "127.0.0.1",
-    port: Annotated[int, typer.Option("--port", min=1024, max=65535)] = 8765,
+    port: Annotated[
+        int | None,
+        typer.Option(
+            "--port",
+            min=1024,
+            max=65535,
+            help="Port to serve on. Default 8773, or the next free port if that one is busy.",
+            show_default=False,
+        ),
+    ] = None,
     no_open: Annotated[bool, typer.Option("--no-open")] = False,
 ) -> None:
     """Start the optional loopback-first local web UI."""

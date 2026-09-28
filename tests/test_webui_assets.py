@@ -95,3 +95,27 @@ def test_webui_styles_include_responsive_and_reduced_motion_contracts() -> None:
     assert ":focus-visible" in styles
     assert ".sr-only" in styles
     assert ".status-dot.detecting" in styles
+
+
+def test_first_run_token_and_draft_contracts() -> None:
+    """UI-3: never drop a draft, guide a workspace with no bots, explain a missing token."""
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "styles.css").read_text(encoding="utf-8")
+
+    # Text entry never depends on having a bot; only Send does, with an inline reason.
+    assert '$("#message-input").disabled = Boolean(state.activeRun);' in script
+    assert '$("#message-input").disabled = !bot' not in script
+    assert 'id="composer-hint"' in html and "Your draft stays here." in script
+    assert "renderComposerHint({ attempted: true });  // Keep the draft" in script
+    # First run: detected harnesses, one-click default bot, docs link, inspector call to action.
+    assert 'id="first-run"' in html and 'id="inspector-create-bot"' in html
+    assert "Create your first bot" in script and "createFirstBot" in script
+    assert 'edit_permission: "ask"' in script and 'shell_permission: "ask"' in script
+    # A 401 gets its own screen with a token field instead of the app shell.
+    assert 'id="connect-screen"' in html and 'id="connect-token"' in html
+    assert "error.status === 401" in script and "showConnectScreen" in script
+    # Shortcut chip stays on one line; conversation-only actions hide without a conversation.
+    assert ".shortcut { display: inline-flex;" in styles and "white-space: nowrap" in styles
+    assert '"#delete-session", "#derive-group"]) $(id).hidden = !session;' in script
+    assert ".danger-button:disabled" in styles

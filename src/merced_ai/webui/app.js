@@ -66,7 +66,9 @@ async function api(path, options = {}) {
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`;
     try { message = (await response.json()).detail || message; } catch { /* non-JSON error */ }
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return response;
 }
@@ -75,6 +77,7 @@ async function authenticate() {
   const fragment = new URLSearchParams(window.location.hash.slice(1));
   const token = fragment.get("token");
   if (token) {
+    state.triedToken = true;
     await api("/api/auth", { method: "POST", body: JSON.stringify({ token }) });
     history.replaceState(null, "", `${location.pathname}${location.search}`);
   }
@@ -107,6 +110,7 @@ function applyHarnessPayload(payload) {
   $("#harness-count").textContent = state.data.harnesses.filter(ready).length;
   renderSelectors();
   renderHarnessHealth();
+  renderFirstRun();
   if (state.view === "harnesses") renderManagement();
 }
 
@@ -239,23 +243,116 @@ function renderWriteNotice() {
     : `${listNames(writers)} can ${writers.length === 2 ? "both" : "all"} edit this workspace, so they take turns.`;
 }
 
+const DOCS_URL = "https://github.com/AlexMercedCoder/merced-ai/blob/main/docs/UI.md";
+
+function renderComposerHint({ attempted = false } = {}) {
+  const hint = $("#composer-hint");
+  if (currentParticipants().length || state.activeRun) { hint.hidden = true; return; }
+  const noBots = !state.data.bots.length;
+  hint.classList.toggle("attempted", attempted);
+  hint.innerHTML = `${noBots ? "Create a bot to send messages." : "Choose a bot to send this message."} Your draft stays here. <button type="button" class="link-button" data-hint-action="${noBots ? "create" : "choose"}">${noBots ? "Create your first bot" : "Choose a bot"}</button>`;
+  hint.hidden = false;
+}
+
+function renderFirstRun() {
+  const box = $("#first-run");
+  const show = !state.data.bots.length && !currentSession();
+  box.hidden = !show;
+  $("#inspector-create-bot").hidden = Boolean(state.data.bots.length);
+  if (!show) return;
+  const chosen = $("#first-run-harness")?.value;
+  const harnesses = state.data.harnesses || [];
+  const readyOnes = harnesses.filter(ready);
+  const detecting = !harnesses.length || harnesses.some((item) => item.status === "detecting");
+  const heading = readyOnes.length
+    ? `${readyOnes.length} harness${readyOnes.length === 1 ? "" : "es"} ready on this machine`
+    : detecting ? "Looking for installed harnesses…" : "No harness is ready yet";
+  const chips = readyOnes.map((item) => `<span class="harness-chip"><span class="status-dot online"></span>${escapeHtml(titleCase(item.harness_id))}</span>`).join("");
+  const options = readyOnes.map((item) => `<option value="${escapeHtml(item.harness_id)}"${selected(item.harness_id, chosen)}>${escapeHtml(titleCase(item.harness_id))}</option>`).join("");
+  const profiles = state.data.profiles.length;
+  box.innerHTML = `<div class="first-run-harnesses"><strong>${escapeHtml(heading)}</strong>${chips ? `<div class="chip-row">${chips}</div>` : ""}${!readyOnes.length && !detecting ? '<p>Install a harness such as Codex, Claude Code, MagAgent, or Loro, then check <button type="button" class="link-button" data-first-run="harnesses">Harnesses</button>.</p>' : ""}</div>
+    <form id="first-run-form" class="first-run-form">
+      <label for="first-run-harness">Run it with</label>
+      <select id="first-run-harness" ${readyOnes.length ? "" : "disabled"}>${options || "<option>No ready harness</option>"}</select>
+      <button id="first-run-create" class="primary-button" type="submit" ${readyOnes.length ? "" : "disabled"}>Create your first bot</button>
+    </form>
+    <p class="first-run-note">Creates an <strong>assistant</strong> profile that asks before editing files or running commands, and a bot that runs it on the harness you pick. You can change both later.</p>
+    <div class="first-run-links">${profiles ? `<button type="button" class="link-button" data-first-run="from-profile">Use one of your ${profiles} profile${profiles === 1 ? "" : "s"} instead</button>` : '<button type="button" class="link-button" data-first-run="profile">Write a profile first</button>'}<a class="link-button" href="${DOCS_URL}" target="_blank" rel="noopener noreferrer">How bots and profiles work</a></div>`;
+}
+
+async function createFirstBot(harness) {
+  const button = $("#first-run-create");
+  if (button) { button.disabled = true; button.textContent = "Creating…"; }
+  try {
+    if (!state.data.profiles.some((item) => item.name === "assistant")) {
+      await api("/api/profiles", { method: "POST", body: JSON.stringify({
+        name: "assistant",
+        description: "General-purpose assistant for this project: answers questions, reviews code, and makes small changes when asked.",
+        instructions: "Help with this project. Before editing files or running commands, say what you intend to do and why.",
+        edit_permission: "ask",
+        shell_permission: "ask",
+        scope: "project",
+      }) });
+    }
+    const taken = new Set(state.data.bots.map((item) => item.name));
+    let name = "assistant";
+    for (let index = 2; taken.has(name); index += 1) name = `assistant-${index}`;
+    await api("/api/bots", { method: "POST", body: JSON.stringify({ name, profile: "assistant", harness }) });
+    await refresh({ quiet: true });
+    await selectBot(name);
+    toast(`${titleCase(name)} is ready on ${titleCase(harness)}.`);
+    $("#message-input").focus();
+  } catch (error) {
+    toast(error.message);
+    renderFirstRun();
+  }
+}
+
+function startFirstBot() {
+  showView("conversations");
+  if (window.matchMedia("(max-width: 1100px)").matches) $("#inspector").classList.add("closed");
+  const target = $("#first-run-harness:not(:disabled)") || $("#first-run");
+  target?.scrollIntoView({ block: "center", behavior: "smooth" });
+  target?.focus?.();
+}
+
+async function showConnectScreen(reason) {
+  document.querySelector(".app-shell").hidden = true;
+  document.querySelector(".skip-link").hidden = true;
+  $("#connect-reason").textContent = reason;
+  $("#connect-screen").hidden = false;
+  $("#connect-token").focus();
+}
+
+function tokenFrom(text) {
+  const value = text.trim();
+  const match = value.match(/token=([^&\s]+)/);
+  return match ? decodeURIComponent(match[1]) : value;
+}
+
 function renderConversation() {
   const bot = currentBot();
   const profile = currentProfile();
   const session = currentSession();
   const participants = currentParticipants();
   const group = participants.length > 1;
-  $("#conversation-title").textContent = session?.title || (group ? `Collaborating with ${participants.length} bots` : bot ? (session?.turns.length ? `Working with ${titleCase(bot.name)}` : `Meet ${titleCase(bot.name)}`) : "Your harness-native collaborator");
-  $("#welcome-copy").textContent = group ? "Use @bot to target collaborators, or choose Ask everyone or Round robin below." : profile?.description || "Choose a bot to start a secure local conversation.";
+  const firstRun = !state.data.bots.length && !session;
+  $("#conversation-title").textContent = session?.title || (group ? `Collaborating with ${participants.length} bots` : bot ? (session?.turns.length ? `Working with ${titleCase(bot.name)}` : `Meet ${titleCase(bot.name)}`) : firstRun ? "Create your first bot" : "Your harness-native collaborator");
+  $("#welcome-copy").textContent = group ? "Use @bot to target collaborators, or choose Ask everyone or Round robin below." : profile?.description || (firstRun ? "A bot pairs an OAP profile (who it is and what it may do) with a harness that runs it." : "Choose a bot to start a secure local conversation.");
   $("#participant-list").innerHTML = participants.map((item) => `<span class="participant-chip">${escapeHtml(titleCase(item.bot_name))} · ${escapeHtml(titleCase(item.harness_id))}</span>`).join("");
   $("#message-list").innerHTML = session?.turns.map(messageTemplate).join("") || "";
+  // Conversation-only actions appear once a conversation exists.
+  for (const id of ["#export-session", "#rename-session", "#delete-session", "#derive-group"]) $(id).hidden = !session;
   $("#export-session").disabled = !session;
   $("#rename-session").disabled = !session;
   $("#delete-session").disabled = !session || Boolean(state.activeRun);
   $("#derive-group").disabled = !session || state.data.bots.length < 2;
   $("#compare-changes").hidden = session?.isolation !== "worktree";
-  $("#message-input").disabled = !bot || Boolean(state.activeRun);
-  $("#send-message").disabled = !bot || Boolean(state.activeRun);
+  // Text entry never depends on having a bot, so a draft is never lost; only sending does.
+  $("#message-input").disabled = Boolean(state.activeRun);
+  $("#send-message").disabled = !participants.length || Boolean(state.activeRun);
+  renderComposerHint();
+  renderFirstRun();
   renderWriteNotice();
   bindCopyButtons();
 }
@@ -294,8 +391,9 @@ async function renderInspector() {
   const profile = currentProfile();
   const harnessId = activeHarnessId();
   const participants = currentParticipants();
-  $("#inspector-name").textContent = participants.length > 1 ? (currentSession()?.title || `${participants.length} collaborators`) : bot ? titleCase(bot.name) : "No bot selected";
-  $("#inspector-description").textContent = participants.length > 1 ? "Each collaborator keeps an independent profile, route, and approval boundary." : profile?.description || "Create an OAP profile and bind it to a harness.";
+  const noBots = !state.data.bots.length;
+  $("#inspector-name").textContent = participants.length > 1 ? (currentSession()?.title || `${participants.length} collaborators`) : bot ? titleCase(bot.name) : noBots ? "No bots yet" : "No bot selected";
+  $("#inspector-description").textContent = participants.length > 1 ? "Each collaborator keeps an independent profile, route, and approval boundary." : profile?.description || (noBots ? "Create your first bot to see its profile, route, and authority here." : "Choose a bot to see its profile, route, and authority.");
   $("#participant-count").textContent = participants.length;
   $("#inspector-participants").innerHTML = participants.map((item) => `<div class="inspector-participant" ${identityStyle(item.bot_name)}><div class="message-avatar bot-identity">${escapeHtml(initials(item.bot_name))}</div><div><strong>${escapeHtml(titleCase(item.bot_name))}</strong><small>${escapeHtml(titleCase(item.harness_id))} · ${escapeHtml(item.profile_name || "profile")}</small></div></div>`).join("");
   $("#route-profile").textContent = profile?.name || bot?.profile || "—";
@@ -508,7 +606,7 @@ function openGroupEditor(derive = false) {
 
 async function createConversation() {
   if (!state.activeBot) {
-    if (!state.data.bots.length) { showView("bots"); openBotEditor(); return; }
+    if (!state.data.bots.length) { startFirstBot(); return; }
     state.activeBot = state.data.bots[0].name;
   }
   try {
@@ -640,6 +738,10 @@ async function restoreRun() {
 async function sendPrompt(approved = false) {
   const content = state.pendingPrompt || $("#message-input").value.trim();
   if (!content || state.activeRun) return;
+  if (!currentParticipants().length) {
+    renderComposerHint({ attempted: true });  // Keep the draft; say what is missing.
+    return;
+  }
   const session = await ensureSession();
   if (!session) return;
   state.pendingPrompt = content;
@@ -1217,6 +1319,31 @@ function bindEvents() {
   $("#rename-session").addEventListener("click", renameConversation);
   $("#delete-session").addEventListener("click", deleteConversation);
   $("#composer").addEventListener("submit", (event) => { event.preventDefault(); sendPrompt(); });
+  $("#composer-hint").addEventListener("click", (event) => {
+    const action = event.target.closest("[data-hint-action]")?.dataset.hintAction;
+    if (action === "create") startFirstBot();
+    if (action === "choose") $("#bot-select").focus();
+  });
+  $("#inspector-create-bot").addEventListener("click", startFirstBot);
+  $("#first-run").addEventListener("submit", (event) => { event.preventDefault(); const harness = $("#first-run-harness").value; if (harness) createFirstBot(harness); });
+  $("#first-run").addEventListener("click", (event) => {
+    const action = event.target.closest("[data-first-run]")?.dataset.firstRun;
+    if (action === "harnesses") showView("harnesses");
+    if (action === "from-profile") { showView("bots"); openBotEditor(); }
+    if (action === "profile") { showView("profiles"); openProfileEditor(); }
+  });
+  $("#connect-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const token = tokenFrom($("#connect-token").value);
+    if (!token) return;
+    try {
+      await api("/api/auth", { method: "POST", body: JSON.stringify({ token }) });
+      location.replace(location.pathname);
+    } catch (error) {
+      $("#connect-error").textContent = error.status === 401 ? "That token was not accepted. Copy it from the most recent merced-ai ui output." : error.message;
+      $("#connect-error").hidden = false;
+    }
+  });
   $("#add-context").addEventListener("click", openContextPicker);
   $("#context-chips").addEventListener("click", (event) => {
     const button = event.target.closest("[data-remove-context]");
@@ -1335,6 +1462,13 @@ function bindEvents() {
 }
 
 function showFatal(error) {
+  if (error.status === 401) {
+    const hadToken = new URLSearchParams(window.location.hash.slice(1)).has("token") || state.triedToken;
+    showConnectScreen(hadToken
+      ? "The token in this link was not accepted. It is probably from an earlier run of merced-ai ui."
+      : "This tab was opened without the token that signs it in.");
+    return;
+  }
   $("#conversation-title").textContent = "UI connection unavailable";
   $("#welcome-copy").textContent = error.message;
   $("#composer-status").textContent = "Restart merced-ai ui to create a fresh local session.";
@@ -1343,7 +1477,9 @@ function showFatal(error) {
 
 async function boot() {
   const platform = navigator.userAgentData?.platform || navigator.platform || "";
-  $("#shortcut-label").textContent = /mac/i.test(platform) ? "⌘ K" : "Ctrl K";
+  const mac = /mac/i.test(platform);
+  $("#shortcut-label").innerHTML = mac ? "<kbd>⌘K</kbd>" : "<kbd>Ctrl K</kbd>";
+  $("#shortcut-label").setAttribute("aria-label", mac ? "Keyboard shortcut Command K" : "Keyboard shortcut Control K");
   document.body.dataset.theme = localStorage.getItem("merced-ai-theme") || "dark";
   bindEvents();
   await authenticate();

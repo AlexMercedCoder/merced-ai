@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import socket
 import sys
 import threading
 import webbrowser
@@ -27,6 +28,10 @@ from merced_ai.workspace_context import RunStore
 
 STATIC_ROOT = Path(__file__).resolve().parent.parent / "webui"
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+# 8765 is also Loro's `loro web` default, so running both collided. When the default is busy the
+# next free port is used; an explicit --port that is busy is an error.
+DEFAULT_UI_PORT = 8773
+PORT_SEARCH_SPAN = 20
 # Host header names accepted on requests. Only literal loopback names: a bare single-label name
 # could resolve through a DNS search domain, which is exactly what DNS rebinding needs.
 ALLOWED_HOSTS = frozenset(LOOPBACK_HOSTS)
@@ -105,11 +110,48 @@ def create_web_app(
     return app
 
 
+def port_is_free(host: str, port: int) -> bool:
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except OSError:
+        return False
+    for family, kind, proto, _name, address in infos:
+        with socket.socket(family, kind, proto) as probe:
+            try:
+                probe.bind(address)
+            except OSError:
+                return False
+    return True
+
+
+def choose_port(host: str, requested: int | None) -> tuple[int, str | None]:
+    """The port to serve on, plus a notice when it is not the one the user expects."""
+    if requested is not None:
+        if not port_is_free(host, requested):
+            raise ValueError(
+                f"Port {requested} on {host} is already in use (another Merced AI or Loro UI may "
+                "be running). Stop it, or choose a different port with --port."
+            )
+        return requested, None
+    for candidate in range(DEFAULT_UI_PORT, DEFAULT_UI_PORT + PORT_SEARCH_SPAN):
+        if port_is_free(host, candidate):
+            notice = (
+                None
+                if candidate == DEFAULT_UI_PORT
+                else f"Port {DEFAULT_UI_PORT} is in use; serving on {candidate} instead."
+            )
+            return candidate, notice
+    raise ValueError(
+        f"Ports {DEFAULT_UI_PORT}-{DEFAULT_UI_PORT + PORT_SEARCH_SPAN - 1} on {host} are all in "
+        "use. Choose a free port with --port."
+    )
+
+
 def run_web_ui(
     workspace: Path,
     *,
     host: str = "127.0.0.1",
-    port: int = 8765,
+    port: int | None = None,
     open_browser: bool = True,
 ) -> None:
     try:
@@ -119,8 +161,12 @@ def run_web_ui(
 
     if host not in LOOPBACK_HOSTS:
         raise ValueError("The UI is loopback-only; use 127.0.0.1, localhost, or ::1.")
+    port, port_notice = choose_port(host, port)
+    if port_notice:
+        print(port_notice, file=sys.stderr)
     token = secrets.token_urlsafe(24)
-    url = f"http://{host}:{port}/#token={token}"
+    url_host = f"[{host}]" if ":" in host else host
+    url = f"http://{url_host}:{port}/#token={token}"
     app = create_web_app(workspace, token)
     for notice in app.state.aais_presenter.notices:
         print(
@@ -130,5 +176,5 @@ def run_web_ui(
         )
     if open_browser:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
-    print(f"Merced AI UI: {url}")
+    print(f"Merced AI UI: {url}", flush=True)
     uvicorn.run(app, host=host, port=port, log_level="warning")

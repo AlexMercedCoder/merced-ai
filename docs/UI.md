@@ -26,6 +26,23 @@ python -m pip install 'merced-ai[webui]'
 merced-ai ui -C /path/to/workspace
 ```
 
+## Starting and connecting
+
+`merced-ai ui` serves on port 8773 by default. If 8773 is busy it uses the next free port and says
+so; `--port N` asks for a specific port and fails with a clear message if that one is busy. (Before
+0.8.0 the default was 8765, which is also Loro's `loro web` default, so running both collided.)
+
+The printed URL carries a one-time token. A tab opened without it, or with a token from an earlier
+run, shows a "This tab is not connected" screen that explains what happened and how to reconnect,
+with a field to paste the token (or the whole URL). The app itself stays hidden until the tab is
+signed in.
+
+In a workspace with no bots, the conversation view is a first-run guide: it lists the harnesses
+detected on this machine and creates a starter **assistant** bot on the one you pick (its profile
+asks before editing files or running commands), or sends you to create a bot from an existing
+profile. The message box always accepts text; until a bot is chosen, Send is disabled and a line
+under the box says why, and the draft is kept.
+
 ## Product surfaces
 
 - Start, search, select, resume, and export normalized conversations.

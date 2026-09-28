@@ -64,7 +64,10 @@ system prompt and the prefixed prompt, the projected model, permission helpers (
 `shell_denied`), `native_profile`, and `private_file(name, content)` for files the harness should
 read (mode `0600`, removed after the run). `env=` adds environment variables for the child, and
 `aais_control=True` declares that the harness speaks AAIS 1.0 on stdout/stdin, in which case
-stdin is not available as a prompt channel.
+stdin is not available as a prompt channel. `features=` detects optional CLI features of the
+installed executable (cached per path and modification time), and `native_adjustments=` adds
+lines to the projection report when the profile is passed natively, given the profile and those
+features (the MagAgent adapter uses it to say how `permissions.shell` is applied).
 
 ## Testing an adapter
 
