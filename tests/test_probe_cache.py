@@ -73,3 +73,44 @@ def test_invalid_ttl_falls_back_to_default(monkeypatch: pytest.MonkeyPatch) -> N
 
     monkeypatch.setenv("MERCED_AI_PROBE_TTL_SECONDS", "soon")
     assert probe_ttl_seconds() == DEFAULT_PROBE_TTL_SECONDS
+
+
+def test_web_probes_check_loro_and_magagent_first(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from merced_ai.harnesses import default_registry
+    from merced_ai.harnesses.adapters.command import CommandHarnessAdapter
+    from merced_ai.models import HarnessProbe, HarnessStatus
+    from merced_ai.web import probes as probes_module
+
+    started: list[str] = []
+
+    def probe(adapter, workspace=None):  # type: ignore[no-untyped-def]
+        started.append(adapter.descriptor.id)
+        return HarnessProbe(harness_id=adapter.descriptor.id, status=HarnessStatus.NOT_INSTALLED)
+
+    monkeypatch.setattr(CommandHarnessAdapter, "probe", probe)
+    monkeypatch.setattr(probes_module, "PROBE_WORKERS", 1)  # deterministic start order
+    cache = probes_module.HarnessProbeCache(default_registry(), tmp_path / "probes.json")
+    cache.start_refresh()
+    deadline = __import__("time").monotonic() + 10
+    while cache.payload()["refreshing"] and __import__("time").monotonic() < deadline:
+        __import__("time").sleep(0.02)
+
+    assert started[:2] == ["loro", "magagent"]
+    assert {item["status"] for item in cache.payload()["harnesses"]} == {"not_installed"}
+
+
+def test_a_slow_version_check_says_so(tmp_path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+
+    from merced_ai.harnesses import default_registry, detection
+
+    slow = tmp_path / "loro"
+    slow.write_text("#!/bin/sh\nsleep 5\n", encoding="utf-8")
+    slow.chmod(0o755)
+    monkeypatch.setenv("MERCED_AI_LORO_PATH", str(slow))
+    assert detection.PROBE_TIMEOUT_SECONDS >= 10
+    monkeypatch.setattr(detection, "PROBE_TIMEOUT_SECONDS", 0.2)
+
+    probe = detection.probe_executable(default_registry().get("loro").descriptor)
+
+    assert probe.status.value == "probe_failed"
+    assert "did not answer within" in probe.warnings[0] and "refresh detection" in probe.warnings[0]

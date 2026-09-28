@@ -26,6 +26,17 @@ Targets 0.8.0.
   its shortcut; it now fits on one line at 1280 and 1024 pixels wide (the shortcut chip moves to
   the button's tooltip in the narrower sidebar). A test fails if any font stack lacks a generic
   fallback.
+- Web UI: on the "This tab is not connected" screen, pasting the printed `#token=` URL into the
+  same tab did nothing, because only the hash changed and nothing listened for it. The UI now
+  signs in on `hashchange` (and removes the token from the address bar); a wrong token says so.
+- Harness detection: the first-run guide listed only ready harnesses, so a harness still being
+  checked, or found but failing its check, simply was not there. It now lists every harness it
+  found with its state (`checking…`, or the status and a one-line reason such as a version check
+  that timed out), shows Loro and MagAgent first by their proper names, and picks the first ready
+  one (Loro or MagAgent when present) unless you choose another. Detection probes Loro and
+  MagAgent first and checks harnesses four at a time (about 3 s instead of about 10 s for 14),
+  and the version check allows 10 s instead of 3 s: Loro and MagAgent take about a second to
+  start when idle and could time out on a busy machine and be reported as failed.
 - `merced-ai ui` flushes its URL line immediately, so it appears when output is piped (for
   example `merced-ai ui | tee ui.log`) instead of only when the server stops.
 - Web UI: the bot inspector and `/api/projection` returned a server error for a bot whose profile

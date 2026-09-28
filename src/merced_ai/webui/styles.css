@@ -599,3 +599,9 @@ body[data-theme="light"] .connect-error { color: #b3261e; }
 .identity-card .bot-orb { flex-shrink: 0; }
 .new-thread { gap: 7px; padding-right: 9px; }
 .shortcut kbd { padding: 1px 4px; }
+.harness-chip.ecosystem { border-color: var(--accent); }
+.harness-chip.checking { color: var(--muted); }
+.harness-chip small { color: var(--muted-2); font-size: 11px; }
+.harness-problems { display: grid; gap: 4px; margin: 2px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.harness-problems strong { color: var(--text); }
+.harness-state { display: inline-block; margin: 0 4px; padding: 0 6px; border: 1px solid var(--line); border-radius: 99px; font-size: 11px; color: var(--amber); }

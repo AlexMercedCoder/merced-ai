@@ -12,7 +12,9 @@ from pathlib import Path
 
 from merced_ai.models import HarnessDescriptor, HarnessProbe, HarnessStatus
 
-PROBE_TIMEOUT_SECONDS = 3.0
+# Python-based harnesses (Loro, MagAgent) take about a second to print a version when idle and
+# more on a loaded machine; 3 s marked them as failed. Probes run in the background.
+PROBE_TIMEOUT_SECONDS = 10.0
 MAX_VERSION_LENGTH = 500
 
 
@@ -110,7 +112,14 @@ def probe_executable(descriptor: HarnessDescriptor, workspace: Path | None = Non
             harness_supports=descriptor.harness_supports,
             broker_implements=descriptor.broker_implements,
             prompt_delivery=descriptor.prompt_delivery,
-            warnings=(f"Version probe failed: {type(exc).__name__}",),
+            warnings=(
+                (
+                    f"`{executable.name} {' '.join(descriptor.version_args)}` did not answer "
+                    f"within {PROBE_TIMEOUT_SECONDS:.0f}s; refresh detection to try again."
+                )
+                if isinstance(exc, subprocess.TimeoutExpired)
+                else f"Could not run `{executable.name}`: {type(exc).__name__}.",
+            ),
             duration_ms=_elapsed_ms(started),
         )
 

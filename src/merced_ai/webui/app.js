@@ -260,17 +260,28 @@ function renderFirstRun() {
   box.hidden = !show;
   $("#inspector-create-bot").hidden = Boolean(state.data.bots.length);
   if (!show) return;
-  const chosen = $("#first-run-harness")?.value;
-  const harnesses = state.data.harnesses || [];
+  const harnessName = (item) => item.name || titleCase(item.harness_id);
+  // Loro and MagAgent first: they read OAP profiles natively and relay approvals.
+  const rank = (item) => (ECOSYSTEM_HARNESSES.includes(item.harness_id) ? 0 : 1);
+  const harnesses = [...(state.data.harnesses || [])].sort((left, right) => rank(left) - rank(right));
   const readyOnes = harnesses.filter(ready);
-  const detecting = !harnesses.length || harnesses.some((item) => item.status === "detecting");
+  const pending = harnesses.filter((item) => item.status === "detecting");
+  const blocked = harnesses.filter((item) => item.path && !ready(item) && item.status !== "detecting");
+  const detecting = !harnesses.length || pending.length > 0;
   const heading = readyOnes.length
-    ? `${readyOnes.length} harness${readyOnes.length === 1 ? "" : "es"} ready on this machine`
+    ? `${readyOnes.length} harness${readyOnes.length === 1 ? "" : "es"} ready on this machine${pending.length ? `, still checking ${pending.length}` : ""}`
     : detecting ? "Looking for installed harnesses…" : "No harness is ready yet";
-  const chips = readyOnes.map((item) => `<span class="harness-chip"><span class="status-dot online"></span>${escapeHtml(titleCase(item.harness_id))}</span>`).join("");
-  const options = readyOnes.map((item) => `<option value="${escapeHtml(item.harness_id)}"${selected(item.harness_id, chosen)}>${escapeHtml(titleCase(item.harness_id))}</option>`).join("");
+  const chip = (item, kind) => `<span class="harness-chip ${kind}${ECOSYSTEM_HARNESSES.includes(item.harness_id) ? " ecosystem" : ""}"><span class="status-dot ${kind === "ready" ? "online" : "detecting"}"></span>${escapeHtml(harnessName(item))}${kind === "checking" ? " <small>checking…</small>" : ""}</span>`;
+  const chips = [
+    ...readyOnes.map((item) => chip(item, "ready")),
+    ...pending.filter((item) => ECOSYSTEM_HARNESSES.includes(item.harness_id) || item.path).map((item) => chip(item, "checking")),
+  ].join("");
+  const problems = blocked.map((item) => `<li><strong>${escapeHtml(harnessName(item))}</strong> <span class="harness-state">${escapeHtml(item.status.replaceAll("_", " "))}</span> ${escapeHtml(harnessFix(item))}</li>`).join("");
+  // Keep the user's pick; otherwise default to the first ready harness (Loro or MagAgent first).
+  const chosen = readyOnes.some((item) => item.harness_id === state.firstRunChoice) ? state.firstRunChoice : readyOnes[0]?.harness_id;
+  const options = readyOnes.map((item) => `<option value="${escapeHtml(item.harness_id)}"${selected(item.harness_id, chosen)}>${escapeHtml(harnessName(item))}</option>`).join("");
   const profiles = state.data.profiles.length;
-  box.innerHTML = `<div class="first-run-harnesses"><strong>${escapeHtml(heading)}</strong>${chips ? `<div class="chip-row">${chips}</div>` : ""}${!readyOnes.length && !detecting ? '<p>Install a harness such as Codex, Claude Code, MagAgent, or Loro, then check <button type="button" class="link-button" data-first-run="harnesses">Harnesses</button>.</p>' : ""}</div>
+  box.innerHTML = `<div class="first-run-harnesses"><strong>${escapeHtml(heading)}</strong>${chips ? `<div class="chip-row">${chips}</div>` : ""}${problems ? `<ul class="harness-problems" aria-label="Harnesses found but not ready">${problems}</ul>` : ""}${!readyOnes.length && !detecting ? '<p>Install a harness such as Codex, Claude Code, MagAgent, or Loro, then check <button type="button" class="link-button" data-first-run="harnesses">Harnesses</button>.</p>' : ""}</div>
     <form id="first-run-form" class="first-run-form">
       <label for="first-run-harness">Run it with</label>
       <select id="first-run-harness" ${readyOnes.length ? "" : "disabled"}>${options || "<option>No ready harness</option>"}</select>
@@ -278,6 +289,16 @@ function renderFirstRun() {
     </form>
     <p class="first-run-note">Creates an <strong>assistant</strong> profile that asks before editing files or running commands, and a bot that runs it on the harness you pick. You can change both later.</p>
     <div class="first-run-links">${profiles ? `<button type="button" class="link-button" data-first-run="from-profile">Use one of your ${profiles} profile${profiles === 1 ? "" : "s"} instead</button>` : '<button type="button" class="link-button" data-first-run="profile">Write a profile first</button>'}<a class="link-button" href="${DOCS_URL}" target="_blank" rel="noopener noreferrer">How bots and profiles work</a></div>`;
+}
+
+const ECOSYSTEM_HARNESSES = ["loro", "magagent"];
+
+function harnessFix(probe) {
+  const reason = (probe.warnings || []).find((item) => !/have not been checked yet/.test(item));
+  if (reason) return reason;
+  if (probe.status === "needs_auth") return `Sign in to ${titleCase(probe.harness_id)}, then refresh detection.`;
+  if (probe.status === "incompatible") return `This ${titleCase(probe.harness_id)} version is not supported; upgrade it.`;
+  return "Refresh detection on the Harnesses screen.";
 }
 
 async function createFirstBot(harness) {
@@ -322,6 +343,20 @@ async function showConnectScreen(reason) {
   $("#connect-reason").textContent = reason;
   $("#connect-screen").hidden = false;
   $("#connect-token").focus();
+}
+
+async function signInFromHash() {
+  const token = new URLSearchParams(window.location.hash.slice(1)).get("token");
+  if (!token) return;
+  try {
+    await api("/api/auth", { method: "POST", body: JSON.stringify({ token }) });
+    location.replace(location.pathname);  // Reload signed in, with the token out of the URL.
+  } catch (error) {
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+    if (!$("#connect-screen").hidden || error.status === 401) {
+      showConnectScreen("The token in that link was not accepted. It is probably from an earlier run of merced-ai ui.");
+    }
+  }
 }
 
 function tokenFrom(text) {
@@ -1325,6 +1360,7 @@ function bindEvents() {
     if (action === "choose") $("#bot-select").focus();
   });
   $("#inspector-create-bot").addEventListener("click", startFirstBot);
+  $("#first-run").addEventListener("change", (event) => { if (event.target.id === "first-run-harness") state.firstRunChoice = event.target.value; });
   $("#first-run").addEventListener("submit", (event) => { event.preventDefault(); const harness = $("#first-run-harness").value; if (harness) createFirstBot(harness); });
   $("#first-run").addEventListener("click", (event) => {
     const action = event.target.closest("[data-first-run]")?.dataset.firstRun;
@@ -1332,6 +1368,8 @@ function bindEvents() {
     if (action === "from-profile") { showView("bots"); openBotEditor(); }
     if (action === "profile") { showView("profiles"); openProfileEditor(); }
   });
+  // Pasting the printed URL into the address bar of an open tab only changes the hash.
+  window.addEventListener("hashchange", () => { void signInFromHash(); });
   $("#connect-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const token = tokenFrom($("#connect-token").value);

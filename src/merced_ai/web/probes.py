@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -16,6 +17,10 @@ from merced_ai.models import HarnessDescriptor, HarnessProbe
 # prompt_delivery.
 HARNESS_CACHE_SCHEMA = 3
 HARNESS_CACHE_MAX_AGE_SECONDS = 300
+
+
+PRIORITY_HARNESSES = ("loro", "magagent")
+PROBE_WORKERS = 4
 
 
 def detecting_probe(
@@ -81,7 +86,9 @@ class HarnessProbeCache:
         with self._lock:
             updated_at = self._updated_at
             return {
-                "harnesses": [dict(self._probes[item.id]) for item in self.descriptors],
+                "harnesses": [
+                    {**self._probes[item.id], "name": item.name} for item in self.descriptors
+                ],
                 "refreshing": self._refreshing,
                 "updated_at": updated_at,
                 "cached": self._cached,
@@ -108,11 +115,20 @@ class HarnessProbeCache:
         return True
 
     def _refresh(self) -> None:
+        def probe(harness_id: str) -> None:
+            result = self.registry.get(harness_id).probe().model_dump(mode="json")
+            with self._lock:
+                self._probes[harness_id] = result
+
         try:
-            for descriptor in self.descriptors:
-                result = self.registry.get(descriptor.id).probe().model_dump(mode="json")
-                with self._lock:
-                    self._probes[descriptor.id] = result
+            # Loro and MagAgent first (the ecosystem's native OAP harnesses), a few at a time so a
+            # slow harness does not hold the others back.
+            order = sorted(
+                (item.id for item in self.descriptors),
+                key=lambda harness_id: (harness_id not in PRIORITY_HARNESSES, harness_id),
+            )
+            with ThreadPoolExecutor(max_workers=PROBE_WORKERS) as pool:
+                list(pool.map(probe, order))
             completed_at = time.time()
             with self._lock:
                 self._updated_at = completed_at

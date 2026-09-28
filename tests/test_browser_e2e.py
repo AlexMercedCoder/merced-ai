@@ -324,3 +324,61 @@ def test_inbox_review_and_harness_eval(workspace: Path, monkeypatch: pytest.Monk
     finally:
         server.should_exit = True
         thread.join(timeout=10)
+
+
+def test_connect_screen_signs_in_from_a_same_tab_hash_and_lists_every_harness(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """UI-7: pasting the printed #token= URL into an open tab signs in (only the hash changes),
+    and the first-run guide shows Loro and MagAgent with their state instead of omitting them."""
+    from playwright.sync_api import expect, sync_playwright
+    from uvicorn import Config, Server
+
+    from merced_ai.webui_server import create_web_app
+
+    fake_codex = Path(__file__).parent / "fixtures" / "fake_codex.py"
+    monkeypatch.setenv("MERCED_AI_CODEX_PATH", str(fake_codex))
+    broken = tmp_path / "loro"  # found on disk, but its version check fails
+    broken.write_text(
+        "#!/bin/sh\necho 'loro: config is unreadable' >&2\nexit 3\n", encoding="utf-8"
+    )
+    broken.chmod(0o755)
+    monkeypatch.setenv("MERCED_AI_LORO_PATH", str(broken))
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    server = Server(
+        Config(
+            create_web_app(workspace, "hash-token"), host="127.0.0.1", port=port, log_level="error"
+        )
+    )
+    threading.Thread(target=server.run, daemon=True).start()
+    deadline = time.monotonic() + 10
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.05)
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            page.goto(f"http://127.0.0.1:{port}/")
+            expect(page.locator("#connect-screen")).to_be_visible()
+
+            # A wrong token in the hash stays on the connect screen with an explanation.
+            page.evaluate("location.hash = '#token=not-the-token'")
+            expect(page.locator("#connect-reason")).to_contain_text("not accepted")
+
+            # The printed URL pasted into the same tab: only the hash changes, no page load.
+            page.evaluate("location.hash = '#token=hash-token'")
+            expect(page.locator("#first-run")).to_be_visible(timeout=20_000)
+            expect(page.locator("#connect-screen")).to_be_hidden()
+            assert "#token" not in page.url
+
+            problems = page.locator(".harness-problems")
+            expect(problems).to_contain_text("Loro", timeout=30_000)
+            expect(problems).to_contain_text("probe failed")
+            expect(problems).to_contain_text("status 3")
+            expect(page.locator(".harness-chip.ready", has_text="Codex")).to_be_visible()
+            browser.close()
+    finally:
+        server.should_exit = True
