@@ -205,6 +205,10 @@ regression test in `tests/test_security_review.py` that fails without the fix.
   tag builds (the workflow now also triggers on tags).
 - The dev extra bounds ruff to 0.16.x (`ruff>=0.16,<0.17`), because CI runs `ruff format --check`
   and a new ruff minor can change formatting or add lint rules.
+- The 0.8.0 release was rehearsed in a scratch worktree: after the steps in
+  [RELEASING](docs/RELEASING.md), the strict tag check passes and the suite passes at 0.8.0. The
+  release-metadata drift test no longer depends on the changelog still having an Unreleased
+  section.
 
 ### Performance
 

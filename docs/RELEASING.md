@@ -56,6 +56,7 @@ inferred—results.
   it from `docs/README.md`.
 - Update the README `Current release:` line and the `implementation_version` in
   `docs/oap-conformance.json` and `docs/ags-conformance.json` after the conformance tests pass.
+- Replace the `## Unreleased` heading and its `Targets X.Y.Z.` line with `## X.Y.Z — YYYY-MM-DD`.
 - Run `python scripts/check_release_metadata.py --strict`. CI runs the same check on every push;
   it is advisory on branches and pull requests and fails a `v*` tag build on any drift.
 - Confirm README links and screenshots render.

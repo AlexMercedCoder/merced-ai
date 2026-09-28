@@ -51,7 +51,9 @@ def test_detects_the_drift_fixed_for_0_7_0(tmp_path: Path) -> None:
     text = changelog.read_text()
     changelog.write_text(
         text.replace(f"## {version} — ", f"## {version} — Unreleased\n\n## Old ", 1)
-        + "\n## Unreleased\n"
+        # Two headings, so the repeat is detected whether or not the real changelog still has
+        # an Unreleased section (it does not right after a release).
+        + "\n## Unreleased\n\n## Unreleased\n"
     )
     index = root / "docs" / "README.md"
     index.write_text(index.read_text().replace(f"(RELEASE_NOTES_{version}.md)", "(missing.md)"))
