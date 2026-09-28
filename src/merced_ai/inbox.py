@@ -29,7 +29,6 @@ from uuid import uuid4
 
 import yaml
 from oap.apply import ApplyError, Conflict, apply_delta, dump
-from oap.apply import atomic_write as oap_atomic_write
 from oap.validate import load_schema, validate_file
 
 from merced_ai.profiles import ProfileError, resolve_profile
@@ -300,7 +299,7 @@ class DeltaInbox:
                 warnings.append("the delta has no state operations; only its proposals remain")
             else:
                 _validate_profile(updated, profile_path)
-                oap_atomic_write(profile_path, dump(updated, profile_path))
+                atomic_write(profile_path, dump(updated, profile_path))
             item.update(
                 status="applied",
                 applied={
@@ -367,7 +366,7 @@ class DeltaInbox:
                     }
                 )
                 _validate_profile(updated, profile_path)
-                oap_atomic_write(profile_path, dump(updated, profile_path))
+                atomic_write(profile_path, dump(updated, profile_path))
                 proposal.update(status="applied", revision=revision, approved_by=actor)
             item["history"].append(
                 {

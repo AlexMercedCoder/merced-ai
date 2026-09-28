@@ -89,6 +89,10 @@ See [release notes](docs/RELEASE_NOTES_0.8.0.md).
 - CLI error messages keep text in square brackets. They were printed as Rich markup, so
   `merced-ai ui` without the web extra said to run `pip install "merced-ai"` instead of
   `pip install "merced-ai[webui]"`, and any path or harness message with brackets lost them.
+- Windows: approving an inbox delta or proposal failed with `PermissionError` after the profile
+  was already written, so the item stayed pending. The OAP support library's atomic write fsyncs
+  the directory, which Windows does not allow; the inbox now uses Merced AI's own atomic write,
+  which skips that step where the platform refuses it.
 
 - Projection reports now list every profile section a prompt-context projection does not carry
   (`dropped`): MCP servers, skills, tool allow and deny lists, permission rules, filesystem roots,
@@ -344,6 +348,11 @@ regression test in `tests/test_security_review.py` that fails without the fix.
 - Approval-presenter and web run tests wait on generous deadlines instead of fixed short polls.
   Each presenter and journal step fsyncs, and under parallel disk load the old one-to-two-second
   budgets failed intermittently.
+- Tests no longer depend on the CI runner's terminal settings. Typer forces terminal mode when
+  `GITHUB_ACTIONS` (or `FORCE_COLOR`) is set, so in CI help screens came out with ANSI styles and,
+  under the golden tests' `TERM=dumb`, 80 columns wide; a shared fixture now resets that. The release-metadata test reads files as UTF-8
+  (it failed on Windows' default code page), and the slow-probe test uses a `.cmd` harness on
+  Windows instead of a shell script.
 
 ## 0.7.0 — 2026-09-12
 
