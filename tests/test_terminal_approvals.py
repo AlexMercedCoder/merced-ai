@@ -254,3 +254,36 @@ def test_terminal_path_keeps_the_harness_resolution_receipt(
     ]
     decided = json.loads(magagent.read_text(encoding="utf-8"))
     assert receipts[0]["resolution"]["decision_id"] == decided["decision"]["id"]
+
+
+def test_the_terminal_is_raw_before_the_prompt_is_drawn(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A key sent the moment the prompt appears must reach the reader, not the line discipline.
+
+    Ctrl-C typed while ISIG was still on became a signal instead of a byte, so the prompt waited
+    forever (seen once in CI as a pty test timeout).
+    """
+    import pty
+    import termios
+    import threading
+
+    from merced_ai.cli.approvals import TerminalApprover
+
+    master, slave = pty.openpty()
+    try:
+        approver = TerminalApprover(workspace, input_fd=slave)
+        modes: list[int] = []
+        monkeypatch.setattr(
+            approver, "_render", lambda *_: modes.append(termios.tcgetattr(slave)[3])
+        )
+        monkeypatch.setattr(approver, "_read_key", lambda *_: -1)
+        envelope = {"request": {"choices": [{"decision": "deny", "scope": "once"}]}}
+
+        approver._prompt(envelope, None, threading.Event())
+
+        assert modes and not modes[0] & (termios.ISIG | termios.ICANON | termios.ECHO)
+        assert termios.tcgetattr(slave)[3] & termios.ISIG  # restored afterwards
+    finally:
+        os.close(master)
+        os.close(slave)

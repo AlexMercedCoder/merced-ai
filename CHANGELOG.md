@@ -93,6 +93,9 @@ See [release notes](docs/RELEASE_NOTES_0.8.0.md).
   was already written, so the item stayed pending. The OAP support library's atomic write fsyncs
   the directory, which Windows does not allow; the inbox now uses Merced AI's own atomic write,
   which skips that step where the platform refuses it.
+- Terminal approvals: the prompt now takes the terminal before drawing itself. Ctrl-C pressed the
+  moment it appeared could reach the terminal while signals were still on, and the prompt then
+  waited for a key that never came.
 
 - Projection reports now list every profile section a prompt-context projection does not carry
   (`dropped`): MCP servers, skills, tool allow and deny lists, permission rules, filesystem roots,

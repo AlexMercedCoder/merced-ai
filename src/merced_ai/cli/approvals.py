@@ -224,8 +224,12 @@ class TerminalApprover:
     ) -> tuple[str | None, str]:
         request = envelope["request"]
         choices, refusal = self._choices(request)
-        self._render(request, choices)
-        key = self._read_key(len(choices), cancellation, settled)
+        # Take the terminal before drawing the prompt: a key pressed as soon as the prompt
+        # appears (Ctrl-C in particular, which the line discipline would otherwise swallow as a
+        # signal) must reach the key reader.
+        with _raw_terminal(self.input_fd):
+            self._render(request, choices)
+            key = self._read_key(len(choices), cancellation, settled)
         if key is None:
             self.console.print("[dim]Decided elsewhere; the terminal prompt was withdrawn.[/dim]")
             return None, "once"
@@ -240,25 +244,24 @@ class TerminalApprover:
         """Index of the chosen option, -1 for the refusal, or None if decided elsewhere."""
         if os.name == "nt":  # pragma: no cover - Windows console
             return _read_key_windows(count, cancellation, settled)
-        with _raw_terminal(self.input_fd):
-            while True:
-                if settled.is_set() or (cancellation is not None and cancellation.is_set()):
-                    return None
-                ready, _, _ = select.select([self.input_fd], [], [], 0.1)
-                if not ready:
-                    continue
-                data = os.read(self.input_fd, 1)
-                if not data or data in (b"\r", b"\n", b"\x03", b"\x04"):
-                    return -1  # Enter, Ctrl-C, Ctrl-D, or end of input: deny.
-                if data == b"\x1b":
-                    # A lone Esc denies; an arrow key (Esc [ A) is ignored.
-                    more, _, _ = select.select([self.input_fd], [], [], 0.05)
-                    if not more:
-                        return -1
-                    os.read(self.input_fd, 8)
-                    continue
-                if data.isdigit() and 1 <= int(data) <= count:
-                    return int(data) - 1
+        while True:
+            if settled.is_set() or (cancellation is not None and cancellation.is_set()):
+                return None
+            ready, _, _ = select.select([self.input_fd], [], [], 0.1)
+            if not ready:
+                continue
+            data = os.read(self.input_fd, 1)
+            if not data or data in (b"\r", b"\n", b"\x03", b"\x04"):
+                return -1  # Enter, Ctrl-C, Ctrl-D, or end of input: deny.
+            if data == b"\x1b":
+                # A lone Esc denies; an arrow key (Esc [ A) is ignored.
+                more, _, _ = select.select([self.input_fd], [], [], 0.05)
+                if not more:
+                    return -1
+                os.read(self.input_fd, 8)
+                continue
+            if data.isdigit() and 1 <= int(data) <= count:
+                return int(data) - 1
 
 
 def _read_key_windows(  # pragma: no cover - Windows console
