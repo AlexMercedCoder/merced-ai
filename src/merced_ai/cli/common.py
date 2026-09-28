@@ -8,6 +8,7 @@ from typing import Annotated, Any, NoReturn
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from merced_ai import __version__
@@ -161,7 +162,9 @@ def _bot_action(action: Any) -> Any:
 
 
 def _fail(message: str, code: int) -> NoReturn:
-    error_console.print(f"[red]Error:[/red] {message}")
+    # Messages carry paths, harness output, and hints such as `merced-ai[webui]`; Rich would
+    # otherwise read the brackets as markup and drop them.
+    error_console.print(f"[red]Error:[/red] {escape(message)}")
     raise typer.Exit(code=code)
 
 

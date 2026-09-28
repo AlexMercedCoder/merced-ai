@@ -221,3 +221,15 @@ def test_cli_group_ask_is_attributed_and_deterministic(
     assert "You are tester; respond only as tester." in payload["responses"][1]["output"]
     session = SessionStore(workspace).load(payload["session_id"])
     assert [turn.bot_name for turn in session.turns[1:]] == ["reviewer", "tester"]
+
+
+def test_cli_errors_keep_square_brackets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The UI install hint names the `webui` extra; Rich markup used to swallow `[webui]`."""
+
+    def missing_ui(*args: object, **kwargs: object) -> None:
+        raise RuntimeError('Install the UI with: pip install "merced-ai[webui]"')
+
+    monkeypatch.setattr("merced_ai.webui_server.run_web_ui", missing_ui)
+    result = runner.invoke(app, ["ui", "--no-open"])
+    assert result.exit_code == 2
+    assert 'pip install "merced-ai[webui]"' in " ".join(result.output.split())

@@ -86,6 +86,9 @@ See [release notes](docs/RELEASE_NOTES_0.8.0.md).
   stream. Regression tests cover both shapes.
 - A harness that exits without reading all of stdin is judged by its exit status and output, not
   reported as a broker control-channel failure.
+- CLI error messages keep text in square brackets. They were printed as Rich markup, so
+  `merced-ai ui` without the web extra said to run `pip install "merced-ai"` instead of
+  `pip install "merced-ai[webui]"`, and any path or harness message with brackets lost them.
 
 - Projection reports now list every profile section a prompt-context projection does not carry
   (`dropped`): MCP servers, skills, tool allow and deny lists, permission rules, filesystem roots,
