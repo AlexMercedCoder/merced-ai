@@ -6,6 +6,9 @@ Targets 0.8.0.
 
 ### Fixed
 
+- Web UI: the bot inspector and `/api/projection` returned a server error for a bot whose profile
+  was missing or invalid; they now show "Profile unavailable" with the reason (HTTP 409).
+  Deleting a profile no longer fails when an unrelated bot's profile cannot be resolved.
 - Prompts no longer ride on the command line for harnesses that accept another channel. Codex,
   Claude Code, Gemini CLI, OpenCode, Goose, Pi, Prime Agent, and Kimi read the prompt from stdin;
   OpenClaw reads it from `--message-file`; Claude Code, Pi, and Prime Agent read the profile system
@@ -98,6 +101,19 @@ regression test in `tests/test_security_review.py` that fails without the fix.
 
 ### Added
 
+- Profile discovery reads `.loro/agents/` (Loro's project directory) as well as `.agents/` and
+  `.magent/agents/`. `profile list`, `bot list`, and the web UI Profiles and Bots screens show
+  where each profile was found, and note identical copies. Two project directories holding
+  *different* profiles with one name are now a reported conflict: the profile is listed with both
+  paths and refused wherever it is used, instead of `.magent/agents/` silently winning. Profile
+  JSON gains `origin`, `also_in`, and `conflict`. MagAgent and Loro are passed a profile by name
+  only when it is in a directory that harness reads; a `.loro/agents/` profile routed to MagAgent
+  (or the reverse) is sent as prompt context and reported as such.
+- The MagAgent projection report states how the profile's `shell: ask` is applied: on MagAgent
+  1.4.0 and later every shell command asks (`mapped`); on older versions commands MagAgent
+  classifies as read-only run without asking (`narrowed`). Detected from `magent --version`; a
+  development build that still reports 1.3.x is reported as the older behavior. Probes list the
+  newer behavior as the feature `oap-shell-ask-every-command`.
 - Terminal approvals: when MagAgent, Loro, or an ACP agent asks for approval during `ask`,
   `chat`, `group ask`, or `group chat`, the CLI now shows the request on the terminal (the exact
   action and arguments, risk and reasons, the bot and harness that asked, and Merced AI's own

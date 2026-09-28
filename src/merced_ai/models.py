@@ -126,6 +126,13 @@ class ProfileRecord(BaseModel):
     spec_digest: str
     document: dict[str, Any]
     warnings: tuple[str, ...] = ()
+    # Where discovery found it, e.g. ".agents", ".loro/agents", "~/.agentprofiles".
+    origin: str = ""
+    # Other discovery roots holding a byte-identical profile of the same name.
+    also_in: tuple[str, ...] = ()
+    # Set when another project root holds a *different* profile with this name. Such a profile
+    # is listed but never resolved: Merced AI does not pick one for you.
+    conflict: str | None = None
 
 
 class BotHarnessPreference(BaseModel):

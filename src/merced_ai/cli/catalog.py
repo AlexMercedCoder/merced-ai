@@ -9,6 +9,7 @@ from typing import Annotated
 import typer
 import yaml
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.table import Table
 
 from merced_ai.bots import create_bot, discover_bots, resolve_bot
@@ -54,11 +55,25 @@ def profile_list(
         )
         return
     table = Table(title="Open Agent Profiles")
-    for column in ("Name", "Source", "Revision", "Description", "Path"):
+    for column in ("Name", "Found in", "Revision", "Description", "Path"):
         table.add_column(column)
     for item in profiles:
-        table.add_row(item.name, item.source, str(item.revision), item.description, str(item.path))
+        found_in = escape(item.origin or item.source)
+        if item.also_in:
+            found_in += f" [dim](same file in {escape(', '.join(item.also_in))})[/dim]"
+        if item.conflict:
+            found_in += " [red](conflict)[/red]"
+        table.add_row(
+            item.name,
+            found_in,
+            str(item.revision),
+            escape(item.description),
+            escape(str(item.path)),
+        )
     console.print(table)
+    for item in profiles:
+        if item.conflict:
+            console.print(f"[red]Conflict:[/red] {escape(item.conflict)}.")
 
 
 @profile_app.command("validate")
@@ -191,13 +206,24 @@ def bot_list(
     if json_output:
         typer.echo(json.dumps([item.model_dump(mode="json") for item in bots], indent=2))
         return
+    profiles = {
+        profile.name: profile for profile in _profile_action(lambda: discover_profiles(workspace))
+    }
     table = Table(title="Merced AI bots")
-    for column in ("Name", "Profile", "Harness", "Fallbacks", "Source"):
+    for column in ("Name", "Profile", "Profile found in", "Harness", "Fallbacks", "Source"):
         table.add_column(column)
     for item in bots:
+        profile = profiles.get(item.profile)
+        if profile is None:
+            where = "[yellow]not found[/yellow]"
+        elif profile.conflict:
+            where = "[red]conflict (see profile list)[/red]"
+        else:
+            where = escape(profile.origin or profile.source)
         table.add_row(
             item.name,
             item.profile,
+            where,
             item.harness.preferred,
             ", ".join(item.harness.fallbacks) or "-",
             item.source,

@@ -104,7 +104,7 @@ def test_new_magagent_gets_a_private_prompt_file(
     assert result.native_session_id == "mag-1"
     probe = adapter.probe()
     assert probe.prompt_delivery == PromptDelivery.FILE
-    assert probe.features == ("--prompt-file",)
+    assert probe.features == ("--prompt-file", "oap-shell-ask-every-command")
 
 
 def test_older_magagent_falls_back_to_argv_behind_the_guard(
@@ -116,3 +116,26 @@ def test_older_magagent_falls_back_to_argv_behind_the_guard(
     assert adapter.probe().prompt_delivery == PromptDelivery.ARGV
     with pytest.raises(HarnessRunError, match="command line"):
         adapter.run(_request(workspace, "y" * (ARGV_LIMIT_POSIX + 1)))
+
+
+@pytest.mark.parametrize("new", [True, False])
+def test_shell_ask_projection_matches_the_detected_magagent(
+    fake_magent: Path, workspace: Path, monkeypatch: pytest.MonkeyPatch, new: bool
+) -> None:
+    monkeypatch.setenv("FAKE_MAGENT_NEW", "1" if new else "0")
+    profile = create_profile("asker", "Asks.", "Ask first.", workspace, shell_permission="ask")
+
+    projection = _adapter().project_profile(profile)
+
+    assert projection.support_level == "native"
+    shell = [item for item in projection.adjustments if item.field == "spec.permissions.shell"]
+    assert len(shell) == 1
+    if new:  # MagAgent 1.4.0: every command asks
+        assert shell[0].action == "mapped" and "every shell command" in shell[0].reason
+    else:  # 1.3.0 still auto-runs read-only commands; the report must say so
+        assert shell[0].action == "narrowed" and "without asking" in shell[0].reason
+    denied = create_profile("reader", "Reads.", "Read.", workspace, shell_permission="deny")
+    assert not any(
+        item.field == "spec.permissions.shell"
+        for item in _adapter().project_profile(denied).adjustments
+    )

@@ -57,40 +57,77 @@ def validate_profile(path: Path, source: str = "portable") -> ProfileRecord:
     )
 
 
-def discover_profiles(workspace: Path) -> tuple[ProfileRecord, ...]:
-    roots = (
-        (Path("~/.agentprofiles").expanduser(), "user"),
-        (ensure_user_layout() / "agents", "user"),
-        (workspace.resolve() / ".agents", "project"),
-        (workspace.resolve() / ".magent" / "agents", "project"),
+# Discovery roots, lowest precedence first. A project profile overrides a user profile of the
+# same name (reported as a warning). Among project roots, the harness directories (.loro/agents,
+# .magent/agents) sit above the portable .agents/ root, as they do in Loro and MagAgent
+# themselves. Two project roots with *different* profiles under one name are a conflict: the
+# profile is listed with the conflict and refused by resolve_profile until one is renamed or
+# removed. Identical copies (MagAgent and Loro imports copy the file byte for byte) are fine.
+PROJECT_PROFILE_DIRS = (".agents", ".loro/agents", ".magent/agents")
+
+
+def discovery_roots(workspace: Path) -> tuple[tuple[Path, str, str], ...]:
+    """(directory, source, label) for every discovery root, lowest precedence first."""
+    root = workspace.resolve()
+    user_agents = ensure_user_layout() / "agents"
+    return (
+        (Path("~/.agentprofiles").expanduser(), "user", "~/.agentprofiles"),
+        (user_agents, "user", _home_relative(user_agents)),
+        *((root / name, "project", name) for name in PROJECT_PROFILE_DIRS),
     )
-    selected: dict[str, ProfileRecord] = {}
-    collisions: dict[str, list[str]] = {}
-    for root, source in roots:
+
+
+def _home_relative(path: Path) -> str:
+    try:
+        return "~/" + path.resolve().relative_to(Path.home().resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def discover_profiles(workspace: Path) -> tuple[ProfileRecord, ...]:
+    found: dict[str, list[ProfileRecord]] = {}
+    for root, source, label in discovery_roots(workspace):
         if not root.is_dir():
             continue
         by_name: dict[str, ProfileRecord] = {}
         for path in sorted(root.iterdir()):
             if not path.is_file() or not path.name.endswith(PROFILE_SUFFIXES):
                 continue
-            record = validate_profile(path, source)
+            record = validate_profile(path, source).model_copy(update={"origin": label})
             if record.name in by_name:
                 raise ProfileError(f"duplicate profile {record.name!r} in {root}")
             by_name[record.name] = record
         for name, record in by_name.items():
-            if previous := selected.get(name):
-                collisions.setdefault(name, []).append(
-                    f"{previous.source}:{previous.path} overridden by {record.source}:{record.path}"
-                )
-            selected[name] = record
-    for name, messages in collisions.items():
-        record = selected[name]
-        selected[name] = record.model_copy(
+            found.setdefault(name, []).append(record)
+    return tuple(_select(records) for _, records in sorted(found.items()))
+
+
+def _select(records: list[ProfileRecord]) -> ProfileRecord:
+    """The highest-precedence record, annotated with every other place the name appears."""
+    chosen = records[-1]
+    project = [item for item in records if item.source == "project"]
+    distinct = {item.profile_digest for item in project}
+    if len(distinct) > 1:
+        places = ", ".join(f"{item.origin}/{item.path.name}" for item in project)
+        return chosen.model_copy(
             update={
-                "warnings": (*record.warnings, *(f"discovery collision: {m}" for m in messages))
+                "conflict": (
+                    f"profile {chosen.name!r} has different definitions in {places}; rename or "
+                    "remove one so Merced AI and the harnesses agree on which to use"
+                )
             }
         )
-    return tuple(sorted(selected.values(), key=lambda item: item.name))
+    also_in = tuple(
+        item.origin
+        for item in records[:-1]
+        if item.source == "project" and item.profile_digest == chosen.profile_digest
+    )
+    warnings = [
+        f"discovery collision: overrides {item.origin}/{item.path.name}"
+        for item in records[:-1]
+        if item.source == "user"
+    ]
+    return chosen.model_copy(update={"also_in": also_in, "warnings": (*chosen.warnings, *warnings)})
 
 
 def resolve_profile(reference: str, workspace: Path) -> ProfileRecord:
@@ -99,6 +136,8 @@ def resolve_profile(reference: str, workspace: Path) -> ProfileRecord:
         return validate_profile(candidate, "portable")
     for profile in discover_profiles(workspace):
         if profile.name == reference:
+            if profile.conflict:
+                raise ProfileError(profile.conflict)
             return profile
     raise ProfileError(f"profile {reference!r} was not found")
 

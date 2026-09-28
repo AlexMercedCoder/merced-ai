@@ -37,6 +37,9 @@ def profile_payload(record: ProfileRecord, workspace: Path) -> dict[str, Any]:
     payload["editable"] = resolved_parent in {project_root, user_root.resolve(), universal_root}
     if resolved_parent == project_root:
         payload["source_scope"] = "portable"
+    elif record.origin in {".loro/agents", ".magent/agents"}:
+        # Owned by Loro or MagAgent; edit it with that tool.
+        payload["source_scope"] = "loro" if record.origin.startswith(".loro") else "magagent"
     elif resolved_parent == universal_root:
         payload["source_scope"] = "universal"
     else:
@@ -51,10 +54,15 @@ def profile_payload(record: ProfileRecord, workspace: Path) -> dict[str, Any]:
 
 def bot_payload(binding: BotBinding, workspace: Path) -> dict[str, Any]:
     payload = binding.model_dump(mode="json")
+    payload["profile_origin"] = None
+    payload["profile_problem"] = None
     try:
-        payload["write_capable"] = is_write_capable(resolve_profile(binding.profile, workspace))
-    except (ProfileError, ValueError):
+        profile = resolve_profile(binding.profile, workspace)
+        payload["write_capable"] = is_write_capable(profile)
+        payload["profile_origin"] = profile.origin or profile.source
+    except (ProfileError, ValueError) as error:
         payload["write_capable"] = None  # Unknown until the profile resolves again.
+        payload["profile_problem"] = str(error)
     return payload
 
 

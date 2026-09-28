@@ -26,7 +26,13 @@ from pathlib import Path
 from typing import Literal
 
 from merced_ai.harnesses.output import NormalizedOutput
-from merced_ai.models import HarnessDescriptor, ProfileRecord, PromptDelivery, RunRequest
+from merced_ai.models import (
+    HarnessDescriptor,
+    ProfileRecord,
+    ProjectionAdjustment,
+    PromptDelivery,
+    RunRequest,
+)
 
 ADAPTER_API_VERSION = 1
 ENTRY_POINT_GROUP = "merced_ai.harnesses"
@@ -46,6 +52,28 @@ class HarnessInvocation:
     argv: list[str]
     prompt_delivery: PromptDelivery
     stdin: str | None = None
+
+
+def executable_version(argv: list[str], *, timeout: float = 10.0) -> tuple[int, int, int] | None:
+    """The first ``X.Y.Z`` in a ``--version`` command's output (never raises)."""
+    import re
+    import subprocess
+
+    try:
+        completed = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env={**os.environ, "NO_COLOR": "1", "TERM": "dumb"},
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", completed.stdout + completed.stderr)
+    return (int(match[1]), int(match[2]), int(match[3])) if match else None
 
 
 def help_flags(
@@ -87,12 +115,33 @@ def prefixed_prompt(system_prompt: str, prompt: str) -> str:
     )
 
 
-def native_profile_visible(profile: ProfileRecord) -> bool:
-    """True when the profile lives where MagAgent and Loro discover project profiles."""
+# Project profile directories each native-OAP harness discovers by itself.
+NATIVE_PROFILE_DIRS = {
+    "loro": (".agents", ".loro/agents"),
+    "magagent": (".agents", ".magent/agents"),
+}
+
+
+def _project_dir(profile: ProfileRecord) -> str | None:
     parent = profile.path.parent
-    return profile.source == "project" and (
-        parent.name == ".agents" or (parent.name == "agents" and parent.parent.name == ".magent")
-    )
+    if parent.name == ".agents":
+        return ".agents"
+    if parent.name == "agents" and parent.parent.name in {".loro", ".magent"}:
+        return f"{parent.parent.name}/agents"
+    return None
+
+
+def native_profile_visible(profile: ProfileRecord, harness_id: str | None = None) -> bool:
+    """True when ``harness_id`` discovers this project profile itself, so it can be passed by
+    name. Loro reads .agents/ and .loro/agents/; MagAgent reads .agents/ and .magent/agents/."""
+    if profile.source != "project" or profile.conflict:
+        return False
+    location = _project_dir(profile)
+    if location is None:
+        return False
+    if harness_id is None:
+        return True
+    return location in NATIVE_PROFILE_DIRS.get(harness_id, ())
 
 
 def profile_provider(profile: ProfileRecord) -> str | None:
@@ -143,7 +192,7 @@ class InvocationContext:
 
     @property
     def native_profile(self) -> bool:
-        return native_profile_visible(self.profile)
+        return native_profile_visible(self.profile, self.request.harness_id)
 
     def permission(self, name: str) -> str | None:
         value = self.profile.document.get("spec", {}).get("permissions", {}).get(name)
@@ -181,6 +230,11 @@ class HarnessSpec:
     # `--prompt-file` flag) so `build` can use them and fall back on older versions. Results are
     # cached per executable path and modification time.
     features: Callable[[Path], frozenset[str]] | None = None
+    # Extra projection-report lines when the profile is passed natively (by name), given the
+    # profile and the detected features; for example how the harness applies a permission.
+    native_adjustments: (
+        Callable[[ProfileRecord, frozenset[str]], tuple[ProjectionAdjustment, ...]] | None
+    ) = None
     api_version: int = ADAPTER_API_VERSION
     # Where the adapter came from: "builtin" or the distribution that provided the entry point.
     origin: str = field(default="builtin", compare=False)

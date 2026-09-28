@@ -40,7 +40,10 @@ async def projection(
     bot = next((item for item in discover_bots(workspace) if item.name == bot_name), None)
     if bot is None:
         raise HTTPException(status_code=404, detail="Bot not found")
-    profile = resolve_profile(bot.profile, workspace)
+    try:
+        profile = resolve_profile(bot.profile, workspace)
+    except ProfileError as exc:  # Missing, invalid, or a name conflict between directories.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     try:
         report = context.registry.get(harness or bot.harness.preferred).project_profile(profile)
     except (KeyError, NotImplementedError) as exc:
@@ -119,9 +122,14 @@ async def profile_update(
 @router.delete("/api/profiles/{name}", status_code=204, response_model=None)
 async def profile_delete(name: str, context: WriteContext) -> Response:
     workspace = context.workspace
-    if any(
-        resolve_profile(item.profile, workspace).name == name for item in discover_bots(workspace)
-    ):
+
+    def uses(reference: str) -> bool:
+        try:
+            return resolve_profile(reference, workspace).name == name
+        except ProfileError:
+            return reference == name  # Unresolvable right now; still count a same-name binding.
+
+    if any(uses(item.profile) for item in discover_bots(workspace)):
         raise HTTPException(
             status_code=409, detail="Delete or rebind bots that use this profile first"
         )

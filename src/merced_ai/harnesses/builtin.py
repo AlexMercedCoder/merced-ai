@@ -14,6 +14,7 @@ from merced_ai.harnesses.api import (
     HarnessInvocation,
     HarnessSpec,
     InvocationContext,
+    executable_version,
     help_flags,
     profile_provider,
     qualified_model,
@@ -22,6 +23,8 @@ from merced_ai.harnesses.output import normalize_loro, normalize_repl
 from merced_ai.models import (
     HarnessCapabilities,
     HarnessDescriptor,
+    ProfileRecord,
+    ProjectionAdjustment,
     PromptDelivery,
     TransportKind,
 )
@@ -103,9 +106,54 @@ def build_gemini(ctx: InvocationContext) -> HarnessInvocation:
     return HarnessInvocation(command, STDIN, stdin=ctx.prefixed_prompt)
 
 
+# MagAgent 1.4.0 applies OAP `permissions.shell: ask` to every shell command (its I-17). Earlier
+# versions ignore it and auto-run commands they classify as read-only. Detected by version,
+# because nothing in the CLI surface shows it; a development build that still reports 1.3.x is
+# treated as the older behavior, so the projection report never over-claims.
+MAGAGENT_SHELL_ASK_VERSION = (1, 4, 0)
+SHELL_ASK_EVERY_COMMAND = "oap-shell-ask-every-command"
+
+
 def magagent_features(executable: Path) -> frozenset[str]:
-    """MagAgent 1.4 added `ask --prompt-file` (with a clean --json stdout)."""
-    return help_flags([str(executable), "ask", "--help"], ("--prompt-file",))
+    """MagAgent 1.4 added `ask --prompt-file` (with a clean --json stdout) and per-command
+    approval under `shell: ask`."""
+    flags = help_flags([str(executable), "ask", "--help"], ("--prompt-file",))
+    version = executable_version([str(executable), "--version"])
+    if version is not None and version >= MAGAGENT_SHELL_ASK_VERSION:
+        flags |= {SHELL_ASK_EVERY_COMMAND}
+    return flags
+
+
+def magagent_native_adjustments(
+    profile: ProfileRecord, features: frozenset[str]
+) -> tuple[ProjectionAdjustment, ...]:
+    """How MagAgent applies the profile's `shell` permission, for the projection report."""
+    shell = profile.document.get("spec", {}).get("permissions", {}).get("shell")
+    if shell != "ask":
+        return ()
+    if SHELL_ASK_EVERY_COMMAND in features:
+        return (
+            ProjectionAdjustment(
+                field="spec.permissions.shell",
+                action="mapped",
+                reason=(
+                    "MagAgent asks before every shell command under this profile, in every "
+                    "permission mode; Merced AI relays each request as an AAIS approval."
+                ),
+            ),
+        )
+    return (
+        ProjectionAdjustment(
+            field="spec.permissions.shell",
+            action="narrowed",
+            reason=(
+                "This MagAgent (before 1.4.0) ignores shell: ask for commands it classifies as "
+                "read-only (echo, cat, grep, sed without -i, awk) and runs those without asking; "
+                "other commands are relayed as AAIS approvals. MagAgent 1.4.0 asks for every "
+                "command."
+            ),
+        ),
+    )
 
 
 def build_magagent(ctx: InvocationContext) -> HarnessInvocation:
@@ -325,6 +373,7 @@ BUILTIN_SPECS: tuple[HarnessSpec, ...] = (
         output="json",
         aais_control=True,
         features=magagent_features,
+        native_adjustments=magagent_native_adjustments,
     ),
     HarnessSpec(
         descriptor(

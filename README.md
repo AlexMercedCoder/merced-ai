@@ -93,8 +93,8 @@ merced-ai profile generate "A portable documentation specialist" --scope univers
 
 The Profiles page exposes the same prompt-driven path. Generation runs a temporary author profile
 with tools and consequential permissions denied, compiles the result into OAP 1.0, and validates
-it before creation. `~/.agentprofiles` is the universal user root; Merced AI's native user root and
-project `.agents` directory take precedence. Native MagAgent and Loro sessions can also use the
+it before creation. See [profile discovery](#profile-discovery) for where profiles are found and
+which one wins. Native MagAgent and Loro sessions can also use the
 bundled `oap-profile-authoring` workflow to propose profiles for subagents without silently
 activating new authority.
 
@@ -233,12 +233,36 @@ custom config selected with `MERCED_AI_KIMI_CONFIG_FILE`; standard provider envi
 remain outside Merced AI. See the compatibility guide for a key-free DSH example and current live
 qualification results.
 
+## Profile discovery
+
+Merced AI reads OAP profiles from these directories, lowest precedence first:
+
+| Directory | Written by | Editable in Merced AI |
+|---|---|---|
+| `~/.agentprofiles/` | any compatible tool (universal user root) | yes |
+| Merced AI's user `agents/` directory (under `MERCED_AI_HOME`) | Merced AI | yes |
+| `.agents/` in the project | Merced AI, and `--scope portable` imports | yes |
+| `.loro/agents/` in the project | Loro (`loro agents create`, generation) | no; edit with Loro |
+| `.magent/agents/` in the project | MagAgent (`magent agent import`) | no; edit with MagAgent |
+
+`profile list`, `bot list`, and the web UI show where each profile was found. A project profile
+overrides a user profile of the same name, with a warning. Within the project, a harness directory
+wins over `.agents/`, as it does in Loro and MagAgent, but only when the files are identical (an
+import copies the file byte for byte), and the listing notes the other copy. If two project
+directories hold **different** profiles with the same name, Merced AI does not pick one: the
+profile is listed with the conflict, and any bot or command that uses it fails with a message
+naming both files until you rename or remove one.
+
+MagAgent and Loro receive a project profile by name only when they discover it themselves (Loro
+reads `.agents/` and `.loro/agents/`; MagAgent reads `.agents/` and `.magent/agents/`). Otherwise
+the profile is passed as prompt context, and the projection report says so.
+
 ## Storage
 
 Project-local data:
 
 ```text
-.agents/                    OAP profiles
+.agents/                    OAP profiles (also read: .loro/agents/, .magent/agents/)
 .merced-ai/bots/            bot bindings
 .merced-ai/sessions/        normalized conversation sessions
 ~/.agentprofiles/           portable user profiles shared by compatible harnesses

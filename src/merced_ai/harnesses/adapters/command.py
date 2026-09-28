@@ -154,8 +154,13 @@ class CommandHarnessAdapter:
         model, model_adjustment = _projected_model(
             profile, harness_id, self.spec.compatible_providers
         )
-        if self.spec.projection == "native" and native_profile_visible(profile):
+        if self.spec.projection == "native" and native_profile_visible(profile, harness_id):
             native_model = profile.document.get("spec", {}).get("model", {}).get("id")
+            extra = (
+                self.spec.native_adjustments(profile, self.features())
+                if self.spec.native_adjustments is not None
+                else ()
+            )
             return ProfileProjection(
                 harness_id=harness_id,
                 support_level="native",
@@ -167,6 +172,7 @@ class CommandHarnessAdapter:
                         action="mapped",
                         reason="The harness receives the discovered OAP profile name natively.",
                     ),
+                    *extra,
                 ),
             )
         if self.spec.projection == "system_prompt":

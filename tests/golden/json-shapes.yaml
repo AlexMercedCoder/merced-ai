@@ -22,8 +22,11 @@ ask --dry-run:
     source: str
     workspace: str
   profile:
+    also_in: []
+    conflict: NoneType
     description: str
     name: str
+    origin: str
     path: str
     profile_digest: str
     revision: int
@@ -365,8 +368,11 @@ profile effective:
   support_level: str
   system_prompt: str
 profile list:
-- description: str
+- also_in: []
+  conflict: NoneType
+  description: str
   name: str
+  origin: str
   path: str
   profile_digest: str
   revision: int
@@ -375,6 +381,8 @@ profile list:
   warnings:
   - str
 profile show:
+  also_in: []
+  conflict: NoneType
   description: str
   document:
     kind: str
@@ -391,6 +399,7 @@ profile show:
       role:
         instructions: str
   name: str
+  origin: str
   path: str
   profile_digest: str
   revision: int
@@ -399,8 +408,11 @@ profile show:
   warnings:
   - str
 profile validate:
+  also_in: []
+  conflict: NoneType
   description: str
   name: str
+  origin: str
   path: str
   profile_digest: str
   revision: int
