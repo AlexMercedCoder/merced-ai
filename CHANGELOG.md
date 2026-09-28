@@ -236,9 +236,14 @@ regression test in `tests/test_security_review.py` that fails without the fix.
   `loro web` default, so running both failed). When the default is busy the next free port is
   used and the CLI says so; an explicit `--port` that is busy fails with a message suggesting
   another. Update bookmarks and A2A client configuration that assumed 8765.
-- The `agent-approval-interchange` requirement is widened to `>=0.1.0,<0.3` so Merced AI installs
-  alongside Loro and MagAgent builds that require AAIS 0.2. The full suite passes against the
-  published 0.1.0 and against the unreleased local 0.2.0 build.
+- **Requires `agent-approval-interchange>=0.2.0,<0.3`** (was `>=0.1.0,<0.2`), matching Loro and
+  MagAgent. AAIS 0.2.0 must be published before this release (see RELEASING).
+- The approval presenter records who is waiting on each request as an `aais.liveness`
+  `OwnerIdentity` (PID, process start time, and host id) instead of a bare PID. A reused PID is
+  no longer mistaken for the original owner, so an orphaned request is recognized as orphaned
+  and cannot be decided; an owner on another host or PID namespace is reported as unknown and
+  never treated as stopped. Existing `.merced-ai/aais-presenter.json` files with bare PIDs are
+  read as local PID-only owners and rewritten in the new form when the presenter opens them.
 - Harness descriptors and probes now report two capability sets: `harness_supports` (what the
   harness documents for itself) and `broker_implements` (what Merced AI delivers through its
   adapter). Previously every rich harness advertised streaming, resume, approvals, attachments,

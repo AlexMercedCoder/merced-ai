@@ -155,3 +155,88 @@ def test_valid_state_is_not_quarantined(tmp_path: Path) -> None:
     presenter = AAISPresenter(tmp_path)
     assert presenter.notices == []
     assert not list(presenter.path.parent.glob("*.corrupt-*"))
+
+
+# ---- owner identity (I-24): pid + process start time + host, via aais.liveness ------------------
+
+
+def _pending_state(workspace: Path, owner: object) -> tuple[Path, str]:
+    """A presenter state file with one pending request owned by ``owner``."""
+    import json
+
+    envelope = validate(request())
+    path = workspace / ".merced-ai" / "aais-presenter.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "schema": "merced-ai.aais-presenter.v1",
+                "sequence": 1,
+                "envelopes": [envelope],
+                "decisions": {},
+                "receipts": {},
+                "owners": {envelope["request"]["id"]: owner},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path, envelope["request"]["id"]
+
+
+def test_legacy_bare_pid_owners_are_read_and_upgraded(workspace: Path) -> None:
+    import json
+    import os
+
+    from aais.liveness import current_host_id
+
+    path, request_id = _pending_state(workspace, os.getpid())
+
+    presenter = AAISPresenter(workspace)
+
+    stored = json.loads(path.read_text(encoding="utf-8"))["owners"][request_id]
+    assert stored["pid"] == os.getpid() and stored["host_id"] == current_host_id()
+    assert "process_start_time" in stored  # upgraded in place on load
+    assert presenter.recovery()["orphaned"] == []  # this process is alive
+    assert len(presenter.snapshot()["snapshot"]["pending"]) == 1
+
+
+def test_a_reused_pid_is_not_mistaken_for_the_owner(workspace: Path) -> None:
+    import os
+
+    from aais.liveness import OwnerIdentity, current_host_id, process_start_time
+
+    started = process_start_time(os.getpid())
+    assert started is not None
+    # Same PID and host, but the recorded process started an hour earlier: the PID was reused.
+    ghost = OwnerIdentity(os.getpid(), started - 3600, current_host_id()).to_dict()
+    _path, request_id = _pending_state(workspace, ghost)
+
+    presenter = AAISPresenter(workspace)
+
+    assert presenter.recovery()["orphaned"] == [request_id]
+    assert presenter.snapshot()["snapshot"]["pending"] == []
+    with pytest.raises(ConflictError, match="issuing process stopped"):
+        presenter.decide(request_id, "approve", "once")
+
+
+def test_an_owner_on_another_host_is_unknown_not_dead(workspace: Path) -> None:
+    from aais.liveness import OwnerIdentity
+
+    other = OwnerIdentity(999_999, 1.0, "host-somewhere-else").to_dict()
+    _path, request_id = _pending_state(workspace, other)
+
+    presenter = AAISPresenter(workspace)
+
+    assert presenter.recovery()["orphaned"] == []  # never treated as dead
+    assert len(presenter.snapshot()["snapshot"]["pending"]) == 1
+    decided = presenter.decide(request_id, "deny", "once")
+    assert decided["decision"]["decision"] == "deny"
+
+
+def test_an_invalid_owner_record_quarantines_the_state(workspace: Path) -> None:
+    path, _request_id = _pending_state(workspace, {"pid": -4, "host_id": "x"})
+
+    presenter = AAISPresenter(workspace)
+
+    assert presenter.notices and presenter.notices[0]["kind"] == "approval_state_quarantined"
+    assert not path.exists()

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from aais import ApprovalError, ApprovalStore, ConflictError, create_decision, validate
+from aais.liveness import Liveness, OwnerIdentity
 
 from merced_ai.storage import atomic_write, file_lock
 
@@ -37,11 +38,15 @@ class AAISPresenter:
         self._sequence = 0
         self._decisions: dict[str, dict[str, Any]] = {}
         self._receipts: dict[str, dict[str, Any]] = {}
-        self._owners: dict[str, int] = {}
+        # request id -> the process waiting on it (pid, start time, host; PID-reuse safe).
+        self._owners: dict[str, OwnerIdentity] = {}
+        self._legacy_owners = False
         # Recovery notices for the UI, for example a quarantined state file.
         self.notices: list[dict[str, Any]] = []
         with self._lock, file_lock(self.path):
             self._load()
+            if self._legacy_owners and self.path.exists():
+                self._persist()  # Upgrade bare-PID owner records in place.
 
     def _load(self) -> None:
         """Reload shared state; quarantine an unreadable file instead of failing."""
@@ -102,7 +107,10 @@ class AAISPresenter:
             sequence = int(payload.get("sequence", 0))
             decisions = dict(payload.get("decisions", {}))
             receipts = dict(payload.get("receipts", {}))
-            owners = dict(payload.get("owners", {}))
+            raw_owners = dict(payload.get("owners", {}))
+            # Before 0.8.0 an owner was a bare PID; it is read as a local, PID-only identity.
+            legacy = any(isinstance(value, int) for value in raw_owners.values())
+            owners = {key: OwnerIdentity.from_dict(value) for key, value in raw_owners.items()}
             envelopes = payload.get("envelopes")
             if envelopes is None:
                 envelopes = [
@@ -129,6 +137,7 @@ class AAISPresenter:
             receipts,
             owners,
         )
+        self._legacy_owners = legacy
         existing = self._pending
         self._pending = {}
         for envelope in validated:
@@ -155,18 +164,18 @@ class AAISPresenter:
                     "envelopes": [item.envelope for item in self._pending.values()],
                     "decisions": self._decisions,
                     "receipts": self._receipts,
-                    "owners": self._owners,
+                    "owners": {key: owner.to_dict() for key, owner in self._owners.items()},
                 },
                 sort_keys=True,
                 separators=(",", ":"),
             ),
         )
 
-    @staticmethod
-    def _owner_alive(pid: int | None) -> bool:
-        from merced_ai.process_liveness import process_alive
-
-        return process_alive(pid)
+    def _owner_alive(self, request_id: str) -> bool:
+        """False only when the owning process is known to be gone. An owner on another host
+        (or PID namespace) is UNKNOWN and never treated as dead; a reused PID is dead."""
+        owner = self._owners.get(request_id)
+        return owner is not None and owner.liveness() is not Liveness.DEAD
 
     def record_event(self, envelope: dict[str, Any]) -> None:
         event = validate(envelope)
@@ -215,7 +224,7 @@ class AAISPresenter:
                 != requested["request"]["action_digest"]
             ):
                 raise ConflictError("Approval identifier was reused for a different action")
-            self._owners[request_id] = os.getpid()
+            self._owners[request_id] = OwnerIdentity.current()
             self._persist()
         while not pending.decided.wait(0.1):
             with self._lock, file_lock(self.path):
@@ -265,7 +274,7 @@ class AAISPresenter:
                 if (body["decision"], body["scope"]) == (decision, scope):
                     return copy.deepcopy(pending.decision)
                 raise ConflictError(f"request {request_id} was already decided")
-            if self.path.exists() and not self._owner_alive(self._owners.get(request_id)):
+            if self.path.exists() and not self._owner_alive(request_id):
                 raise ConflictError("The issuing process stopped; inspect approval recovery")
             expires = pending.envelope["request"].get("expires_at")
             if (
@@ -299,9 +308,7 @@ class AAISPresenter:
             self._load()
             machine = ApprovalStore(last_sequence=self._sequence)
             for request_id, pending in self._pending.items():
-                if request_id not in self._decisions and self._owner_alive(
-                    self._owners.get(request_id)
-                ):
+                if request_id not in self._decisions and self._owner_alive(request_id):
                     machine.add(pending.envelope)
             return machine.snapshot(stream="merced-ai.presenter")
 
@@ -310,9 +317,7 @@ class AAISPresenter:
             self._load()
             return {
                 "notices": list(self.notices),
-                "orphaned": [
-                    key for key in self._pending if not self._owner_alive(self._owners.get(key))
-                ],
+                "orphaned": [key for key in self._pending if not self._owner_alive(key)],
                 "decisions_sent": len(self._decisions),
                 "receipts": list(self._receipts.values())[-100:],
             }

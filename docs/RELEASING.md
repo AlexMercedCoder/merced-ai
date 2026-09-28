@@ -20,9 +20,11 @@ python -m twine check dist/*
 
 CI must pass on Ubuntu, macOS, and Windows. Coverage must remain at or above 75%.
 
-Merced AI supports `agent-approval-interchange` 0.1 and 0.2. Before a release, also run the
-suite in a clean environment with the newest published 0.2.x installed
-(`pip install 'agent-approval-interchange>=0.2,<0.3'`).
+Merced AI requires `agent-approval-interchange>=0.2.0,<0.3` (the presenter uses
+`aais.liveness`). Publish order matters: AAIS 0.2.0 must be on PyPI before this release, or
+installation (and CI) cannot resolve the dependency. Until then, develop against the local
+checkout: `pip install -e ../agent-approval-interchange-spec`. Before tagging, run the suite in a
+clean environment that installed the published AAIS 0.2.x from PyPI.
 
 ## 3. Package smoke test
 

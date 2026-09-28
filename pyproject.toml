@@ -22,7 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "agent-approval-interchange>=0.1.0,<0.3",
+  "agent-approval-interchange>=0.2.0,<0.3",
   "agentic-graph-spec>=1.0.1,<2",
   "open-agent-profile>=1.0.1,<2",
   "pydantic>=2.9,<3",
