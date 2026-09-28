@@ -218,3 +218,39 @@ def test_without_a_terminal_requests_are_denied_with_one_explained_line(
     assert "interactive terminal" in lines[0] and "merced-ai ui" in lines[0]
     receipt = json.loads(magagent.read_text(encoding="utf-8"))
     assert receipt["decision"]["actor"]["id"] == "merced-ai.no-presenter"
+
+
+def test_terminal_path_keeps_the_harness_resolution_receipt(
+    workspace: Path, tmp_path: Path, magagent: Path
+) -> None:
+    # Like MagAgent and Loro, answer the decision with an approval.resolved receipt.
+    script = tmp_path / "magent"
+    script.write_text(
+        script.read_text(encoding="utf-8").replace(
+            "print(json.dumps({'response'",
+            "body = decision['decision']\n"
+            "print(json.dumps({'aais': '1.0', 'type': 'approval.resolved', 'id': 'evt_resolved1',"
+            " 'occurred_at': body['decided_at'], 'sequence': 2, 'stream': 'child',"
+            " 'resolution': {'id': 'res_1', 'request_id': body['request_id'],"
+            " 'decision_id': body['id'], 'action_digest': body['action_digest'],"
+            " 'outcome': 'approved', 'effective_scope': 'once',"
+            " 'resolved_at': body['decided_at'], 'message': 'Approval accepted.'}}),"
+            " flush=True)\n"
+            "print(json.dumps({'response'",
+        ),
+        encoding="utf-8",
+    )
+    terminal = Pty(workspace, tmp_path)
+    terminal.read_until(b"Enter, Esc, or Ctrl-C denies")
+    terminal.send(b"1")
+    code, output = terminal.finish()
+    assert code == 0, output
+
+    from merced_ai.aais_presenter import AAISPresenter
+
+    receipts = AAISPresenter(workspace).recovery()["receipts"]
+    assert [item["resolution"]["request_id"] for item in receipts] == [
+        SHELL_REQUEST["request"]["id"]
+    ]
+    decided = json.loads(magagent.read_text(encoding="utf-8"))
+    assert receipts[0]["resolution"]["decision_id"] == decided["decision"]["id"]

@@ -148,6 +148,8 @@ regression test in `tests/test_security_review.py` that fails without the fix.
   running in parallel are shown one at a time. Before this, every request from MagAgent and Loro
   was denied silently on the command line. Without an interactive terminal the request is still
   denied, now with one line on stderr naming the request and how to approve instead.
+  The terminal path also keeps the harness's `approval.resolved` receipts in the presenter state,
+  as the web UI does, so `recovery` lists them.
 - Group turns now run write-capable bots that share a workspace one at a time, in participant
   order, and say so: a stderr warning in the CLI (plus `write_serialization` in
   `group ask --json`), and an amber notice above the web composer with queued-participant status.

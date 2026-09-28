@@ -164,7 +164,10 @@ def execute(
     adapter = registry.get(prepared.request.harness_id)
     runner = getattr(adapter, "run_cancellable", None)
     if approval_handler is not None and runner is not None:
-        result: RunResult = runner(prepared.request, None, approval_handler)
+        # A handler backed by the AAIS presenter also records the harness's other envelopes
+        # (resolutions are receipts), as the web UI does; a plain callable records nothing.
+        record_event = getattr(approval_handler, "record_event", None)
+        result: RunResult = runner(prepared.request, None, approval_handler, record_event)
         return result
     return adapter.run(prepared.request)
 

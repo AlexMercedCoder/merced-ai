@@ -128,6 +128,10 @@ class TerminalApprover:
         self.input_fd = sys.stdin.fileno() if input_fd is None else input_fd
         self.console = console or Console(stderr=True, highlight=False)
 
+    def record_event(self, envelope: dict[str, Any]) -> None:
+        """Keep the harness's resolution receipts, so `recovery` shows them like the web UI."""
+        self.presenter.record_event(envelope)
+
     def __call__(
         self, envelope: dict[str, Any], cancellation: threading.Event | None = None
     ) -> dict[str, Any]:
