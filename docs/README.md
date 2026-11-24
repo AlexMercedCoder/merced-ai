@@ -46,3 +46,7 @@ Use this index as the release documentation entry point.
 Project-level documents: [PRD](../PRD.md), [security policy](../SECURITY.md),
 [threat model](THREAT_MODEL.md), [contributing guide](../CONTRIBUTING.md), and
 [changelog](../CHANGELOG.md).
+
+## Maintenance
+
+[Maintenance findings, acceptance checks and completion log](maintenance.md).
