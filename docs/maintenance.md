@@ -6,7 +6,7 @@ Claim a row by entering your name or task ID and setting the status to **In prog
 
 | ID | Priority | Status | Owner | Fix and verification |
 | --- | --- | --- | --- | --- |
-| MER-01 | P1 | Open | — | — |
+| MER-01 | P1 | Done | — | `5e6443f`. Six tests passed. The new test checks the real CLI and bootstrap response builder while preserving the damaged file. |
 
 ### MER-01 · Let healthy conversations open alongside a damaged session
 
