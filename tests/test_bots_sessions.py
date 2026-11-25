@@ -152,3 +152,36 @@ def test_group_store_rejects_empty_and_duplicate_participants(workspace: Path) -
     )
     with pytest.raises(ValueError, match="at most twelve"):
         store.create_group(too_many)
+
+
+def test_bad_session_keeps_cli_and_bootstrap_available(workspace: Path):
+    import json
+    from types import SimpleNamespace
+
+    from typer.testing import CliRunner
+
+    from merced_ai.cli import app
+    from merced_ai.web.routers.workspace import bootstrap_payload
+
+    store = SessionStore(workspace)
+    profile = create_profile("notes", "Test profile", "Summarize notes.", workspace)
+    healthy = store.create("notes", "loro", profile)
+    bad = store.root / "session-damaged.json"
+    bad.write_text("{", encoding="utf-8")
+    with pytest.raises(ValueError, match=bad.name):
+        store.load(bad.stem)
+
+    result = CliRunner().invoke(app, ["session", "list", "--workspace", str(workspace), "--json"])
+    assert result.exit_code == 0
+    assert [record["id"] for record in json.loads(result.stdout)] == [healthy.id]
+    assert bad.name in result.stderr
+
+    context = SimpleNamespace(
+        workspace=workspace,
+        probes=SimpleNamespace(payload=lambda: {"harnesses": []}, descriptors=[]),
+        presenter=SimpleNamespace(notices=[]),
+    )
+    payload = bootstrap_payload(context)
+    assert [record["id"] for record in payload["sessions"]] == [healthy.id]
+    assert any(bad.name in notice for notice in payload["notices"])
+    assert bad.read_text(encoding="utf-8") == "{"
