@@ -2,7 +2,7 @@
 
 One portable agent identity across the harnesses you already use, with honest reports of what each one drops.
 
-Current release: 0.8.0 ([release notes](docs/RELEASE_NOTES_0.8.0.md)). Unreleased work is tracked in
+Current release: 0.8.1 ([release notes](docs/RELEASE_NOTES_0.8.1.md)). Unreleased work is tracked in
 the [changelog](CHANGELOG.md).
 
 ## Which tool do I want?
