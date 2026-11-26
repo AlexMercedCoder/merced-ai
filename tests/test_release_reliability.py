@@ -2,8 +2,10 @@
 
 import asyncio
 import os
+import subprocess
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -118,11 +120,12 @@ def test_timeout_stops_descendant(workspace):
     with pytest.raises(ChildProcessError, match="timed out"):
         child(workspace, code, timeout=0.5)
     pid = int(pidfile.read_text())
-    import time
 
     for _ in range(50):
-        status = __import__("pathlib").Path(f"/proc/{pid}/stat")
-        if not status.exists() or status.read_text().split()[2] == "Z":
+        status = subprocess.run(
+            ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, check=False
+        ).stdout.strip()
+        if not status or status.startswith("Z"):
             break
         time.sleep(0.02)
     else:
@@ -189,8 +192,6 @@ def test_child_does_not_inherit_test_coverage_settings(workspace, monkeypatch):
     ),
 )
 def test_windows_cancel_terminates_grandchild(workspace):  # pragma: no cover - Windows CI
-    import time
-
     from merced_ai.process_liveness import process_alive
 
     pidfile = workspace / "grandchild.pid"
