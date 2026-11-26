@@ -69,15 +69,17 @@ def bot_payload(binding: BotBinding, workspace: Path) -> dict[str, Any]:
 def bootstrap_payload(context: WebContext) -> dict[str, Any]:
     workspace = context.workspace
     detection = context.probes.payload()
+    warnings: list[str] = []
+    sessions = SessionStore(workspace).list(warnings=warnings)
     return {
         "workspace": str(workspace),
         "profiles": [profile_payload(item, workspace) for item in discover_profiles(workspace)],
         "bots": [bot_payload(item, workspace) for item in discover_bots(workspace)],
-        "sessions": [item.model_dump(mode="json") for item in SessionStore(workspace).list()],
+        "sessions": [item.model_dump(mode="json") for item in sessions],
         "harnesses": detection.pop("harnesses"),
         "harness_detection": detection,
         "recent_runs": [item.model_dump(mode="json") for item in RunStore(workspace).list(20)],
-        "notices": list(context.presenter.notices),
+        "notices": [*context.presenter.notices, *warnings],
         "inbox_pending": sum(
             item["status"] in {"pending", "conflict"}
             for item in DeltaInbox(context.workspace).items()

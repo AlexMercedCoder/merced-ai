@@ -225,7 +225,10 @@ def session_list(
     json_output: Annotated[bool, typer.Option("--json", help=JSON_HELP)] = False,
 ) -> None:
     """List durable project sessions."""
-    records = SessionStore(workspace).list()
+    warnings: list[str] = []
+    records = SessionStore(workspace).list(warnings=warnings)
+    for warning in warnings:
+        typer.echo(warning, err=True)
     if json_output:
         typer.echo(json.dumps([item.model_dump(mode="json") for item in records], indent=2))
         return

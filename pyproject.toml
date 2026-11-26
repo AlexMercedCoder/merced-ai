@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "merced-ai"
-version = "0.8.0"
+version = "0.8.1"
 description = "An OAP-native broker for existing AI agent harnesses."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,7 +28,8 @@ dependencies = [
   "pydantic>=2.9,<3",
   "PyYAML>=6.0,<7",
   "rich>=13.9,<15",
-  "typer>=0.12.5,<1",
+  # Typer 0.28+ changes the CLI help layout tracked by our snapshots.
+  "typer>=0.12.5,<0.28",
 ]
 
 [project.optional-dependencies]

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 from uuid import uuid4
+
+from pydantic import ValidationError
 
 from merced_ai.models import (
     ConversationTurn,
@@ -102,13 +105,22 @@ class SessionStore:
         path = self._path(session_id)
         if not path.is_file():
             raise ValueError(f"session {session_id!r} was not found")
-        return SessionRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        try:
+            return SessionRecord.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, ValidationError) as error:
+            raise ValueError(f"Could not read conversation {path.name}") from error
 
-    def list(self) -> tuple[SessionRecord, ...]:
-        records = [
-            SessionRecord.model_validate_json(path.read_text(encoding="utf-8"))
-            for path in self.root.glob("session-*.json")
-        ]
+    def list(self, *, warnings: list[str] | None = None) -> tuple[SessionRecord, ...]:
+        records = []
+        for path in sorted(self.root.glob("session-*.json")):
+            try:
+                records.append(self.load(path.stem))
+            except ValueError:
+                message = f"Could not read conversation {path.name}"
+                if warnings is None:
+                    logging.getLogger(__name__).warning(message)
+                else:
+                    warnings.append(message)
         return tuple(sorted(records, key=lambda item: item.updated_at, reverse=True))
 
     def append(

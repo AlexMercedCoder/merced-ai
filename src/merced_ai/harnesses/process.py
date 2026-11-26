@@ -74,7 +74,8 @@ def stop_process(process: subprocess.Popen) -> None:
         process.wait(timeout=3)
     if os.name != "nt":
         # The group can outlive its leader; descendants may ignore SIGTERM.
-        with suppress(ProcessLookupError):
+        # macOS can return EPERM while the terminated group is being collected.
+        with suppress(ProcessLookupError, PermissionError):
             os.killpg(process.pid, signal.SIGKILL)
 
 

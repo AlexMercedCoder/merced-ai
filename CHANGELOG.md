@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.1 — 2026-11-26
+
+- Keep healthy sessions available when a conversation record is unreadable.
+- Constrain Typer to preserve the established CLI help layout on clean installs.
+- Preserve the timeout result when macOS has already terminated the harness process group.
+
 ## 0.8.0 — 2026-09-28
 
 See [release notes](docs/RELEASE_NOTES_0.8.0.md).

@@ -24,6 +24,7 @@ Use this index as the release documentation entry point.
 - [MVP validation](MVP_VALIDATION.md): automated, packaging, and live-test evidence.
 - [Release process](RELEASING.md): maintainer checklist from versioning through post-release
   verification.
+- [0.8.1 release notes](RELEASE_NOTES_0.8.1.md): session recovery and stable CLI help.
 - [0.8.0 release notes](RELEASE_NOTES_0.8.0.md): harness adapter plugins, ACP client and server,
   worktree rooms, cross-harness evals, terminal approvals, and prompt delivery off the command line.
 - [0.7.0 release notes](RELEASE_NOTES_0.7.0.md): transactional sessions, broker-owned runs with
@@ -46,3 +47,7 @@ Use this index as the release documentation entry point.
 Project-level documents: [PRD](../PRD.md), [security policy](../SECURITY.md),
 [threat model](THREAT_MODEL.md), [contributing guide](../CONTRIBUTING.md), and
 [changelog](../CHANGELOG.md).
+
+## Maintenance
+
+[Maintenance findings, acceptance checks and completion log](maintenance.md).
